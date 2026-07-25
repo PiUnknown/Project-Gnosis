@@ -1,8 +1,7 @@
 import os
 import argparse
 from dotenv import load_dotenv
-from src.orchestrator import run_pipeline, save_manifest
-
+from src.orchestrator import run_pipeline, save_manifest, save_symbol_tables
 
 load_dotenv()
 
@@ -17,33 +16,26 @@ Examples:
   python run.py --url https://github.com/tiangolo/fastapi --output ./my_outputs
         """
     )
-    parser.add_argument(
-        "--url",
-        required=True,
-        help="GitHub repository URL (public repos only in Phase 1)"
-    )
-    parser.add_argument(
-        "--output",
-        default="./outputs",
-        help="Directory to save output files (default: ./outputs)"
-    )
+    parser.add_argument("--url", required=True, help="GitHub repository URL")
+    parser.add_argument("--output", default="./outputs", help="Output directory")
     args = parser.parse_args()
 
     github_token = os.getenv("GITHUB_TOKEN")
     if not github_token:
-        print("[INFO] No GITHUB_TOKEN in .env. Using unauthenticated mode.")
-        print("       File tree fetch uses API (60 req/hr limit).")
-        print("       File content uses raw URLs (no limit).")
-        print("       For large repos, add GITHUB_TOKEN to .env\n")
+        print("[INFO] No GITHUB_TOKEN in .env. Using unauthenticated mode.\n")
 
     state = run_pipeline(args.url, github_token)
-    manifest_path = save_manifest(state, args.output)
+
+    save_manifest(state, args.output)
+    save_symbol_tables(state, args.output)
 
     print(f"\n{'=' * 55}")
-    print(f"  Phase 1 Complete")
-    print(f"  Files analyzed : {len(state.file_manifest)}")
-    print(f"  Manifest at    : {manifest_path}")
-    print(f"  Next: inspect the manifest, then run Phase 2")
+    print(f"  Phase 2 Complete")
+    print(f"  Files parsed     : {len(state.symbol_tables)}")
+    print(f"  Outputs at       : {args.output}/")
+    print(f"    file_manifest.json")
+    print(f"    symbol_tables.json")
+    print(f"  Next: inspect symbol_tables.json, then run Phase 3")
     print(f"{'=' * 55}\n")
 
 
