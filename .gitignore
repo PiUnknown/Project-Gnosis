@@ -1,0 +1,29 @@
+# Environment
+.env
+venv/
+.venv/
+env/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.Python
+
+# Project outputs (generated, not committed)
+outputs/
+chroma_db/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+
+# Test cache
+.pytest_cache/
+.hypothesis/
