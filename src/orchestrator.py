@@ -4,6 +4,7 @@ from src.state import ArchaeonState
 from src.utils.github_api import parse_github_url, fetch_repo_metadata
 from src.agents import ingestion
 from src.agents import ast_parser
+from src.agents import dependency_graph
 
 
 def run_pipeline(repo_url: str, github_token: str = None) -> ArchaeonState:
@@ -34,8 +35,8 @@ def run_pipeline(repo_url: str, github_token: str = None) -> ArchaeonState:
     # --- Agent 2: AST Parser ---
     state = ast_parser.run(state)
 
-    # --- Agent 3: Dependency Graph (Phase 3) ---
-    # state = dependency_graph.run(state)
+    # --- Agent 3: Dependency Graph ---
+    state = dependency_graph.run(state)
 
     # --- Agent 4: Complexity Scorer (Phase 4) ---
     # state = complexity_scorer.run(state)
@@ -54,7 +55,6 @@ def run_pipeline(repo_url: str, github_token: str = None) -> ArchaeonState:
 
 def save_manifest(state: ArchaeonState, output_dir: str = "./outputs") -> str:
     os.makedirs(output_dir, exist_ok=True)
-
     manifest_data = [
         {
             "path": f.path,
@@ -65,11 +65,9 @@ def save_manifest(state: ArchaeonState, output_dir: str = "./outputs") -> str:
         }
         for f in state.file_manifest
     ]
-
     lang_counts: dict = {}
     for f in state.file_manifest:
         lang_counts[f.language] = lang_counts.get(f.language, 0) + 1
-
     output = {
         "repo": f"{state.owner}/{state.repo_name}",
         "branch": state.default_branch,
@@ -78,22 +76,15 @@ def save_manifest(state: ArchaeonState, output_dir: str = "./outputs") -> str:
         "language_breakdown": lang_counts,
         "files": manifest_data
     }
-
     path = os.path.join(output_dir, "file_manifest.json")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(output, fh, indent=2)
-
-    print(f"\n[Orchestrator] Manifest saved → {path}")
+    print(f"[Orchestrator] Manifest saved         → {path}")
     return path
 
 
 def save_symbol_tables(state: ArchaeonState, output_dir: str = "./outputs") -> str:
-    """
-    Serialize state.symbol_tables to JSON for inspection.
-    This is Phase 2's primary deliverable.
-    """
     os.makedirs(output_dir, exist_ok=True)
-
     output = {}
     for file_path, st in state.symbol_tables.items():
         output[file_path] = {
@@ -134,10 +125,49 @@ def save_symbol_tables(state: ArchaeonState, output_dir: str = "./outputs") -> s
                 for i in st.imports
             ]
         }
-
     path = os.path.join(output_dir, "symbol_tables.json")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(output, fh, indent=2)
+    print(f"[Orchestrator] Symbol tables saved    → {path}")
+    return path
 
-    print(f"[Orchestrator] Symbol tables saved → {path}")
+
+def save_graph_data(state: ArchaeonState, output_dir: str = "./outputs") -> str:
+    """
+    Serialize graph_stats, circular_deps, and topological_order to JSON.
+    This is Phase 3's primary data deliverable.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    output = {
+        "repo": f"{state.owner}/{state.repo_name}",
+        "total_files": state.dependency_graph.number_of_nodes() if state.dependency_graph else 0,
+        "total_edges": state.dependency_graph.number_of_edges() if state.dependency_graph else 0,
+        "circular_dependency_count": len(state.circular_deps),
+        "circular_deps": state.circular_deps,
+        "circular_nodes": list(state.circular_nodes),
+        "topological_order": state.topological_order,
+        "graph_stats": state.graph_stats
+    }
+
+    path = os.path.join(output_dir, "graph_data.json")
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(output, fh, indent=2)
+    print(f"[Orchestrator] Graph data saved       → {path}")
+    return path
+
+
+def save_graph_html(state: ArchaeonState, output_dir: str = "./outputs") -> str:
+    """Generate the interactive pyvis dependency graph HTML."""
+    from src.utils.graph_utils import generate_graph_html
+    os.makedirs(output_dir, exist_ok=True)
+    path = os.path.join(output_dir, "dependency_graph.html")
+    success = generate_graph_html(
+        state.dependency_graph,
+        state.graph_stats,
+        state.circular_nodes,
+        path
+    )
+    if success:
+        print(f"[Orchestrator] Dependency graph saved  → {path}")
     return path

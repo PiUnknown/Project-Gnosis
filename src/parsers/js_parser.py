@@ -19,6 +19,12 @@ WHY NOT CommonJS:
   tree-sitter sees it as a call_expression, not an import node.
   Detecting it would require pattern matching on call expressions.
   Deferred to v2: most modern JS/TS uses ES6 imports.
+
+NOTE ON class_heritage:
+  In tree-sitter-javascript, `extends Bar` is represented as a child
+  node of TYPE 'class_heritage' — it is NOT assigned to a named field.
+  child_by_field_name('heritage') always returns None. We instead
+  iterate node.children and match on child.type == 'class_heritage'.
 """
 from typing import Optional, Tuple
 from src.parsers.base import FunctionInfo, ClassInfo, ImportInfo
@@ -158,18 +164,29 @@ def _extract_arrow_function(declarator_node) -> Optional[FunctionInfo]:
 def _extract_js_class(node) -> Tuple[Optional[ClassInfo], list]:
     """
     Extract a ClassInfo and its methods from a class_declaration node.
+
+    WHY node.children INSTEAD OF child_by_field_name('heritage'):
+    In tree-sitter-javascript, the extends clause is represented as a
+    child node of TYPE 'class_heritage'. It is NOT assigned to a named
+    field in the grammar, so child_by_field_name('heritage') always
+    returns None. We iterate node.children (which includes anonymous
+    and unnamed nodes) and match on child.type == 'class_heritage'.
     """
     name_node = node.child_by_field_name('name')
     if not name_node:
         return None, []
 
-    # Base classes: class Foo extends Bar
+    # FIX: class_heritage is a child node TYPE, not a named field.
+    # Iterate all children and find the class_heritage node.
     bases = []
-    heritage = node.child_by_field_name('heritage')
-    if heritage:
-        for child in heritage.named_children:
-            if child.type in ('identifier', 'member_expression'):
-                bases.append(child.text.decode('utf-8'))
+    for child in node.children:
+        if child.type == 'class_heritage':
+            # class_heritage contains the 'extends' keyword (anonymous)
+            # followed by the base class identifier or member expression.
+            for subchild in child.named_children:
+                if subchild.type in ('identifier', 'member_expression'):
+                    bases.append(subchild.text.decode('utf-8'))
+            break  # JS only allows a single extends clause
 
     # Methods inside the class body
     method_names = []

@@ -7,13 +7,20 @@ given a tree-sitter tree and source bytes, return extracted symbols.
 
 Key Python AST node types used:
   function_definition       - def foo():
-  async_function_definition - async def foo():
+  async_function_definition - async def foo():  (newer tree-sitter-python only)
   class_definition          - class Foo:
   import_statement          - import os
   import_from_statement     - from pathlib import Path
   decorated_definition      - @decorator\ndef foo():
   parameters                - the (a, b, c) part of a function
   block                     - indented body of function/class
+
+NOTE ON ASYNC DETECTION:
+In most versions of tree-sitter-python, `async def foo()` produces a
+`function_definition` node with an anonymous `async` keyword child —
+NOT a separate `async_function_definition` node type.
+We detect async by checking: any(child.type == 'async' for child in node.children).
+The `async_function_definition` branch is kept as a fallback for newer grammar versions.
 """
 import ast as stdlib_ast
 from typing import Optional, Tuple
@@ -131,6 +138,27 @@ def _extract_params(params_node) -> list:
 
 
 # -----------------------------------------------------------------------
+# Async detection helper
+# -----------------------------------------------------------------------
+
+def _is_async_node(node) -> bool:
+    """
+    Return True if a function_definition node represents an async function.
+
+    In most tree-sitter-python versions, `async def foo()` produces a
+    plain `function_definition` node with an anonymous `async` keyword
+    as its first child. We detect this by scanning all children (including
+    anonymous ones) for a node whose type is the string 'async'.
+
+    This is also correct for the rarer `async_function_definition` node
+    type used in some grammar versions — callers pass is_async=True
+    directly in that branch, so this helper is only called for
+    `function_definition` nodes.
+    """
+    return any(child.type == 'async' for child in node.children)
+
+
+# -----------------------------------------------------------------------
 # Function extraction
 # -----------------------------------------------------------------------
 
@@ -199,14 +227,23 @@ def extract_class(node) -> Tuple[Optional[ClassInfo], list]:
         for child in body_node.named_children:
             fn = None
             if child.type == 'function_definition':
-                fn = extract_function(child, is_async=False, is_method=True)
+                # FIX: detect async by checking for 'async' keyword child,
+                # since tree-sitter Python uses function_definition for both
+                # sync and async methods in most grammar versions.
+                fn = extract_function(child, is_async=_is_async_node(child), is_method=True)
             elif child.type == 'async_function_definition':
+                # Fallback for newer tree-sitter-python grammar versions
+                # that do use a distinct async_function_definition node type.
                 fn = extract_function(child, is_async=True, is_method=True)
             elif child.type == 'decorated_definition':
                 # @property\ndef method(self): ...
                 definition = child.child_by_field_name('definition')
                 if definition:
-                    is_async = definition.type == 'async_function_definition'
+                    if definition.type == 'async_function_definition':
+                        is_async = True
+                    else:
+                        # function_definition: check for async keyword child
+                        is_async = _is_async_node(definition)
                     fn = extract_function(definition, is_async=is_async, is_method=True)
 
             if fn:
@@ -336,11 +373,16 @@ def extract_symbols(tree, source_bytes: bytes) -> Tuple[Optional[str], list, lis
             continue
 
         if ntype == 'function_definition':
-            fn = extract_function(node, is_async=False)
+            # FIX: detect async by checking for 'async' keyword child.
+            # In most tree-sitter-python versions, `async def foo()` is a
+            # function_definition node with an anonymous 'async' child —
+            # NOT a separate async_function_definition node.
+            fn = extract_function(node, is_async=_is_async_node(node))
             if fn:
                 functions.append(fn)
 
         elif ntype == 'async_function_definition':
+            # Fallback for newer tree-sitter-python grammar versions.
             fn = extract_function(node, is_async=True)
             if fn:
                 functions.append(fn)
@@ -362,7 +404,8 @@ def extract_symbols(tree, source_bytes: bytes) -> Tuple[Optional[str], list, lis
             if definition:
                 dtype = definition.type
                 if dtype == 'function_definition':
-                    fn = extract_function(definition, is_async=False)
+                    # FIX: same async detection as above
+                    fn = extract_function(definition, is_async=_is_async_node(definition))
                     if fn:
                         functions.append(fn)
                 elif dtype == 'async_function_definition':

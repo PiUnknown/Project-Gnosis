@@ -33,12 +33,15 @@ class ArchaeonState:
     file_manifest: list = field(default_factory=list)   # list[FileMetadata]
     raw_contents: dict = field(default_factory=dict)    # path -> str
 
-    # --- Agent 2: AST Parser (Phase 2) ---
-    symbol_tables: dict = field(default_factory=dict)
+    # --- Agent 2: AST Parser ---
+    symbol_tables: dict = field(default_factory=dict)   # path -> SymbolTable
 
-    # --- Agent 3: Dependency Graph (Phase 3) ---
-    dependency_graph: Any = None
-    circular_deps: list = field(default_factory=list)
+    # --- Agent 3: Dependency Graph ---
+    dependency_graph: Any = None                             # nx.DiGraph
+    circular_deps: list = field(default_factory=list)        # list of cycles (list of lists)
+    circular_nodes: set = field(default_factory=set)         # all file paths in any cycle
+    graph_stats: dict = field(default_factory=dict)          # path -> per-file metrics dict
+    topological_order: list = field(default_factory=list)    # suggested reading order
 
     # --- Agent 4: Complexity Scorer (Phase 4) ---
     complexity_scores: dict = field(default_factory=dict)
