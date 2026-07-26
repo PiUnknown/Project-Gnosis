@@ -13,6 +13,7 @@ PYTHON:
   Absolute:  "src.utils.github_api"  →  "src/utils/github_api.py"
   Package:   "src.utils"             →  "src/utils/__init__.py"
   Relative:  ".utils" from "src/agents/x.py"  →  "src/agents/utils.py"
+             Falls back to "src/utils/__init__.py" if not found in same dir.
   Bare rel:  "." + names=["utils"]  from "src/agents/x.py"  →  "src/agents/utils.py"
 
 JAVASCRIPT / TYPESCRIPT:
@@ -20,6 +21,8 @@ JAVASCRIPT / TYPESCRIPT:
              → try src/components/utils.ts, .tsx, .js, .jsx
              → try src/components/utils/index.ts, .tsx, .js, .jsx
   Extension already present: "./utils.js" → direct match
+  Parent dir: "../state" from "src/utils/helpers.ts" → "src/state.ts"
+             NOTE: PurePosixPath does NOT normalize ".." — we do it manually.
 """
 
 from pathlib import PurePosixPath
@@ -115,6 +118,12 @@ def _resolve_python_relative(
       Append remainder (module after the dots).
       If remainder is empty, try each name from import_info.names
       as a potential submodule.
+
+    Fallback for remainder imports:
+      If "from .state import X" doesn't resolve in the computed directory
+      (e.g. src/agents/state.py doesn't exist), try one level higher
+      (e.g. src/state.py). This handles namespace packages and projects
+      where the top-level package boundary doesn't match the file structure.
     """
     dots = len(module) - len(module.lstrip('.'))
     remainder = module[dots:]
@@ -128,7 +137,18 @@ def _resolve_python_relative(
         # "from .utils import X" → resolve .utils, not X
         # X is a symbol inside utils, not a file
         target = str(base / remainder.replace('.', '/'))
-        return _try_python_path_variants(target, file_paths)
+        result = _try_python_path_variants(target, file_paths)
+        if result:
+            return result
+
+        # FIX: fallback — if the module isn't found in the computed
+        # directory, try one level up. This handles cases where
+        # namespace packages or non-standard layouts mean the file
+        # lives in the parent directory rather than the sibling dir.
+        # Example: ".state" from "src/agents/ingestion.py" may resolve
+        # to "src/state.py" when "src/agents/state.py" doesn't exist.
+        parent_target = str(base.parent / remainder.replace('.', '/'))
+        return _try_python_path_variants(parent_target, file_paths)
 
     else:
         # "from . import utils, models"
@@ -168,6 +188,29 @@ def _try_python_path_variants(base_path: str, file_paths: set) -> list:
 # JavaScript / TypeScript resolution
 # -----------------------------------------------------------------------
 
+def _normalize_posix_path(path: str) -> str:
+    """
+    Resolve '..' and '.' components in a POSIX path string without
+    accessing the filesystem.
+
+    WHY THIS EXISTS:
+    PurePosixPath does NOT normalize '..' components.
+    str(PurePosixPath('src/utils') / '../state') returns
+    'src/utils/../state' — the '..' is kept verbatim. That string
+    never matches 'src/state.ts' in a file_paths set lookup.
+    This function manually collapses the path segments so that
+    '../state' from 'src/utils/' correctly becomes 'src/state'.
+    """
+    parts = []
+    for part in path.replace('\\', '/').split('/'):
+        if part == '..':
+            if parts:
+                parts.pop()
+        elif part and part != '.':
+            parts.append(part)
+    return '/'.join(parts)
+
+
 def _resolve_js(importer_path: str, module: str, file_paths: set) -> list:
     """
     Resolve a JS/TS relative import module string to a file path.
@@ -186,11 +229,10 @@ def _resolve_js(importer_path: str, module: str, file_paths: set) -> list:
     importer_dir = PurePosixPath(importer_path).parent
     raw_target = str(importer_dir / module).replace('\\', '/')
 
-    # Normalize any ".." components in the path
-    try:
-        raw_target = str(PurePosixPath(raw_target))
-    except Exception:
-        return []
+    # FIX: PurePosixPath does NOT normalize '..' components — normalize manually.
+    # e.g. 'src/utils/../state' → 'src/state'
+    # Without this, file_paths lookups against normalized paths always fail.
+    raw_target = _normalize_posix_path(raw_target)
 
     # Case 1: Import already has an extension ("./utils.js")
     if raw_target in file_paths:

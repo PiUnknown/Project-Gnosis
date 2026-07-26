@@ -10,14 +10,14 @@ class FunctionInfo:
     line_end: int
     docstring: Optional[str]
     is_async: bool
-    is_method: bool          # True if defined inside a class body
+    is_method: bool
 
 
 @dataclass
 class ClassInfo:
     name: str
-    bases: list              # list of base class name strings
-    method_names: list       # just the names, not FunctionInfo objects
+    bases: list
+    method_names: list
     line_start: int
     line_end: int
     docstring: Optional[str]
@@ -25,10 +25,10 @@ class ClassInfo:
 
 @dataclass
 class ImportInfo:
-    module: str              # "os", "src.utils", "./components/Button"
-    names: list              # ["Path", "getcwd"] or [] for bare imports
-    is_from_import: bool     # True: "from X import Y", False: "import X"
-    is_internal: bool        # True if resolves to a file in our manifest
+    module: str
+    names: list
+    is_from_import: bool
+    is_internal: bool
 
 
 @dataclass
@@ -36,9 +36,9 @@ class SymbolTable:
     file_path: str
     language: str
     module_docstring: Optional[str]
-    functions: list = field(default_factory=list)    # list[FunctionInfo]
-    classes: list = field(default_factory=list)      # list[ClassInfo]
-    imports: list = field(default_factory=list)      # list[ImportInfo]
+    functions: list = field(default_factory=list)
+    classes: list = field(default_factory=list)
+    imports: list = field(default_factory=list)
     parse_error: bool = False
     parse_error_detail: Optional[str] = None
 
@@ -61,3 +61,56 @@ class SymbolTable:
     @property
     def undocumented_functions(self) -> list:
         return [f for f in self.functions if not f.docstring]
+
+
+# -----------------------------------------------------------------------
+# Agent 4 output: one ComplexityScore per scored file
+# Stored in state.complexity_scores[file_path]
+# Read by Agents 6 and 7
+# -----------------------------------------------------------------------
+
+@dataclass
+class ComplexityScore:
+    """
+    Complete complexity and risk profile for one file.
+
+    WHY IN parsers/base.py AND NOT agents/complexity_scorer.py:
+    This object is READ by multiple agents (6 and 7), not just written
+    by Agent 4. Placing data models in the agent that writes them
+    would force reader agents to import the writer agent.
+    All shared data models live here so any agent can import them
+    without creating circular dependencies.
+    """
+    file_path: str
+    language: str
+
+    # Per-function cyclomatic complexity.
+    # key: function name (radon uses "ClassName.method" for methods)
+    # value: integer complexity score
+    function_scores: dict
+
+    # Aggregate metrics across all functions in the file
+    avg_complexity: float          # 0.0 if file has no functions
+    max_complexity: float          # 0.0 if file has no functions
+    max_complexity_function: str   # name of the worst function, "" if none
+
+    function_count: int
+    avg_function_lines: float      # average lines per function, 0.0 if no functions
+
+    # Coupling: number of unique internal files this file imports
+    # Sourced from graph_stats[file]['out_degree'] (Phase 3)
+    coupling_score: int
+
+    # Documentation health
+    undocumented_count: int
+    undocumented_ratio: float      # undocumented_count / function_count, 0.0 if no functions
+
+    # Tech debt signals carried forward from upstream agents
+    parse_error: bool              # from Phase 2 SymbolTable
+    is_in_circular_dep: bool       # from Phase 3 circular_nodes
+
+    line_count: int
+
+    # Risk verdict
+    risk_level: str                # "CRITICAL" | "HIGH" | "MEDIUM" | "LOW"
+    risk_reasons: list             # list[str]: human-readable reasons, empty for LOW
