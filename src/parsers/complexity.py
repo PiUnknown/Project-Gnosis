@@ -75,6 +75,18 @@ def compute_python_complexity(source: str) -> dict:
 
     Returns empty dict on any failure (missing radon, syntax error, etc.).
     Callers must handle empty dict: treat as zero functions scored.
+
+    WHY WE SKIP BLOCKS WHERE block.letter == 'C':
+    radon's cc_visit returns three block types:
+      'F' — top-level function
+      'M' — class method
+      'C' — class itself
+
+    A class block's complexity score counts the class body as a whole
+    (including its methods), which double-counts complexity already
+    captured in the 'M' blocks. Including 'C' blocks inflates
+    max_complexity and produces incorrect results. We keep only
+    function ('F') and method ('M') blocks.
     """
     try:
         from radon.complexity import cc_visit
@@ -89,6 +101,13 @@ def compute_python_complexity(source: str) -> dict:
 
     result = {}
     for block in blocks:
+        # FIX: skip class-level blocks (letter == 'C').
+        # radon returns 'F' (function), 'M' (method), and 'C' (class).
+        # Class blocks aggregate their methods' complexity and must be
+        # excluded — only score individual functions and methods.
+        if block.letter == 'C':
+            continue
+
         classname = getattr(block, 'classname', None)
         key = f"{classname}.{block.name}" if classname else block.name
         # If same name appears twice (overloads or nested), keep the highest
