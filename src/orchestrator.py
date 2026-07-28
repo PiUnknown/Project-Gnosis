@@ -6,6 +6,7 @@ from src.agents import ingestion
 from src.agents import ast_parser
 from src.agents import dependency_graph
 from src.agents import complexity_scorer
+from src.agents import code_rag
 
 
 def run_pipeline(repo_url: str, github_token: str = None) -> ArchaeonState:
@@ -31,10 +32,10 @@ def run_pipeline(repo_url: str, github_token: str = None) -> ArchaeonState:
     state = ast_parser.run(state)
     state = dependency_graph.run(state)
     state = complexity_scorer.run(state)
+    state = code_rag.run(state)
 
-    # state = code_rag.run(state)         # Phase 5
-    # state = explainability.run(state)   # Phase 6
-    # state = doc_generator.run(state)    # Phase 7
+    # state = explainability.run(state)    # Phase 6
+    # state = doc_generator.run(state)     # Phase 7
 
     return state
 
@@ -74,19 +75,23 @@ def save_symbol_tables(state: ArchaeonState, output_dir: str = "./outputs") -> s
             "parse_error": st.parse_error,
             "parse_error_detail": st.parse_error_detail,
             "functions": [
-                {"name": f.name, "params": f.params, "line_start": f.line_start,
-                 "line_end": f.line_end, "docstring": f.docstring,
-                 "is_async": f.is_async, "is_method": f.is_method}
+                {"name": f.name, "params": f.params,
+                 "line_start": f.line_start, "line_end": f.line_end,
+                 "docstring": f.docstring, "is_async": f.is_async,
+                 "is_method": f.is_method}
                 for f in st.functions
             ],
             "classes": [
-                {"name": c.name, "bases": c.bases, "method_names": c.method_names,
-                 "line_start": c.line_start, "line_end": c.line_end, "docstring": c.docstring}
+                {"name": c.name, "bases": c.bases,
+                 "method_names": c.method_names,
+                 "line_start": c.line_start, "line_end": c.line_end,
+                 "docstring": c.docstring}
                 for c in st.classes
             ],
             "imports": [
                 {"module": i.module, "names": i.names,
-                 "is_from_import": i.is_from_import, "is_internal": i.is_internal}
+                 "is_from_import": i.is_from_import,
+                 "is_internal": i.is_internal}
                 for i in st.imports
             ]
         }
@@ -121,65 +126,37 @@ def save_graph_html(state: ArchaeonState, output_dir: str = "./outputs") -> str:
     os.makedirs(output_dir, exist_ok=True)
     path = os.path.join(output_dir, "dependency_graph.html")
     generate_graph_html(
-        state.dependency_graph, state.graph_stats, state.circular_nodes, path
+        state.dependency_graph, state.graph_stats,
+        state.circular_nodes, path
     )
     print(f"[Orchestrator] Dependency graph saved    → {path}")
     return path
 
 
 def save_complexity_report(state: ArchaeonState, output_dir: str = "./outputs") -> str:
-    """
-    Serialize complexity scores to a structured JSON report.
-    Phase 4's primary deliverable.
-
-    Structure:
-    {
-      "summary": { risk distribution, repo average, top complex functions },
-      "files_by_risk": { "CRITICAL": [...], "HIGH": [...], ... }
-    }
-
-    WHY GROUPED BY RISK LEVEL:
-    The primary use of this report is triage. An engineer opening it wants
-    to see CRITICAL files immediately, not scroll through 300 LOW files
-    to find the 3 dangerous ones. Grouping by risk serves the use case.
-    """
     os.makedirs(output_dir, exist_ok=True)
-
     scores = list(state.complexity_scores.values())
     risk_dist = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
     for s in scores:
         risk_dist[s.risk_level] = risk_dist.get(s.risk_level, 0) + 1
-
     complexities = [s.avg_complexity for s in scores if s.avg_complexity > 0]
     repo_avg = round(sum(complexities) / len(complexities), 2) if complexities else 0.0
-
-    # Top 10 most complex functions across the repo
     all_fn = []
     for s in scores:
         for fn_name, complexity in s.function_scores.items():
-            all_fn.append({
-                "file": s.file_path,
-                "function": fn_name,
-                "complexity": complexity
-            })
+            all_fn.append({"file": s.file_path, "function": fn_name, "complexity": complexity})
     top_functions = sorted(all_fn, key=lambda x: -x["complexity"])[:10]
 
-    def score_to_dict(s) -> dict:
+    def score_to_dict(s):
         return {
-            "file_path": s.file_path,
-            "language": s.language,
-            "risk_level": s.risk_level,
-            "risk_reasons": s.risk_reasons,
-            "avg_complexity": s.avg_complexity,
-            "max_complexity": s.max_complexity,
+            "file_path": s.file_path, "language": s.language,
+            "risk_level": s.risk_level, "risk_reasons": s.risk_reasons,
+            "avg_complexity": s.avg_complexity, "max_complexity": s.max_complexity,
             "max_complexity_function": s.max_complexity_function,
-            "function_count": s.function_count,
-            "coupling_score": s.coupling_score,
-            "undocumented_ratio": s.undocumented_ratio,
-            "line_count": s.line_count,
-            "parse_error": s.parse_error,
-            "is_in_circular_dep": s.is_in_circular_dep,
-            "function_scores": s.function_scores,
+            "function_count": s.function_count, "coupling_score": s.coupling_score,
+            "undocumented_ratio": s.undocumented_ratio, "line_count": s.line_count,
+            "parse_error": s.parse_error, "is_in_circular_dep": s.is_in_circular_dep,
+            "function_scores": s.function_scores
         }
 
     files_by_risk: dict = {"CRITICAL": [], "HIGH": [], "MEDIUM": [], "LOW": []}
@@ -196,9 +173,41 @@ def save_complexity_report(state: ArchaeonState, output_dir: str = "./outputs") 
         },
         "files_by_risk": files_by_risk
     }
-
     path = os.path.join(output_dir, "complexity_report.json")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(output, fh, indent=2)
     print(f"[Orchestrator] Complexity report saved   → {path}")
+    return path
+
+
+def save_rag_info(state: ArchaeonState, output_dir: str = "./outputs") -> str:
+    """
+    Write a summary of the RAG collection to outputs.
+    Primary deliverable is the ChromaDB collection on disk.
+    This JSON is the manifest of what was stored.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    chunk_count = 0
+    if state.chroma_collection_name:
+        try:
+            from src.utils.retriever import CodeRetriever, DEFAULT_CHROMA_DB_PATH
+            retriever = CodeRetriever(
+                state.chroma_collection_name,
+                chroma_db_path=DEFAULT_CHROMA_DB_PATH
+            )
+            chunk_count = retriever.count()
+        except Exception:
+            pass
+
+    output = {
+        "repo": f"{state.owner}/{state.repo_name}",
+        "collection_name": state.chroma_collection_name,
+        "chroma_db_path": "./chroma_db",
+        "total_chunks": chunk_count
+    }
+    path = os.path.join(output_dir, "rag_info.json")
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(output, fh, indent=2)
+    print(f"[Orchestrator] RAG info saved            → {path}")
     return path
