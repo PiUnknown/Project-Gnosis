@@ -13,6 +13,7 @@ Tests are grouped:
 All tests are offline. The embedder is mocked to avoid loading 80MB model.
 ChromaDB uses EphemeralClient (in-memory, no disk I/O).
 """
+import re
 import pytest
 from unittest.mock import patch
 
@@ -29,7 +30,7 @@ from src.state import ArchaeonState, FileMetadata
 
 
 # -----------------------------------------------------------------------
-# Fixtures
+# Helpers
 # -----------------------------------------------------------------------
 
 def make_function(name, line_start=1, line_end=10, docstring=None, is_method=False):
@@ -95,10 +96,16 @@ class PaymentHandler:
         return True
 """
 
+_INVALID_CHARS_PATTERN = re.compile(r'[^a-zA-Z0-9_-]')
+
+
+# -----------------------------------------------------------------------
+# Fixtures
+# -----------------------------------------------------------------------
 
 @pytest.fixture
 def mock_embed():
-    """Mock embed_texts and embed_query to avoid loading the ML model."""
+    """Mock embed_texts and embed_query to avoid loading the 80MB ML model."""
     def fake_embed_texts(texts):
         return [[0.1] * 384 for _ in texts]
 
@@ -122,7 +129,27 @@ def populated_retriever(ephemeral_chroma, mock_embed):
     """
     Create a CodeRetriever backed by an ephemeral ChromaDB collection
     pre-populated with test chunks.
+
+    WHY delete_collection BEFORE create_collection:
+    chromadb.EphemeralClient() creates a new Python-level client per call,
+    but the underlying Rust bindings use a shared in-process singleton
+    backend. A collection created in test N is still visible in test N+1
+    even though ephemeral_chroma is a new fixture instance each time.
+    Deleting before creating guarantees a clean slate regardless of
+    execution order or backend sharing.
+
+    WHY yield INSTEAD OF return:
+    yield lets pytest run teardown after the test body completes — even
+    if the test fails. Without teardown a failed test leaves the collection
+    behind and every subsequent test errors with "already exists" before
+    it even runs its own logic.
     """
+    # Clean up any collection left by a previous test
+    try:
+        ephemeral_chroma.delete_collection("test_collection")
+    except Exception:
+        pass
+
     col = ephemeral_chroma.create_collection(
         name="test_collection",
         metadata={"hnsw:space": "cosine"}
@@ -183,10 +210,16 @@ def populated_retriever(ephemeral_chroma, mock_embed):
         metadatas=[c["meta"] for c in test_chunks]
     )
 
-    return CodeRetriever(
+    yield CodeRetriever(
         collection_name="test_collection",
         _client=ephemeral_chroma
     )
+
+    # Teardown: always delete so the next test starts clean
+    try:
+        ephemeral_chroma.delete_collection("test_collection")
+    except Exception:
+        pass
 
 
 # -----------------------------------------------------------------------
@@ -323,10 +356,6 @@ class TestCollectionNaming:
 
     def test_different_repos_give_different_names(self):
         assert make_collection_name("owner", "repo1") != make_collection_name("owner", "repo2")
-
-
-import re
-_INVALID_CHARS_PATTERN = re.compile(r'[^a-zA-Z0-9_-]')
 
 
 # -----------------------------------------------------------------------
@@ -541,7 +570,7 @@ class TestCodeRetriever:
 
 
 # -----------------------------------------------------------------------
-# TestCodeRAGAgent (full agent run with mocks)
+# TestCodeRAGAgent
 # -----------------------------------------------------------------------
 
 class TestCodeRAGAgent:

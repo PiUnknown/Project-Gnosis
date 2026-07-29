@@ -1,0 +1,198 @@
+{
+  "repo": "realpython/codetiming",
+  "summary": {
+    "files_analyzed": 4,
+    "risk_distribution": {
+      "CRITICAL": 0,
+      "HIGH": 0,
+      "MEDIUM": 1,
+      "LOW": 3
+    },
+    "avg_complexity_across_repo": 2.49,
+    "top_complex_functions": [
+      {
+        "file": "tests/test_codetiming.py",
+        "function": "test_timers_stats",
+        "complexity": 7
+      },
+      {
+        "file": "codetiming/_timer.py",
+        "function": "Timer.start",
+        "complexity": 6
+      },
+      {
+        "file": "tests/test_codetiming.py",
+        "function": "test_accumulated_explicit_timer",
+        "complexity": 6
+      },
+      {
+        "file": "codetiming/_timer.py",
+        "function": "Timer.stop",
+        "complexity": 5
+      },
+      {
+        "file": "tests/test_codetiming.py",
+        "function": "test_accumulated_decorator",
+        "complexity": 5
+      },
+      {
+        "file": "tests/test_codetiming.py",
+        "function": "test_accumulated_context_manager",
+        "complexity": 5
+      },
+      {
+        "file": "tests/test_codetiming.py",
+        "function": "test_timer_as_decorator",
+        "complexity": 4
+      },
+      {
+        "file": "tests/test_codetiming.py",
+        "function": "test_timer_as_context_manager",
+        "complexity": 4
+      },
+      {
+        "file": "tests/test_codetiming.py",
+        "function": "test_explicit_timer",
+        "complexity": 4
+      },
+      {
+        "file": "tests/test_codetiming.py",
+        "function": "test_access_timer_object_in_context",
+        "complexity": 4
+      }
+    ]
+  },
+  "files_by_risk": {
+    "CRITICAL": [],
+    "HIGH": [],
+    "MEDIUM": [
+      {
+        "file_path": "tests/test_codetiming.py",
+        "language": "Python",
+        "risk_level": "MEDIUM",
+        "risk_reasons": [
+          "File is 464 lines (threshold: 300)"
+        ],
+        "avg_complexity": 3.08,
+        "max_complexity": 7.0,
+        "max_complexity_function": "test_timers_stats",
+        "function_count": 39,
+        "coupling_score": 1,
+        "undocumented_ratio": 0.0,
+        "line_count": 464,
+        "parse_error": false,
+        "is_in_circular_dep": false,
+        "function_scores": {
+          "waste_time": 2,
+          "decorated_timewaste": 2,
+          "decorated_timewaste_initial_text_true": 2,
+          "decorated_timewaste_initial_text_custom": 2,
+          "accumulated_timewaste": 2,
+          "test_timer_as_decorator": 4,
+          "test_timer_as_context_manager": 4,
+          "test_explicit_timer": 4,
+          "test_error_if_timer_not_running": 1,
+          "test_access_timer_object_in_context": 4,
+          "test_custom_logger": 2,
+          "test_timer_without_text": 3,
+          "test_accumulated_decorator": 5,
+          "test_accumulated_context_manager": 5,
+          "test_accumulated_explicit_timer": 6,
+          "test_error_if_restarting_running_timer": 1,
+          "test_last_starts_as_nan": 2,
+          "test_timer_sets_last": 2,
+          "test_using_name_in_text_without_explicit_timer": 3,
+          "test_using_name_in_text_with_explicit_timer": 3,
+          "test_using_minutes_attribute_in_text": 3,
+          "test_using_milliseconds_attribute_in_text": 3,
+          "test_text_formatting_function": 3,
+          "test_text_formatting_class": 3,
+          "test_timers_cleared": 3,
+          "test_running_cleared_timers": 3,
+          "test_timers_stats": 7,
+          "test_stats_missing_timers": 1,
+          "test_setting_timers_exception": 1,
+          "test_timer_as_decorator_with_initial_text_true": 4,
+          "test_timer_as_context_manager_with_initial_text_true": 4,
+          "test_explicit_timer_with_initial_text_true": 4,
+          "test_timer_as_decorator_with_initial_text_custom": 4,
+          "test_timer_as_context_manager_with_initial_text_custom": 4,
+          "test_explicit_timer_with_initial_text_custom": 4,
+          "test_explicit_timer_with_initial_text_true_with_name": 4,
+          "test_explicit_timer_with_initial_text_with_name": 4,
+          "CustomLogger.__init__": 1,
+          "CustomLogger.__call__": 1
+        }
+      }
+    ],
+    "LOW": [
+      {
+        "file_path": "codetiming/_timer.py",
+        "language": "Python",
+        "risk_level": "LOW",
+        "risk_reasons": [],
+        "avg_complexity": 2.8,
+        "max_complexity": 6.0,
+        "max_complexity_function": "Timer.start",
+        "function_count": 4,
+        "coupling_score": 1,
+        "undocumented_ratio": 0.0,
+        "line_count": 106,
+        "parse_error": false,
+        "is_in_circular_dep": false,
+        "function_scores": {
+          "FloatArg.__call__": 1,
+          "Timer.start": 6,
+          "Timer.stop": 5,
+          "Timer.__enter__": 1,
+          "Timer.__exit__": 1
+        }
+      },
+      {
+        "file_path": "codetiming/_timers.py",
+        "language": "Python",
+        "risk_level": "LOW",
+        "risk_reasons": [],
+        "avg_complexity": 1.58,
+        "max_complexity": 3.0,
+        "max_complexity_function": "Timers.stdev",
+        "function_count": 12,
+        "coupling_score": 0,
+        "undocumented_ratio": 0.0,
+        "line_count": 78,
+        "parse_error": false,
+        "is_in_circular_dep": false,
+        "function_scores": {
+          "Timers.__init__": 1,
+          "Timers.add": 1,
+          "Timers.clear": 1,
+          "Timers.__setitem__": 1,
+          "Timers.apply": 2,
+          "Timers.count": 1,
+          "Timers.total": 1,
+          "Timers.min": 2,
+          "Timers.max": 2,
+          "Timers.mean": 2,
+          "Timers.median": 2,
+          "Timers.stdev": 3
+        }
+      },
+      {
+        "file_path": "codetiming/__init__.py",
+        "language": "Python",
+        "risk_level": "LOW",
+        "risk_reasons": [],
+        "avg_complexity": 0.0,
+        "max_complexity": 0.0,
+        "max_complexity_function": "",
+        "function_count": 0,
+        "coupling_score": 1,
+        "undocumented_ratio": 0.0,
+        "line_count": 32,
+        "parse_error": false,
+        "is_in_circular_dep": false,
+        "function_scores": {}
+      }
+    ]
+  }
+}
