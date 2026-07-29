@@ -7,9 +7,15 @@ from src.agents import ast_parser
 from src.agents import dependency_graph
 from src.agents import complexity_scorer
 from src.agents import code_rag
+from src.agents import explainability
 
 
-def run_pipeline(repo_url: str, github_token: str = None) -> ArchaeonState:
+def run_pipeline(
+    repo_url: str,
+    github_token: str = None,
+    max_explanations: int = 20,
+    skip_llm: bool = False
+) -> ArchaeonState:
     state = ArchaeonState(repo_url=repo_url, github_token=github_token)
 
     owner, repo_name = parse_github_url(repo_url)
@@ -34,8 +40,12 @@ def run_pipeline(repo_url: str, github_token: str = None) -> ArchaeonState:
     state = complexity_scorer.run(state)
     state = code_rag.run(state)
 
-    # state = explainability.run(state)    # Phase 6
-    # state = doc_generator.run(state)     # Phase 7
+    if skip_llm:
+        print("\n[Orchestrator] Skipping Phase 6 (--skip-llm flag set)")
+    else:
+        state = explainability.run(state, max_count=max_explanations)
+
+    # state = doc_generator.run(state)   # Phase 7
 
     return state
 
@@ -143,8 +153,8 @@ def save_complexity_report(state: ArchaeonState, output_dir: str = "./outputs") 
     repo_avg = round(sum(complexities) / len(complexities), 2) if complexities else 0.0
     all_fn = []
     for s in scores:
-        for fn_name, complexity in s.function_scores.items():
-            all_fn.append({"file": s.file_path, "function": fn_name, "complexity": complexity})
+        for fn_name, c in s.function_scores.items():
+            all_fn.append({"file": s.file_path, "function": fn_name, "complexity": c})
     top_functions = sorted(all_fn, key=lambda x: -x["complexity"])[:10]
 
     def score_to_dict(s):
@@ -181,13 +191,7 @@ def save_complexity_report(state: ArchaeonState, output_dir: str = "./outputs") 
 
 
 def save_rag_info(state: ArchaeonState, output_dir: str = "./outputs") -> str:
-    """
-    Write a summary of the RAG collection to outputs.
-    Primary deliverable is the ChromaDB collection on disk.
-    This JSON is the manifest of what was stored.
-    """
     os.makedirs(output_dir, exist_ok=True)
-
     chunk_count = 0
     if state.chroma_collection_name:
         try:
@@ -199,7 +203,6 @@ def save_rag_info(state: ArchaeonState, output_dir: str = "./outputs") -> str:
             chunk_count = retriever.count()
         except Exception:
             pass
-
     output = {
         "repo": f"{state.owner}/{state.repo_name}",
         "collection_name": state.chroma_collection_name,
@@ -210,4 +213,32 @@ def save_rag_info(state: ArchaeonState, output_dir: str = "./outputs") -> str:
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(output, fh, indent=2)
     print(f"[Orchestrator] RAG info saved            → {path}")
+    return path
+
+
+def save_explanations(state: ArchaeonState, output_dir: str = "./outputs") -> str:
+    """
+    Serialize state.explanations to JSON.
+    Phase 6's primary deliverable. Also consumed by Agent 7.
+
+    Structure:
+    {
+      "repo": "owner/repo",
+      "files_explained": 12,
+      "explanations": {
+        "src/state.py": "This file defines...",
+        ...
+      }
+    }
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    output = {
+        "repo": f"{state.owner}/{state.repo_name}",
+        "files_explained": len(state.explanations),
+        "explanations": state.explanations
+    }
+    path = os.path.join(output_dir, "explanations.json")
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(output, fh, indent=2, ensure_ascii=False)
+    print(f"[Orchestrator] Explanations saved        → {path}")
     return path
