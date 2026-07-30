@@ -1,3 +1,9 @@
+"""
+Orchestrator: runs all 7 agents in sequence and saves all outputs.
+
+All agent imports are at the top level. If an import fails, the error
+surfaces immediately at startup rather than partway through a pipeline run.
+"""
 import json
 import os
 from src.state import ArchaeonState
@@ -8,6 +14,7 @@ from src.agents import dependency_graph
 from src.agents import complexity_scorer
 from src.agents import code_rag
 from src.agents import explainability
+from src.agents import doc_generator
 
 
 def run_pipeline(
@@ -16,10 +23,19 @@ def run_pipeline(
     max_explanations: int = 20,
     skip_llm: bool = False
 ) -> ArchaeonState:
+    """
+    Run the full 7-agent pipeline.
+
+    Args:
+        repo_url:          Public GitHub repository URL
+        github_token:      Optional PAT for higher rate limits
+        max_explanations:  Cap on LLM explanation calls (default 20)
+        skip_llm:          If True, skip Phase 6 entirely
+    """
     state = ArchaeonState(repo_url=repo_url, github_token=github_token)
 
     owner, repo_name = parse_github_url(repo_url)
-    state.owner = owner
+    state.owner     = owner
     state.repo_name = repo_name
 
     print(f"\n{'=' * 55}")
@@ -34,21 +50,36 @@ def run_pipeline(
     print(f"  Repo size:      {metadata.get('size', '?')} KB")
     print(f"  Language:       {metadata.get('language', 'Mixed')}")
 
+    # --- Phase 1: Ingestion ---
     state = ingestion.run(state)
+
+    # --- Phase 2: AST Parser ---
     state = ast_parser.run(state)
+
+    # --- Phase 3: Dependency Graph ---
     state = dependency_graph.run(state)
+
+    # --- Phase 4: Complexity Scorer ---
     state = complexity_scorer.run(state)
+
+    # --- Phase 5: Code RAG ---
     state = code_rag.run(state)
 
+    # --- Phase 6: Explainability ---
     if skip_llm:
-        print("\n[Orchestrator] Skipping Phase 6 (--skip-llm flag set)")
+        print("\n[Orchestrator] Skipping Phase 6 (--skip-llm)")
     else:
         state = explainability.run(state, max_count=max_explanations)
 
-    # state = doc_generator.run(state)   # Phase 7
+    # --- Phase 7: Doc Generator ---
+    state = doc_generator.run(state)
 
     return state
 
+
+# -----------------------------------------------------------------------
+# Save functions — one per output file
+# -----------------------------------------------------------------------
 
 def save_manifest(state: ArchaeonState, output_dir: str = "./outputs") -> str:
     os.makedirs(output_dir, exist_ok=True)
@@ -71,7 +102,7 @@ def save_manifest(state: ArchaeonState, output_dir: str = "./outputs") -> str:
     path = os.path.join(output_dir, "file_manifest.json")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(output, fh, indent=2)
-    print(f"[Orchestrator] Manifest saved            → {path}")
+    print(f"[Orchestrator] file_manifest.json       → {path}")
     return path
 
 
@@ -108,7 +139,7 @@ def save_symbol_tables(state: ArchaeonState, output_dir: str = "./outputs") -> s
     path = os.path.join(output_dir, "symbol_tables.json")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(output, fh, indent=2)
-    print(f"[Orchestrator] Symbol tables saved       → {path}")
+    print(f"[Orchestrator] symbol_tables.json       → {path}")
     return path
 
 
@@ -116,8 +147,10 @@ def save_graph_data(state: ArchaeonState, output_dir: str = "./outputs") -> str:
     os.makedirs(output_dir, exist_ok=True)
     output = {
         "repo": f"{state.owner}/{state.repo_name}",
-        "total_files": state.dependency_graph.number_of_nodes() if state.dependency_graph else 0,
-        "total_edges": state.dependency_graph.number_of_edges() if state.dependency_graph else 0,
+        "total_files": state.dependency_graph.number_of_nodes()
+                       if state.dependency_graph else 0,
+        "total_edges": state.dependency_graph.number_of_edges()
+                       if state.dependency_graph else 0,
         "circular_dependency_count": len(state.circular_deps),
         "circular_deps": state.circular_deps,
         "circular_nodes": list(state.circular_nodes),
@@ -127,7 +160,7 @@ def save_graph_data(state: ArchaeonState, output_dir: str = "./outputs") -> str:
     path = os.path.join(output_dir, "graph_data.json")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(output, fh, indent=2)
-    print(f"[Orchestrator] Graph data saved          → {path}")
+    print(f"[Orchestrator] graph_data.json          → {path}")
     return path
 
 
@@ -139,19 +172,19 @@ def save_graph_html(state: ArchaeonState, output_dir: str = "./outputs") -> str:
         state.dependency_graph, state.graph_stats,
         state.circular_nodes, path
     )
-    print(f"[Orchestrator] Dependency graph saved    → {path}")
+    print(f"[Orchestrator] dependency_graph.html    → {path}")
     return path
 
 
 def save_complexity_report(state: ArchaeonState, output_dir: str = "./outputs") -> str:
     os.makedirs(output_dir, exist_ok=True)
-    scores = list(state.complexity_scores.values())
+    scores    = list(state.complexity_scores.values())
     risk_dist = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
     for s in scores:
         risk_dist[s.risk_level] = risk_dist.get(s.risk_level, 0) + 1
     complexities = [s.avg_complexity for s in scores if s.avg_complexity > 0]
-    repo_avg = round(sum(complexities) / len(complexities), 2) if complexities else 0.0
-    all_fn = []
+    repo_avg     = round(sum(complexities) / len(complexities), 2) if complexities else 0.0
+    all_fn       = []
     for s in scores:
         for fn_name, c in s.function_scores.items():
             all_fn.append({"file": s.file_path, "function": fn_name, "complexity": c})
@@ -165,7 +198,8 @@ def save_complexity_report(state: ArchaeonState, output_dir: str = "./outputs") 
             "max_complexity_function": s.max_complexity_function,
             "function_count": s.function_count, "coupling_score": s.coupling_score,
             "undocumented_ratio": s.undocumented_ratio, "line_count": s.line_count,
-            "parse_error": s.parse_error, "is_in_circular_dep": s.is_in_circular_dep,
+            "parse_error": s.parse_error,
+            "is_in_circular_dep": s.is_in_circular_dep,
             "function_scores": s.function_scores
         }
 
@@ -186,7 +220,7 @@ def save_complexity_report(state: ArchaeonState, output_dir: str = "./outputs") 
     path = os.path.join(output_dir, "complexity_report.json")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(output, fh, indent=2)
-    print(f"[Orchestrator] Complexity report saved   → {path}")
+    print(f"[Orchestrator] complexity_report.json   → {path}")
     return path
 
 
@@ -196,7 +230,7 @@ def save_rag_info(state: ArchaeonState, output_dir: str = "./outputs") -> str:
     if state.chroma_collection_name:
         try:
             from src.utils.retriever import CodeRetriever, DEFAULT_CHROMA_DB_PATH
-            retriever = CodeRetriever(
+            retriever   = CodeRetriever(
                 state.chroma_collection_name,
                 chroma_db_path=DEFAULT_CHROMA_DB_PATH
             )
@@ -212,25 +246,11 @@ def save_rag_info(state: ArchaeonState, output_dir: str = "./outputs") -> str:
     path = os.path.join(output_dir, "rag_info.json")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(output, fh, indent=2)
-    print(f"[Orchestrator] RAG info saved            → {path}")
+    print(f"[Orchestrator] rag_info.json            → {path}")
     return path
 
 
 def save_explanations(state: ArchaeonState, output_dir: str = "./outputs") -> str:
-    """
-    Serialize state.explanations to JSON.
-    Phase 6's primary deliverable. Also consumed by Agent 7.
-
-    Structure:
-    {
-      "repo": "owner/repo",
-      "files_explained": 12,
-      "explanations": {
-        "src/state.py": "This file defines...",
-        ...
-      }
-    }
-    """
     os.makedirs(output_dir, exist_ok=True)
     output = {
         "repo": f"{state.owner}/{state.repo_name}",
@@ -240,5 +260,21 @@ def save_explanations(state: ArchaeonState, output_dir: str = "./outputs") -> st
     path = os.path.join(output_dir, "explanations.json")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(output, fh, indent=2, ensure_ascii=False)
-    print(f"[Orchestrator] Explanations saved        → {path}")
+    print(f"[Orchestrator] explanations.json        → {path}")
+    return path
+
+
+def save_onboarding_doc(state: ArchaeonState, output_dir: str = "./outputs") -> str:
+    """
+    Write state.final_doc to onboarding.md.
+    This is Project Gnosis's primary deliverable.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    if not state.final_doc:
+        print("[Orchestrator] No document to save (doc_generator may not have run)")
+        return ""
+    path = os.path.join(output_dir, "onboarding.md")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(state.final_doc)
+    print(f"[Orchestrator] onboarding.md            → {path}")
     return path
