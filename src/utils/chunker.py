@@ -23,7 +23,7 @@ class CodeChunk:
     A single retrievable unit of code.
     Stored in ChromaDB as one document with metadata.
     """
-    chunk_id: str           # unique: "{sanitized_path}::{symbol_name}::{symbol_type}"
+    chunk_id: str           # unique: "{sanitized_path}::{symbol_name}::{line_start}::{symbol_type}"
     content: str            # exact source text sent to the embedding model
     file_path: str
     symbol_name: str        # function name, class name, or "module"
@@ -105,7 +105,7 @@ def _make_module_chunk(file_path: str, language: str, symbol_table) -> Optional[
 
     content = f"# MODULE: {file_path}\n" + '\n\n'.join(parts)
     return CodeChunk(
-        chunk_id=_make_chunk_id(file_path, "module", "module"),
+        chunk_id=_make_chunk_id(file_path, "module", "module", line_start=1),
         content=content,
         file_path=file_path,
         symbol_name="module",
@@ -156,7 +156,7 @@ def _make_function_chunk(
     risk_level = complexity_score.risk_level if complexity_score else None
 
     return CodeChunk(
-        chunk_id=_make_chunk_id(file_path, func.name, "function"),
+        chunk_id=_make_chunk_id(file_path, func.name, "function", line_start=func.line_start),
         content=full_content,
         file_path=file_path,
         symbol_name=func.name,
@@ -200,7 +200,7 @@ def _make_class_chunk(
     risk_level = complexity_score.risk_level if complexity_score else None
 
     return CodeChunk(
-        chunk_id=_make_chunk_id(file_path, cls.name, "class"),
+        chunk_id=_make_chunk_id(file_path, cls.name, "class", line_start=cls.line_start),
         content=full_content,
         file_path=file_path,
         symbol_name=cls.name,
@@ -226,15 +226,26 @@ def _extract_lines(lines: list, line_start: int, line_end: int) -> str:
     return '\n'.join(lines[start:end]).strip()
 
 
-def _make_chunk_id(file_path: str, symbol_name: str, symbol_type: str) -> str:
+def _make_chunk_id(
+    file_path: str,
+    symbol_name: str,
+    symbol_type: str,
+    line_start: int = 0
+) -> str:
     """
     Unique, deterministic chunk ID for ChromaDB.
 
-    ChromaDB requires string IDs. If the same function name appears twice
-    in the same file (only possible in broken code that tree-sitter still
-    partially parsed), the second write overwrites the first.
-    Acceptable: last-seen definition wins.
+    WHY line_start IS REQUIRED:
+    Multiple classes in the same file can have methods with identical names
+    (e.g. __init__, render, __repr__). Without line_start, two different
+    methods in two different classes produce the same ID:
+      fastapi/responses.py::render::function  (line 12)
+      fastapi/responses.py::render::function  (line 47)
+    ChromaDB raises DuplicateIDError on batch insert.
+    Adding line_start makes every chunk unique:
+      fastapi/responses.py::render::12::function
+      fastapi/responses.py::render::47::function
     """
     safe_path = file_path.replace('/', '_').replace('.', '_').replace('-', '_')
     safe_name = symbol_name.replace('.', '_').replace(' ', '_')
-    return f"{safe_path}::{safe_name}::{symbol_type}"
+    return f"{safe_path}::{safe_name}::{line_start}::{symbol_type}"

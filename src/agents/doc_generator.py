@@ -119,7 +119,12 @@ def _build_project_summary(state: ArchaeonState) -> str:
         )
     lines.append(summary)
 
-    # Risk and dependency health
+    # Risk and dependency health.
+    # health collects only the BAD signals (things to flag with attention).
+    # Circular dep cleanliness is always stated explicitly — it must appear
+    # in the output whether cycles exist or not. The test for the clean case
+    # checks for "no circular" or "not detected" in the output, so we cannot
+    # rely on the else-branch alone (which only fires when health is empty).
     risk_dist = _compute_risk_distribution(state)
     critical  = risk_dist.get("CRITICAL", 0)
     high      = risk_dist.get("HIGH", 0)
@@ -138,6 +143,12 @@ def _build_project_summary(state: ArchaeonState) -> str:
         lines.append(
             "\n**Attention required:** " + ", ".join(health) + " identified."
         )
+        # FIX: when other risks exist but NO circular deps, we must still
+        # say so explicitly. Without this line the clean-cycles case produces
+        # output that mentions CRITICAL/HIGH but says nothing about circular
+        # deps — the test asserts "no circular" or "not detected" must appear.
+        if not state.circular_deps:
+            lines.append("No circular dependencies detected.")
     else:
         lines.append(
             "\nNo critical risks or circular dependencies were detected."
