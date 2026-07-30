@@ -8,7 +8,7 @@
 
 ## Project Summary
 
-*The `fastapi/__init__.py` file serves as the main entry point for the FastAPI framework, importing and exposing key classes and functions from other modules within the framework. Its primary responsibility is to provide a unified interface to the framework's core components, such as `FastAPI`, `Request`, `Response`, and `APIRouter`.*
+*The `fastapi/__init__.py` file serves as the main entry point for the FastAPI framework, importing and exposing key classes and functions from other modules within the framework. Its primary responsibility is to provide a unified interface for accessing core components, such as `FastAPI`, `Request`, `Response`, `APIRouter`, and various parameter functions like `Body`, `Depends`, and `Path`.*
 
 This repository contains **300 analyzed files** in Python (100%). **2016 functions** and **260 classes** were extracted and semantically indexed. **10 file(s)** received detailed explanations from the LLM analysis.
 
@@ -70,13 +70,13 @@ FILE                                          IMPORTS  RISK
 
 **Language:** Python · **Risk:** CRITICAL · **Imported by:** 204 file(s)
 
-The `fastapi/__init__.py` file serves as the main entry point for the FastAPI framework, importing and exposing key classes and functions from other modules within the framework. Its primary responsibility is to provide a unified interface to the framework's core components, such as `FastAPI`, `Request`, `Response`, and `APIRouter`. 
+The `fastapi/__init__.py` file serves as the main entry point for the FastAPI framework, importing and exposing key classes and functions from other modules within the framework. Its primary responsibility is to provide a unified interface for accessing core components, such as `FastAPI`, `Request`, `Response`, `APIRouter`, and various parameter functions like `Body`, `Depends`, and `Path`. 
 
-In terms of architecture, this file sits at the top of the dependency chain, importing from seven internal files, including `background.py`, `datastructures.py`, and `param_functions.py`, and is itself imported by over 200 other files. This positions it as a central hub, making it a critical component of the framework.
+In terms of architecture, this file sits at the center of the dependency chain, importing from seven internal files, including `background.py`, `datastructures.py`, and `param_functions.py`, and being imported by over 200 other files. This central position makes it a critical component of the framework, but also introduces a significant risk due to its involvement in a circular dependency. 
 
-Notably, this file does not define any functions itself but rather imports and re-exports classes and functions from other modules, such as `Body`, `Depends`, `File`, and `WebSocket`. A new engineer should focus on understanding the `FastAPI` class and its associated components, such as `APIRouter` and `Request`, to grasp how the framework is structured and how applications are built with it.
+The key entry points for a new engineer to explore are the `FastAPI` class, which is the main application class, and the various parameter functions, such as `Depends` and `Body`, which are used to define API endpoints. 
 
-However, caution is advised due to the file's involvement in a circular dependency, which poses a significant risk. Before modifying this file, a new engineer must carefully consider the potential impact on the entire framework to avoid introducing instability or breaking existing functionality. To start, a new engineer should read the `FastAPI` class definition in the `.applications` module first.
+Given the critical risk level and potential complexity, a new engineer should exercise caution when modifying this file. Before making any changes, they should carefully review the import chain and consider the potential impact on the entire framework. To begin, a new engineer should read the `applications.py` file first, which contains the definition of the `FastAPI` class, to gain a deeper understanding of the framework's core functionality.
 
 > **Imports:** `background.py`, `datastructures.py`, `exceptions.py`, `param_functions.py`, `requests.py`, `responses.py` +1 more  
 > **Imported by:** `param_functions.py`, `utils.py`, `main.py`, `test_additional_properties.py`, `test_additional_properties_bool.py`, `test_additional_response_extra.py` +198 more
@@ -87,11 +87,11 @@ However, caution is advised due to the file's involvement in a circular dependen
 
 The fastapi/testclient.py file is primarily responsible for providing a test client for the FastAPI application, utilizing the TestClient class from the starlette.testclient module. This file does not contain any functions, but rather imports and exposes the TestClient class for use in other parts of the codebase. 
 
-In terms of architecture, this file sits at the top of the dependency chain, as it is imported by 187 other files, including various test files such as test_additional_properties.py and test_additional_responses_bad.py. This suggests that the TestClient class is widely used throughout the codebase for testing purposes.
+In terms of architecture, this file sits at the top of the dependency chain, as it is imported by 187 other files, including various test files such as test_additional_properties.py and test_additional_responses_bad.py. This suggests that the TestClient class is widely used throughout the test suite for the FastAPI application.
 
-Since this file does not contain any functions or classes defined within it, the primary entry point for a new engineer would be the TestClient class from the starlette.testclient module. To understand how this class is used, a new engineer should look at the various test files that import this module, such as test_additional_properties.py, to see how the TestClient class is instantiated and used to test FastAPI applications.
+Since this file does not contain any functions or classes defined within it, the primary entry point for a new engineer would be the TestClient class from the starlette.testclient module. To understand how this class is used, a new engineer should look at the various test files that import this module, such as test_additional_properties.py, to see how the TestClient class is instantiated and used to test the FastAPI application.
 
-There are no significant risks or cautions associated with this file, given its low complexity and lack of internal dependencies. However, a new engineer should be aware that modifying this file could potentially affect a large number of other files that import it. To get started, a new engineer should read the documentation for the TestClient class in the starlette.testclient module to understand its capabilities and usage.
+There are no significant risks or cautions associated with modifying this file, given its simple import-only nature and low cyclomatic complexity. A new engineer should read the starlette.testclient module's documentation and the FastAPI test files that import this module, such as test_additional_properties.py, to understand how the TestClient class is used in the context of the FastAPI application. The TestClient class documentation should be read first to understand its capabilities and usage.
 
 > **Imports:** nothing internal  
 > **Imported by:** `test_additional_properties.py`, `test_additional_properties_bool.py`, `test_additional_response_extra.py`, `test_additional_responses_bad.py`, `test_additional_responses_custom_model_in_callback.py`, `test_additional_responses_custom_validationerror.py` +181 more
@@ -106,7 +106,7 @@ In the dependency chain, this file imports from `exceptions.py` and `sse.py`, an
 
 The key entry points in this file are the `UJSONResponse` and `ORJSONResponse` classes, which are the primary classes that a new engineer should read first. The `render` method in these classes is also important, as it is responsible for serializing the response content to JSON.
 
-There are several risks and cautions that a new engineer should be aware of when modifying this file. Firstly, 100% of the functions in this file have no docstrings, which can make it difficult to understand their purpose and behavior. Additionally, the `UJSONResponse` and `ORJSONResponse` classes are deprecated, which means that they may be removed in future versions of FastAPI. A new engineer should read the `UJSONResponse` class first to understand the primary responsibility of this file and the risks associated with modifying it.
+There are several risks and cautions that a new engineer should be aware of when modifying this file. Firstly, 100% of the functions in this file have no docstrings, which can make it difficult to understand the purpose and behavior of each function. Additionally, the `UJSONResponse` and `ORJSONResponse` classes are deprecated, which means that they may be removed in future versions of FastAPI. A new engineer should read the `UJSONResponse` class first to understand the custom response classes and their usage.
 
 > **Imports:** `exceptions.py`, `sse.py`  
 > **Imported by:** `__init__.py`, `test_additional_responses_custom_validationerror.py`, `test_additional_responses_response_class.py`, `test_default_response_class.py`, `test_default_response_class_router.py`, `test_dependency_after_yield_streaming.py` +21 more
@@ -115,11 +115,13 @@ There are several risks and cautions that a new engineer should be aware of when
 
 **Language:** Python · **Risk:** HIGH · **Imported by:** 26 file(s) · **Functions:** 9 · **Avg complexity:** 1.9
 
-This file, `fastapi/exceptions.py`, is primarily responsible for defining custom exception classes for the FastAPI framework. It contains classes such as `HTTPException`, `WebSocketException`, `ValidationException`, and others, which are used to handle and raise errors in a FastAPI application. The `ValidationException` class, for example, has a method `_format_endpoint_context` that formats the endpoint context for validation errors, and a `__str__` method that returns a string representation of the exception.
+This file, `fastapi/exceptions.py`, is primarily responsible for defining custom exception classes for the FastAPI framework. It contains classes such as `HTTPException`, `WebSocketException`, `ValidationException`, and others, which are used to handle and raise errors in a FastAPI application. The `ValidationException` class, for example, has a method `_format_endpoint_context` that formats the endpoint context for validation errors, and a method `__str__` that returns a string representation of the exception.
 
-In the architecture, this file sits at the foundation of the error handling mechanism, with 26 other files importing from it, including `__init__.py`, `encoders.py`, and `exception_handlers.py`. The `HTTPException` class, which inherits from `StarletteHTTPException`, is a key entry point, as it provides a way to raise HTTP exceptions in custom code.
+In terms of architecture, this file sits at the foundation of the FastAPI framework, as it is imported by 26 other files, including `__init__.py`, `encoders.py`, and `exception_handlers.py`. This means that any changes to this file could have a ripple effect throughout the framework.
 
-New engineers should start by reading the `HTTPException` and `ValidationException` classes, as well as the `_format_endpoint_context` and `__str__` methods, to understand how exceptions are handled and formatted. However, they should be cautious when modifying this file, as it has a high risk level due to the lack of docstrings in 100% of its functions, which can make it difficult to understand the intended behavior of the code. Additionally, the high cyclomatic complexity in some methods, such as `_format_endpoint_context`, can make the code prone to errors. Before making any changes, engineers should carefully review the code and consider adding docstrings and simplifying complex logic to reduce the risk of introducing bugs. The `ValidationException` class is a good starting point for understanding the exception handling mechanism.
+Key entry points for a new engineer include the `HTTPException` and `ValidationException` classes, as well as the `_format_endpoint_context` method. The `__init__` methods of these classes are also important, as they define the initialization of the exceptions.
+
+There are significant risks associated with modifying this file, primarily due to its high coupling and lack of docstrings. The average cyclomatic complexity of 1.9, with a maximum of 6 in the `_format_endpoint_context` method, indicates that the code can be complex and difficult to understand. Furthermore, 100% of the functions in this file have no docstrings, making it challenging for new engineers to comprehend the purpose and behavior of the code. Before modifying this file, a new engineer should carefully review the existing code and consider adding docstrings to improve readability and maintainability. To get started, a new engineer should read the `HTTPException` class first.
 
 > **Imports:** nothing internal  
 > **Imported by:** `__init__.py`, `encoders.py`, `exception_handlers.py`, `params.py`, `responses.py`, `utils.py` +20 more
@@ -128,13 +130,13 @@ New engineers should start by reading the `HTTPException` and `ValidationExcepti
 
 **Language:** Python · **Risk:** CRITICAL · **Imported by:** 2 file(s) · **Functions:** 4 · **Avg complexity:** 10.2
 
-The primary responsibility of this file, `fastapi/encoders.py`, is to convert any object to something that can be encoded in JSON, primarily through the `jsonable_encoder` function. This function takes an object and various parameters, such as `include`, `exclude`, and `custom_encoder`, to determine how the object should be converted.
+The primary responsibility of this file, `fastapi/encoders.py`, is to provide a function, `jsonable_encoder`, that converts any object to something that can be encoded in JSON. This function is used internally by FastAPI to ensure that any object returned can be encoded as JSON before being sent to the client.
 
-In the dependency chain, this file imports from `exceptions.py` and `types.py`, and is imported by `exception_handlers.py` and `test_jsonable_encoder.py`. This suggests that the `jsonable_encoder` function is a key component in handling data serialization within the FastAPI framework.
+In the dependency chain, this file imports from `exceptions.py` and `types.py`, and is imported by `exception_handlers.py` and `test_jsonable_encoder.py`. The `jsonable_encoder` function is the key entry point, and it handles various types of objects, including Pydantic models, dataclasses, enums, and more.
 
-The `jsonable_encoder` function is the main entry point for understanding this file, as it encapsulates the logic for converting objects to JSON-compatible formats. It handles various types of objects, including Pydantic models, dataclasses, enums, and more, and applies the provided parameters to customize the conversion process.
+The `jsonable_encoder` function takes several parameters, including `include`, `exclude`, `by_alias`, and `custom_encoder`, which allow for customization of the encoding process. It uses recursion to handle nested objects and collections.
 
-However, caution is advised when modifying this file due to its high cyclomatic complexity, particularly in the `jsonable_encoder` function, which has a complexity of 35. This complexity can make the code difficult to understand and maintain, and increases the risk of introducing bugs or unintended behavior. Therefore, a new engineer should carefully review the `jsonable_encoder` function and its dependencies before making any changes. To start, they should read the `jsonable_encoder` function first to understand its logic and parameters.
+A new engineer should be aware of the high cyclomatic complexity of the `jsonable_encoder` function, which has a complexity of 35. This indicates a high risk of errors or unintended behavior when modifying this function. Before modifying this file, it is essential to thoroughly understand the `jsonable_encoder` function and its parameters. The new engineer should read the `jsonable_encoder` function first to understand how it works and how it handles different types of objects.
 
 > **Imports:** `exceptions.py`, `types.py`  
 > **Imported by:** `exception_handlers.py`, `test_jsonable_encoder.py`
@@ -143,13 +145,13 @@ However, caution is advised when modifying this file due to its high cyclomatic 
 
 **Language:** Python · **Risk:** CRITICAL · **Imported by:** 2 file(s) · **Functions:** 9 · **Avg complexity:** 1.0
 
-The `fastapi/param_functions.py` file is primarily responsible for defining the `Path` function, which is used to declare path parameters in FastAPI applications. This function takes various parameters, such as `default`, `alias`, `title`, and `description`, to configure the behavior of the path parameter. The `Path` function is heavily annotated with documentation strings, providing detailed information about each parameter.
+The `fastapi/param_functions.py` file is primarily responsible for defining the `Path` function, which is used to declare path parameters in FastAPI applications. This function takes various parameters that allow for customization of the path parameter, such as its default value, alias, validation rules, and documentation metadata.
 
-In the dependency chain, this file imports from `__init__.py` and `datastructures.py`, and is itself imported by `__init__.py` and `test_ambiguous_params.py`. This creates a circular dependency, which is a critical risk that should be carefully managed to avoid potential issues.
+In terms of architecture, this file sits in the middle of the dependency chain, importing from `__init__.py` and `datastructures.py`, and being imported by `__init__.py` and `test_ambiguous_params.py`. This creates a circular dependency, which is a critical risk that should be carefully managed to avoid potential issues.
 
-The `Path` function is the key entry point in this file, and new engineers should start by reading its documentation and understanding how it is used to declare path parameters. The function's numerous parameters and annotations provide a wealth of information about its behavior and usage.
+The `Path` function is the key entry point in this file, and new engineers should read its documentation and implementation first to understand how it works. The function is heavily annotated with documentation strings that provide detailed information about each parameter, making it easier to understand its usage and behavior.
 
-Before modifying this file, engineers should be aware of the circular dependency risk and take steps to mitigate it. Additionally, they should carefully review the existing code and documentation to ensure that any changes are consistent with the overall architecture and design of the FastAPI framework. To get started, a new engineer should read the `Path` function first, paying close attention to its parameters and annotations.
+Before modifying this file, new engineers should be aware of the circular dependency risk and take necessary precautions to avoid introducing any issues. They should also carefully review the existing code and documentation to ensure that any changes they make are consistent with the overall design and functionality of the `Path` function. To get started, a new engineer should read the `Path` function first to understand its implementation and usage.
 
 > **Imports:** `__init__.py`, `datastructures.py`  
 > **Imported by:** `__init__.py`, `test_ambiguous_params.py`
@@ -158,13 +160,13 @@ Before modifying this file, engineers should be aware of the circular dependency
 
 **Language:** Python · **Risk:** CRITICAL · **Imported by:** 0 file(s) · **Functions:** 1 · **Avg complexity:** 27.0
 
-The `scripts/deploy_docs_status.py` file is primarily responsible for updating the status of a GitHub pull request based on the deployment state of documentation. It uses the `Github` class from the `github` library to interact with the GitHub API. The `main` function is the entry point, which initializes logging, loads settings from the `Settings` class, and updates the pull request status accordingly.
+The `scripts/deploy_docs_status.py` file is primarily responsible for updating the status of a GitHub pull request based on the deployment state of documentation. It uses the `Github` class from the `github` library to interact with the GitHub API. The `main` function is the entry point, which initializes logging, loads settings from the `Settings` class, and then updates the pull request status accordingly.
 
-In terms of architecture, this file has no internal dependencies and only imports external libraries, making it a standalone script. The `Settings` class is used to load configuration settings, such as the GitHub repository, token, and deployment URL. The `LinkData` class is used to represent links to documentation pages.
+In terms of architecture, this file sits at the end of the dependency chain, with no internal dependencies detected. It imports external libraries such as `github`, `pydantic`, and `pydantic_settings`. The `Settings` class is used to load configuration settings, and the `LinkData` class is used to represent link data for documentation pages.
 
-The `main` function is the key entry point, and new engineers should read this function first to understand the script's logic. The function uses the `Github` class to get the pull request and commit, and then updates the commit status based on the deployment state.
+The `main` function is the key entry point, and new engineers should read this function first to understand the overall flow of the script. The `Settings` and `LinkData` classes are also important to understand, as they define the structure of the configuration settings and link data, respectively.
 
-There are significant risks associated with modifying this file, primarily due to the high cyclomatic complexity of the `main` function, which has a complexity of 27. This complexity makes the code difficult to understand and maintain. Additionally, the lack of docstrings and comments in the code makes it challenging for new engineers to understand the intent and behavior of the script. Before modifying this file, engineers should carefully review the code and consider refactoring it to reduce complexity and improve readability. The new engineer should read the `main` function first to understand the script's logic and complexity.
+There are significant risks associated with modifying this file, primarily due to its high cyclomatic complexity. The `main` function has a complexity of 27, which is above the threshold of 21. This means that the function has many conditional paths, which can make it difficult to understand and modify. New engineers should exercise caution when modifying this file, and consider refactoring the code to reduce its complexity. To get started, a new engineer should read the `main` function in the `scripts/deploy_docs_status.py` file first.
 
 > **Imports:** nothing internal
 
@@ -174,11 +176,11 @@ There are significant risks associated with modifying this file, primarily due t
 
 The scripts/docs.py file is primarily responsible for managing documentation-related tasks, such as removing unused documentation source files and adding permalinks to specific pages. The `remove_unused_docs_src` function deletes .py files in the docs_src directory that are not referenced in any .md files under the docs directory, while the `add_permalinks_page` function adds or updates header permalinks in specific pages of the En docs.
 
-In terms of architecture, this file appears to be a standalone script with no internal dependencies, importing various external libraries such as `json`, `logging`, and `jinja2`. It does not seem to be part of a larger dependency chain, but rather a utility script used to maintain the documentation.
+This file sits at the periphery of the dependency chain, with no internal dependencies detected. It imports various external libraries, including `json`, `logging`, `os`, and `jinja2`, to perform its tasks.
 
-Key entry points for a new engineer would be the `remove_unused_docs_src` and `add_permalinks_page` functions, which demonstrate the primary responsibilities of this file. The `VisibleTextExtractor` class is also used in the `add_permalinks_page` function, but its definition is not shown in the provided code snippet.
+Key entry points for a new engineer include the `remove_unused_docs_src` and `add_permalinks_page` functions, which demonstrate the file's primary responsibilities. The `VisibleTextExtractor` class, used in `add_permalinks_page`, is also worth examining.
 
-A significant risk associated with modifying this file is its high cyclomatic complexity, particularly in the `remove_unused_docs_src` function, which has a complexity of 31. This complexity can make the code difficult to understand and maintain, and any modifications should be made with caution to avoid introducing bugs or unintended behavior. Before modifying this file, a new engineer should carefully review the existing code and consider refactoring or simplifying the complex logic to reduce the risk of errors. They should read the `remove_unused_docs_src` function first to understand the complexity and potential pitfalls.
+However, caution is advised when modifying this file due to its high cyclomatic complexity, particularly in the `remove_unused_docs_src` function, which has a complexity of 31. This complexity poses a risk of introducing bugs or unintended behavior. Additionally, the lack of internal dependencies does not necessarily imply simplicity, as the file's interactions with external libraries and the file system can still lead to subtle issues. Before making changes, a new engineer should carefully review the existing code and consider the potential impact on the overall system. They should read the `remove_unused_docs_src` function first to understand the file's core logic and complexity.
 
 > **Imports:** nothing internal
 
@@ -188,11 +190,11 @@ A significant risk associated with modifying this file is its high cyclomatic co
 
 The `notify_translations.py` file is primarily responsible for notifying users about new translation pull requests on GitHub. It achieves this by interacting with the GitHub API using the `Github` class and the `httpx` library to send GraphQL queries. The `main` function is the entry point, which initializes the settings, retrieves the GitHub event, and processes the pull request.
 
-In terms of architecture, this file does not have any internal dependencies, meaning it does not import any other modules within the project. However, it does rely on external libraries such as `github`, `httpx`, and `pydantic`.
+In terms of architecture, this file sits at the top of the dependency chain, with no internal dependencies detected. It imports various libraries, including `github`, `httpx`, and `pydantic`, to handle tasks such as authentication, API requests, and data modeling.
 
-To understand this file, a new engineer should start by reading the `main` function, which provides an overview of the script's workflow. They should also familiarize themselves with the `get_graphql_response` function, which is used to send GraphQL queries to the GitHub API.
+Key entry points for a new engineer include the `main` function, which orchestrates the entire process, and the `get_graphql_response` function, which handles the GraphQL queries to the GitHub API. The `get_graphql_translation_discussion_comments` function is also important, as it retrieves comments from a discussion.
 
-There are significant risks associated with modifying this file, primarily due to its high cyclomatic complexity, particularly in the `main` function. The complexity is 28, which exceeds the threshold of 21, indicating that the function is difficult to understand and maintain. Additionally, the lack of docstrings and the presence of complex logic make it challenging to comprehend the code's behavior. Before making any changes, a new engineer should carefully review the code and consider refactoring it to improve readability and maintainability. They should read the `main` function first to understand the overall workflow.
+However, caution is advised when modifying this file due to its high cyclomatic complexity, particularly in the `main` function, which has a complexity of 28. This increases the risk of introducing bugs or unintended behavior. Additionally, the lack of docstrings and the presence of complex logic make it essential to carefully review the code before making changes. To start, a new engineer should read the `main` function first to understand the overall flow of the script.
 
 > **Imports:** nothing internal
 
@@ -200,13 +202,11 @@ There are significant risks associated with modifying this file, primarily due t
 
 **Language:** Python · **Risk:** CRITICAL · **Imported by:** 0 file(s) · **Functions:** 11 · **Avg complexity:** 9.3
 
-This file, `tests/test_router_events.py`, is primarily responsible for testing the event handling functionality of the `FastAPI` and `APIRouter` classes. It contains a series of test functions, including `test_router_events`, `test_router_nested_lifespan_state`, `test_startup_shutdown_handlers_as_parameters`, `test_app_lifespan_state`, and `test_router_sync_generator_lifespan`, which verify the correct execution of startup and shutdown handlers in various scenarios.
+This file, `tests/test_router_events.py`, is primarily responsible for testing the event handling functionality of the FastAPI framework, specifically focusing on router events. It contains a series of test functions, including `test_router_events`, `test_router_nested_lifespan_state`, `test_startup_shutdown_handlers_as_parameters`, `test_app_lifespan_state`, and `test_router_sync_generator_lifespan`, which verify the correct execution of startup and shutdown handlers for applications and routers.
 
-In the dependency chain, this file imports `FastAPI`, `APIRouter`, and `TestClient` from the `fastapi` module, as well as `BaseModel` from `pydantic`. It also imports `State` from an unspecified module, which is used to track the state of the application and routers during testing.
+In the dependency chain, this file imports from `__init__.py` and `testclient.py`, indicating its position as a testing module that relies on other internal components. The tests in this file utilize the `FastAPI` and `APIRouter` classes, as well as the `TestClient` class from `fastapi.testclient`, to simulate application and router events.
 
-The key entry points for understanding this file are the `test_router_events` and `test_router_nested_lifespan_state` functions, which demonstrate the basic event handling behavior of `FastAPI` and `APIRouter`. The `test_startup_shutdown_handlers_as_parameters` function shows how to pass startup and shutdown handlers as parameters to `FastAPI` and `APIRouter`.
-
-There are significant risks associated with modifying this file, primarily due to its high cyclomatic complexity and coupling with other internal files. The `test_router_events` function has a cyclomatic complexity of 21, which exceeds the threshold and may indicate difficult-to-test code. Additionally, the file imports from two internal files, which may introduce circular dependencies or other issues. Before modifying this file, a new engineer should carefully review the existing tests and consider the potential impact on the overall system. They should read the `test_router_events` function first to understand the basic event handling behavior being tested.
+New engineers should start by reading the `test_router_events` function, which demonstrates the basic event handling mechanism for routers and applications. They should also examine the `test_router_nested_lifespan_state` function to understand how nested router lifespans are handled. When modifying this file, engineers must be aware of the high cyclomatic complexity in some functions, such as `test_router_events`, which has a complexity of 21. Additionally, they should be cautious of the potential for circular dependencies due to the imports from internal files. To begin, a new engineer should read the `test_router_events` function to gain a solid understanding of the event handling mechanisms being tested.
 
 > **Imports:** `__init__.py`, `testclient.py`
 
@@ -219,7 +219,7 @@ There are significant risks associated with modifying this file, primarily due t
 
 ⚠️ **1 cycle(s) detected.** These files cannot be read in isolation — each depends on something that depends on it. Refactor before touching.
 
-- `param_functions.py → __init__.py → param_functions.py`
+- `__init__.py → param_functions.py → __init__.py`
 
 ### Critical Risk Files
 
@@ -265,7 +265,7 @@ These files import from many internal modules. Changing any of their dependencie
 
 ⚠️ **A complete reading order cannot be computed** because circular dependencies exist in this codebase. Files involved in cycles have no well-defined reading order — each requires understanding the other first.
 
-**Files in cycles:** `param_functions.py`, `__init__.py`
+**Files in cycles:** `__init__.py`, `param_functions.py`
 
 **Recommended first steps:**
 
@@ -289,7 +289,7 @@ These files import from many internal modules. Changing any of their dependencie
 ## About This Document
 
 Generated by **Project Gnosis** — Code Archaeology Agent  
-Generated at: `2026-07-31 00:48`  
+Generated at: `2026-07-31 01:17`  
 Pipeline: 7 agents ran in sequence  
 Files analyzed: 300  
 Files scored: 252  
