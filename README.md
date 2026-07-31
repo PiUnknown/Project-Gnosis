@@ -187,8 +187,8 @@ Used to clone repositories programmatically for private repos or when the full f
 **GitHub REST API**  
 For public repositories: fetches the complete file tree and individual file contents via HTTP. No cloning required. Rate limit: 60 requests/hour unauthenticated, 5000/hour with a PAT.
 
-**Streamlit** (v1 frontend)  
-Lightweight frontend for the demo. Text input for GitHub URL, progress bar showing which agent is running, download buttons for all outputs. Replaced by Next.js in v2.
+**Frontend (React 18 + TypeScript + Tailwind + shadcn/ui via Lovable)**  
+Production-quality SPA; shareable demo; correct tech for a developer tool portfolio.
 
 **pyvis**  
 Renders the NetworkX dependency graph as an interactive HTML file using D3.js. Users can zoom, pan, and click nodes to see file details. Zero frontend code required.
@@ -302,7 +302,7 @@ code-archaeology-agent/
 │       └── main.py              # FastAPI application
 │
 ├── frontend/
-│   └── app.py                   # Streamlit frontend
+│   └── app.py                   # React frontend
 │
 ├── tests/
 │   ├── test_ingestion.py
@@ -360,9 +360,18 @@ Deliverable: a complete onboarding doc for a real open-source repo.
 **Phase 8: FastAPI Backend**  
 Wrap the pipeline in an API. POST `/analyze` → returns the doc as JSON.
 
-**Phase 9: Streamlit Frontend + Demo Polish**  
-UI: URL input → progress indicator per agent → download buttons.  
-Demo video: run the tool live on a real repo, post to Twitter/LinkedIn.
+**Phase 9: React Frontend**
+Production-quality web UI built with React 18 + TypeScript + Tailwind CSS + shadcn/ui via Lovable (lovable.dev).
+Three screens: Landing (URL input + options), Job Progress (live-polling pipeline visualizer), Results (tabbed output viewer).
+
+Deliverables:
+- Complete React frontend scaffolded via Lovable prompt
+- Live polling against FastAPI backend (2s interval, proper cleanup)
+- Markdown-rendered onboarding document
+- Sortable/filterable complexity table
+- Dependency graph data viewer
+- One-click downloads for onboarding.md and JSON outputs
+- Demo video: full pipeline run from URL input to onboarding doc, posted to LinkedIn/Twitter
 
 ---
 
@@ -438,10 +447,6 @@ cp .env.example .env
 python -m src.orchestrator --url https://github.com/tiangolo/fastapi --output ./outputs
 ```
 
-**Running the Streamlit UI:**
-```bash
-streamlit run frontend/app.py
-```
 
 **Running the FastAPI server:**
 ```bash
@@ -464,8 +469,8 @@ ChromaDB: persistent, metadata filtering, easier API. FAISS: faster at scale, no
 **Groq vs local LLM**  
 Groq's free tier is fast enough (500 tokens/second) and llama-3.3-70b produces high-quality explanations. Running locally (Ollama + mistral) avoids rate limits but requires 8GB+ RAM and is slower. For development and demo, Groq is the right call. Local fallback is a config option.
 
-**Streamlit vs Next.js**  
-Streamlit for v1: zero frontend code, working demo in one afternoon. Next.js for v2: proper product, component architecture, better UX. The rule: ship a working demo first, polish after you know the core works.
+**React via Lovable vs Streamlit**
+Streamlit produces a working demo in 30 minutes but looks like a data science notebook. Project Gnosis is a developer tool being presented in interviews and on LinkedIn. A React frontend with a dark theme, monospace accents, and a live pipeline visualizer signals production intent in a way Streamlit cannot. Lovable generates the scaffold from a single precise prompt, reducing frontend build time to the same order as Streamlit while producing professional output. The generated code is standard React — fully editable and not locked into any proprietary abstraction.
 
 ---
 
@@ -483,7 +488,7 @@ Streamlit for v1: zero frontend code, working demo in one afternoon. Next.js for
 ## Roadmap
 
 **v1.0 — Core pipeline**  
-All 7 agents working end-to-end. Streamlit demo. Supports Python and JS repos.
+All 7 agents working end-to-end. React frontend. Supports Python and JS repos.
 
 **v1.1 — Language expansion**  
 Add Rust, Java, C++ via tree-sitter grammars.
