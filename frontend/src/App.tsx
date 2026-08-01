@@ -409,7 +409,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
           </div>
 
           <div style={{ position: 'absolute', bottom: 40, left: 96, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)' }}>
-            v0.1.0 · 7-AGENT PIPELINE · TREE-SITTER · CHROMADB · GROQ
+            v0.1.0 · PiUnknown · Project Gnosis
           </div>
         </div>
 
