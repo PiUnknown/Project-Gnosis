@@ -283,7 +283,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#1400FF' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#1400FF' }}>
       <NavBar onLogoClick={() => {}} />
       <div style={{ display: 'flex', flex: 1, position: 'relative', overflow: 'hidden' }}>
         {/* Left column */}
@@ -295,15 +295,13 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'center',
-            paddingTop: 40,
-            paddingBottom: 80,
           }}
         >
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 72, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 58, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
               UNDERSTAND
             </div>
-            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 72, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 58, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
               ANY CODEBASE
             </div>
           </div>
@@ -408,7 +406,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
             </button>
           </div>
 
-          <div style={{ position: 'absolute', bottom: 40, right: 96, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)' }}>
+          <div style={{ position: 'fixed', bottom: 32, right: 96, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)' }}>
             v0.1.0 · PiUnknown · Project Gnosis
           </div>
         </div>
