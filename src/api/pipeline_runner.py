@@ -184,6 +184,35 @@ def _serialize_result(job_id: str, state: ArchaeonState) -> dict:
                 "is_in_circular_dep": score.is_in_circular_dep
             })
 
+    dependency_rows = []
+    if state.dependency_graph:
+        for node in state.dependency_graph.nodes():
+            complexity_score = state.complexity_scores.get(node)
+            risk_level = complexity_score.risk_level if complexity_score else "LOW"
+            dependency_rows.append({
+                "file": PurePosixPath(node).name,
+                "path": node,
+                "imported_by": state.dependency_graph.in_degree(node),
+                "imports": state.dependency_graph.out_degree(node),
+                "risk": risk_level,
+            })
+        dependency_rows.sort(key=lambda r: r["imported_by"], reverse=True)
+
+    complexity_rows = []
+    for path, scores in state.complexity_scores.items():
+        complexity_rows.append({
+            "file": PurePosixPath(path).name,
+            "path": path,
+            "risk": scores.risk_level,
+            "avg_cc": scores.avg_complexity,
+            "max_cc": scores.max_complexity,
+            "worst_fn": scores.max_complexity_function,
+            "coupling": scores.coupling_score,
+            "flags": scores.risk_reasons,
+        })
+
+    reading_order = state.topological_order or []
+
     return {
         "job_id": job_id,
         "repo": f"{state.owner}/{state.repo_name}",
@@ -216,5 +245,11 @@ def _serialize_result(job_id: str, state: ArchaeonState) -> dict:
             "topological_order_available": bool(state.topological_order),
             "reading_order_top_10": state.topological_order[:10]
         },
-        "explanations": state.explanations
+        "explanations": state.explanations,
+        # frontend-required fields:
+        "dependency_rows": dependency_rows[:10],
+        "reading_order": reading_order[:10],
+        "complexity_rows": complexity_rows,
+        "complexity_report_json": state.complexity_report_json or "{}",
+        "circular_deps": state.circular_deps,
     }

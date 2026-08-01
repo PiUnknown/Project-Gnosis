@@ -1,0 +1,185 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --color-gnosis-blue: #1400FF;
+  --color-gnosis-blue-dark: #0F00CC;
+  --color-gnosis-light: #F0F0FF;
+  --color-gnosis-error: #FF3B3B;
+  --font-playfair: 'Playfair Display', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+  --font-inter: 'Inter', system-ui, sans-serif;
+}
+
+* {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: #1400FF;
+  margin: 0;
+  padding: 0;
+}
+
+/* Custom scrollbar for light content areas */
+.light-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.light-scroll::-webkit-scrollbar-track {
+  background: rgba(20, 0, 255, 0.08);
+}
+.light-scroll::-webkit-scrollbar-thumb {
+  background: rgba(20, 0, 255, 0.25);
+}
+.light-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 0, 255, 0.40);
+}
+
+/* Hide scrollbars by default, show on hover */
+.auto-scroll {
+  scrollbar-width: none;
+}
+.auto-scroll::-webkit-scrollbar {
+  display: none;
+}
+.auto-scroll:hover {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(20,0,255,0.25) rgba(20,0,255,0.08);
+}
+.auto-scroll:hover::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+}
+.auto-scroll:hover::-webkit-scrollbar-track {
+  background: rgba(20, 0, 255, 0.08);
+}
+.auto-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(20, 0, 255, 0.25);
+}
+
+@keyframes dotCycle {
+  0%, 24% { content: '·'; }
+  25%, 49% { content: '··'; }
+  50%, 74% { content: '···'; }
+  75%, 100% { content: ''; }
+}
+
+@keyframes borderPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes spinnerCycle {
+  0%   { content: '|'; }
+  25%  { content: '/'; }
+  50%  { content: '—'; }
+  75%  { content: '\\'; }
+}
+
+.running-dots::after {
+  content: '···';
+  animation: dotCycle 1.2s steps(1) infinite;
+}
+
+.pulse-border {
+  animation: borderPulse 1.4s ease-in-out infinite;
+}
+
+/* Markdown styles for onboarding doc */
+.gnosis-markdown h1 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 48px;
+  font-weight: 400;
+  text-transform: uppercase;
+  color: #1400FF;
+  margin-bottom: 24px;
+  line-height: 1.0;
+  letter-spacing: -0.01em;
+}
+.gnosis-markdown h2 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 32px;
+  font-weight: 400;
+  text-transform: uppercase;
+  color: #1400FF;
+  margin-top: 48px;
+  margin-bottom: 16px;
+  line-height: 1.0;
+}
+.gnosis-markdown h3 {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #1400FF;
+  margin-top: 32px;
+  margin-bottom: 12px;
+}
+.gnosis-markdown p {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 16px;
+  color: #0A0A1A;
+  line-height: 1.7;
+  margin-bottom: 16px;
+}
+.gnosis-markdown code {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  color: #1400FF;
+  background: rgba(20, 0, 255, 0.08);
+  padding: 2px 6px;
+}
+.gnosis-markdown pre {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  color: #0A0A1A;
+  background: rgba(20, 0, 255, 0.04);
+  border: 1px solid rgba(20, 0, 255, 0.12);
+  padding: 20px 24px;
+  overflow-x: auto;
+  margin-bottom: 24px;
+}
+.gnosis-markdown a {
+  color: #1400FF;
+  text-decoration: underline;
+}
+.gnosis-markdown a:hover {
+  color: #0F00CC;
+}
+.gnosis-markdown blockquote {
+  border-left: 2px solid #1400FF;
+  padding-left: 20px;
+  color: rgba(10, 10, 26, 0.65);
+  font-style: italic;
+  margin: 24px 0;
+}
+.gnosis-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 24px;
+}
+.gnosis-markdown th {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(10, 10, 26, 0.70);
+  background: rgba(20, 0, 255, 0.06);
+  border: 1px solid rgba(20, 0, 255, 0.12);
+  padding: 10px 16px;
+  text-align: left;
+}
+.gnosis-markdown td {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 14px;
+  color: #0A0A1A;
+  border: 1px solid rgba(20, 0, 255, 0.10);
+  padding: 10px 16px;
+}

@@ -18,61 +18,85 @@ from src.agents import doc_generator
 
 
 def run_pipeline(
-    repo_url: str,
+    repo_url_or_state,
     github_token: str = None,
     max_explanations: int = 20,
-    skip_llm: bool = False
+    skip_llm: bool = False,
+    on_agent_complete = None
 ) -> ArchaeonState:
     """
     Run the full 7-agent pipeline.
 
     Args:
-        repo_url:          Public GitHub repository URL
+        repo_url_or_state: Public GitHub repository URL or existing ArchaeonState
         github_token:      Optional PAT for higher rate limits
         max_explanations:  Cap on LLM explanation calls (default 20)
         skip_llm:          If True, skip Phase 6 entirely
+        on_agent_complete: Optional callback function triggered after each agent boundary
     """
-    state = ArchaeonState(repo_url=repo_url, github_token=github_token)
+    if isinstance(repo_url_or_state, ArchaeonState):
+        state = repo_url_or_state
+        if not state.github_token:
+            state.github_token = github_token or os.getenv("GITHUB_TOKEN")
+    else:
+        token = github_token or os.getenv("GITHUB_TOKEN")
+        state = ArchaeonState(repo_url=repo_url_or_state, github_token=token)
 
-    owner, repo_name = parse_github_url(repo_url)
-    state.owner     = owner
-    state.repo_name = repo_name
+    if not state.owner or not state.repo_name:
+        owner, repo_name = parse_github_url(state.repo_url)
+        state.owner     = owner
+        state.repo_name = repo_name
 
     print(f"\n{'=' * 55}")
     print(f"  Project Gnosis — Code Archaeology Agent")
-    print(f"  Repository : {owner}/{repo_name}")
+    print(f"  Repository : {state.owner}/{state.repo_name}")
     print(f"{'=' * 55}")
 
-    print(f"\n[Orchestrator] Fetching repo metadata...")
-    metadata = fetch_repo_metadata(owner, repo_name, github_token)
-    state.default_branch = metadata["default_branch"]
-    print(f"  Default branch: {state.default_branch}")
-    print(f"  Repo size:      {metadata.get('size', '?')} KB")
-    print(f"  Language:       {metadata.get('language', 'Mixed')}")
+    if not state.default_branch:
+        print(f"\n[Orchestrator] Fetching repo metadata...")
+        metadata = fetch_repo_metadata(state.owner, state.repo_name, state.github_token)
+        state.default_branch = metadata["default_branch"]
+        print(f"  Default branch: {state.default_branch}")
+        print(f"  Repo size:      {metadata.get('size', '?')} KB")
+        print(f"  Language:       {metadata.get('language', 'Mixed')}")
 
     # --- Phase 1: Ingestion ---
     state = ingestion.run(state)
+    if on_agent_complete:
+        on_agent_complete(0)
 
     # --- Phase 2: AST Parser ---
     state = ast_parser.run(state)
+    if on_agent_complete:
+        on_agent_complete(1)
 
     # --- Phase 3: Dependency Graph ---
     state = dependency_graph.run(state)
+    if on_agent_complete:
+        on_agent_complete(2)
 
     # --- Phase 4: Complexity Scorer ---
     state = complexity_scorer.run(state)
+    if on_agent_complete:
+        on_agent_complete(3)
 
     # --- Phase 5: Code RAG ---
     state = code_rag.run(state)
+    if on_agent_complete:
+        on_agent_complete(4)
 
     # --- Phase 6: Explainability ---
     if skip_llm:
         print("\n[Orchestrator] Skipping Phase 6 (--skip-llm)")
     else:
         state = explainability.run(state, max_count=max_explanations)
+    if on_agent_complete:
+        on_agent_complete(5)
 
     # --- Phase 7: Doc Generator ---
     state = doc_generator.run(state)
+    if on_agent_complete:
+        on_agent_complete(6)
 
     return state
 

@@ -494,7 +494,7 @@ The Figma-first workflow (design in Figma Make, then implement) is correct for
 a portfolio project. It produces a design system that can be presented independently 
 of the code — useful in interviews where you want to show both the engineering 
 architecture and the product design thinking.
-  
+
 ---
 
 ## Limitations (v1)
