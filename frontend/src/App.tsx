@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
+const API_BASE = import.meta.env.VITE_API_URL || "";
 
 type Screen = 'landing' | 'progress' | 'results'
 type AgentStatus = 'queued' | 'running' | 'complete' | 'failed'
@@ -81,15 +82,15 @@ function GnosisLogo() {
       xmlns="http://www.w3.org/2000/svg"
       style={{ display: 'block', flexShrink: 0 }}
     >
-      <line x1="1" y1="4"  x2="17" y2="4"  stroke="white" strokeWidth="1.2" />
-      <line x1="1" y1="9"  x2="17" y2="9"  stroke="white" strokeWidth="1.2" />
+      <line x1="1" y1="4" x2="17" y2="4" stroke="white" strokeWidth="1.2" />
+      <line x1="1" y1="9" x2="17" y2="9" stroke="white" strokeWidth="1.2" />
       <line x1="1" y1="14" x2="17" y2="14" stroke="white" strokeWidth="1.2" />
-      <line x1="9" y1="1"  x2="9"  y2="17" stroke="white" strokeWidth="1.2" />
-      <rect x="1"    y="1"    width="2.5" height="2.5" fill="white" />
-      <rect x="14.5" y="1"    width="2.5" height="2.5" fill="white" />
-      <rect x="1"    y="14.5" width="2.5" height="2.5" fill="white" />
+      <line x1="9" y1="1" x2="9" y2="17" stroke="white" strokeWidth="1.2" />
+      <rect x="1" y="1" width="2.5" height="2.5" fill="white" />
+      <rect x="14.5" y="1" width="2.5" height="2.5" fill="white" />
+      <rect x="1" y="14.5" width="2.5" height="2.5" fill="white" />
       <rect x="14.5" y="14.5" width="2.5" height="2.5" fill="white" />
-      <rect x="7.5"  y="7.5"  width="3"   height="3"   fill="white" />
+      <rect x="7.5" y="7.5" width="3" height="3" fill="white" />
     </svg>
   )
 }
@@ -264,7 +265,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
     setError('')
     setLoading(true)
     try {
-      const res = await fetch('/api/analyze', {
+      const res = await fetch(`${API_BASE}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -284,7 +285,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#1400FF' }}>
-      <NavBar onLogoClick={() => {}} />
+      <NavBar onLogoClick={() => { }} />
       <div style={{ display: 'flex', flex: 1, position: 'relative', overflow: 'hidden' }}>
         {/* Left column */}
         <div
@@ -425,7 +426,7 @@ function ProgressPage({ repoUrl, jobId, onComplete }: { repoUrl: string; jobId: 
     Array(7).fill('queued' as AgentStatus)
   )
   const [agentNames, setAgentNames] = useState<string[]>(
-    ['INGESTION','AST PARSER','DEPENDENCY GRAPH','COMPLEXITY SCORER','CODE RAG','EXPLAINABILITY','DOC GENERATOR']
+    ['INGESTION', 'AST PARSER', 'DEPENDENCY GRAPH', 'COMPLEXITY SCORER', 'CODE RAG', 'EXPLAINABILITY', 'DOC GENERATOR']
   )
   const [jobStatus, setJobStatus] = useState<'running' | 'complete' | 'failed'>('running')
   const [errorMsg, setErrorMsg] = useState('')
@@ -455,7 +456,7 @@ function ProgressPage({ repoUrl, jobId, onComplete }: { repoUrl: string; jobId: 
     // Real polling against FastAPI
     const poll = async () => {
       try {
-        const res = await fetch(`/api/jobs/${jobId}`)
+        const res = await fetch(`${API_BASE}/api/jobs/${jobId}`)
         if (!res.ok) return
         const data: JobState = await res.json()
         const names = data.agents.map(a => a.name)
@@ -490,7 +491,7 @@ function ProgressPage({ repoUrl, jobId, onComplete }: { repoUrl: string; jobId: 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#1400FF', position: 'relative', overflow: 'hidden' }}>
       <AthenaFigure brightness={0.55} />
-      <NavBar onLogoClick={() => {}} />
+      <NavBar onLogoClick={() => { }} />
 
       {/* Repo context bar */}
       <div style={{ height: 48, borderBottom: '1px solid rgba(255,255,255,0.15)', padding: '0 120px', display: 'flex', alignItems: 'center', gap: 16, position: 'relative', zIndex: 1, flexShrink: 0 }}>
@@ -642,7 +643,7 @@ function CollapsibleSection({ title, count, content, defaultOpen = false }: { ti
   const [hoverCopy, setHoverCopy] = useState(false)
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation()
-    navigator.clipboard.writeText(content).catch(() => {})
+    navigator.clipboard.writeText(content).catch(() => { })
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -677,7 +678,7 @@ function ResultsPage({ repoUrl, jobId }: { repoUrl: string; jobId: string }) {
 
   useEffect(() => {
     if (!jobId) { setLoading(false); return }
-    fetch(`/api/jobs/${jobId}/result`)
+    fetch(`${API_BASE}/api/jobs/${jobId}/result`)
       .then(r => r.json())
       .then(data => { setResult(data); setLoading(false) })
       .catch(() => setLoading(false))
@@ -707,7 +708,7 @@ function ResultsPage({ repoUrl, jobId }: { repoUrl: string; jobId: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#1400FF', paddingBottom: 64 }}>
-      <NavBar onLogoClick={() => {}} />
+      <NavBar onLogoClick={() => { }} />
 
       {/* Results header */}
       <div style={{ padding: '28px 96px 24px', borderBottom: '1px solid rgba(255,255,255,0.15)', flexShrink: 0, boxSizing: 'border-box' }}>
@@ -729,7 +730,7 @@ function ResultsPage({ repoUrl, jobId }: { repoUrl: string; jobId: string }) {
             </div>
           ))}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 8 }}>
-            {(['CRITICAL','HIGH','MEDIUM','LOW'] as RiskLevel[]).map(level => {
+            {(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as RiskLevel[]).map(level => {
               const count = riskDist[level] ?? 0
               const styleMap: Record<RiskLevel, React.CSSProperties> = {
                 CRITICAL: { background: '#FFFFFF', color: '#1400FF', border: 'none' },
@@ -806,7 +807,7 @@ function ResultsPage({ repoUrl, jobId }: { repoUrl: string; jobId: string }) {
                 <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid rgba(20,0,255,0.15)', marginBottom: 48 }}>
                   <thead>
                     <tr style={{ background: 'rgba(20,0,255,0.06)', height: 40 }}>
-                      {['FILE','IMPORTED BY','IMPORTS','RISK'].map(h => (
+                      {['FILE', 'IMPORTED BY', 'IMPORTS', 'RISK'].map(h => (
                         <th key={h} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.50)', padding: '0 20px', textAlign: h === 'FILE' ? 'left' : 'center', border: '1px solid rgba(20,0,255,0.12)' }}>{h}</th>
                       ))}
                     </tr>
@@ -859,7 +860,7 @@ function ResultsPage({ repoUrl, jobId }: { repoUrl: string; jobId: string }) {
                 <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid rgba(20,0,255,0.15)' }}>
                   <thead>
                     <tr style={{ background: 'rgba(20,0,255,0.06)', height: 44 }}>
-                      {['FILE','RISK','AVG CC','MAX CC','WORST FUNCTION','COUPLING','FLAGS'].map(h => (
+                      {['FILE', 'RISK', 'AVG CC', 'MAX CC', 'WORST FUNCTION', 'COUPLING', 'FLAGS'].map(h => (
                         <th key={h} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.45)', padding: '0 16px', textAlign: (h === 'FILE' || h === 'WORST FUNCTION' || h === 'FLAGS') ? 'left' : 'center', borderBottom: '1px solid rgba(20,0,255,0.12)' }}>{h}</th>
                       ))}
                     </tr>
