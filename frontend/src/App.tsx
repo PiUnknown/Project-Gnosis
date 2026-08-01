@@ -304,7 +304,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
               UNDERSTAND
             </div>
             <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 72, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
-              ANY CODEBASE.
+              ANY CODEBASE
             </div>
           </div>
 
