@@ -316,40 +316,6 @@ Be specific. Refer to actual function names. Max 300 words.
 
 ---
 
-## Frontend Architecture
-
-### Screen: Landing ("/")
-Input: GitHub URL, max_explanations (int, 0-100), skip_llm (bool).
-Submit: POST /analyze → navigate to /jobs/:jobId.
-Validation: URL must contain github.com with owner/repo structure.
-
-### Screen: Job Progress ("/jobs/:jobId")
-Polls GET /jobs/:jobId every 2 seconds using setInterval with useRef cleanup.
-Displays: status badge, progress bar (0-100%), 7-agent pipeline visualizer with phase states (pending/running/complete).
-On complete: auto-navigate to /jobs/:jobId/results after 1.5s.
-On failed: show error message and retry button.
-
-### Screen: Results ("/jobs/:jobId/results")
-Fetches GET /jobs/:jobId/result on mount. If 409: redirect back to progress page.
-Four tabs:
-  - Onboarding Doc: react-markdown render of result.onboarding_doc
-  - Dependency Graph: structured table from result.graph_summary + reading order
-  - Complexity Report: sortable/filterable table from result.complexity_report.critical_and_high
-  - Raw JSON: collapsible panels with copy-to-clipboard for each data section
-Sticky download bar: onboarding.md, complexity_report.json, graph_summary.json (Blob downloads).
-
-### Frontend Tech Decisions
-
-**React over Streamlit:** Streamlit is a data science tool. Project Gnosis is a developer tool. A React SPA signals production intent in portfolio and interview contexts.
-
-**Lovable for scaffolding:** Lovable generates correct React + Tailwind + shadcn/ui from a detailed prompt. The output is standard React code — not a proprietary abstraction. Manual fixes (polling cleanup, download blobs, 409 handling) are well-understood and documented.
-
-**No state management library:** Seven pieces of page-level state. useState and useRef are sufficient. Adding Redux or Zustand for this scope is over-engineering.
-
-**Fetch API over axios:** Zero dependency for HTTP. The API surface is small (5 endpoints, all JSON). Fetch handles everything needed.
-
----
-
 ## Tech Stack
 
 | Component | Library | Reason |
@@ -362,7 +328,7 @@ Sticky download bar: onboarding.md, complexity_report.json, graph_summary.json (
 | Embeddings | sentence-transformers (all-MiniLM-L6-v2) | Already in Om's stack, free, runs locally |
 | LLM inference | Groq API (llama-3.3-70b-versatile) | Fast, free tier, Om's standard inference provider |
 | Backend | FastAPI | Async, clean, Om's stack |
-| Frontend | React 18 + TypeScript + Tailwind CSS + shadcn/ui (via Lovable) | Production SPA; live polling; dark theme; developer-tool aesthetic; fully editable generated code |
+| Frontend | Streamlit v1, Next.js v2 | Streamlit for fast demo, Next.js for production |
 | Visualization | pyvis (graph), matplotlib (charts) | pyvis renders interactive HTML graph |
 
 ---
@@ -379,7 +345,7 @@ Sticky download bar: onboarding.md, complexity_report.json, graph_summary.json (
 | 6 | Explainability Agent | Given full state, generate explanations for top 5 files |
 | 7 | Doc Generator Agent | Generate full onboarding Markdown from full state |
 | 8 | FastAPI backend | Wrap pipeline in API, accept GitHub URL, return doc |
-| 9 | React Frontend (Lovable) | Three-screen SPA: Landing → Job Progress → Results. Live polling, Markdown render, sortable complexity table, JSON viewer, download bar. |
+| 9 | Streamlit frontend | UI: URL input → progress bar → download onboarding.md |
 
 ---
 
