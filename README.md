@@ -187,8 +187,8 @@ Used to clone repositories programmatically for private repos or when the full f
 **GitHub REST API**  
 For public repositories: fetches the complete file tree and individual file contents via HTTP. No cloning required. Rate limit: 60 requests/hour unauthenticated, 5000/hour with a PAT.
 
-**Streamlit** (v1 frontend)  
-Lightweight frontend for the demo. Text input for GitHub URL, progress bar showing which agent is running, download buttons for all outputs. Replaced by Next.js in v2.
+**Frontend Design & Implementation (Figma Make → React 18 + TypeScript + Tailwind + shadcn/ui)**  
+Professional SPA; Figma-first workflow; dark blue/white palette; 0px border-radius aesthetic.
 
 **pyvis**  
 Renders the NetworkX dependency graph as an interactive HTML file using D3.js. Users can zoom, pan, and click nodes to see file details. Zero frontend code required.
@@ -360,9 +360,26 @@ Deliverable: a complete onboarding doc for a real open-source repo.
 **Phase 8: FastAPI Backend**  
 Wrap the pipeline in an API. POST `/analyze` → returns the doc as JSON.
 
-**Phase 9: Streamlit Frontend + Demo Polish**  
-UI: URL input → progress indicator per agent → download buttons.  
-Demo video: run the tool live on a real repo, post to Twitter/LinkedIn.
+**Phase 9: React Frontend (designed via Figma Make)**
+Production-quality web UI. Design system built in Figma using Figma Make, 
+implemented in React 18 + TypeScript + Tailwind CSS + shadcn/ui.
+
+Visual direction: deep electric blue (#1400FF) primary palette, IBM Plex Mono 
+for all UI chrome, Playfair Display serif for hero type, classical Athena figure 
+as background motif. Inspired by the Nous Research Hermes Agent site. Sharp corners 
+everywhere, no gradients, no gray, no green.
+
+Three screens:
+  1. Landing     — URL input, options, classical split-screen composition
+  2. Job Progress — live pipeline visualizer, large serif progress percentage
+  3. Results     — four-tab output viewer (doc, graph, complexity, JSON) 
+                    with sticky download bar
+
+Deliverables:
+  - Complete Figma design system (colors, typography, all component states)
+  - Figma prototypes for all three screens at 1440px
+  - React implementation built from the Figma design
+  - Demo video: full pipeline run from URL input to onboarding doc
 
 ---
 
@@ -464,8 +481,19 @@ ChromaDB: persistent, metadata filtering, easier API. FAISS: faster at scale, no
 **Groq vs local LLM**  
 Groq's free tier is fast enough (500 tokens/second) and llama-3.3-70b produces high-quality explanations. Running locally (Ollama + mistral) avoids rate limits but requires 8GB+ RAM and is slower. For development and demo, Groq is the right call. Local fallback is a config option.
 
-**Streamlit vs Next.js**  
-Streamlit for v1: zero frontend code, working demo in one afternoon. Next.js for v2: proper product, component architecture, better UX. The rule: ship a working demo first, polish after you know the core works.
+**Design philosophy: classical academic instrument, not startup SaaS**
+The Nous Research Hermes Agent site (nousr.com/hermes) is the direct visual 
+reference. The #1400FF electric blue, Playfair Display serif headlines in all-caps, 
+IBM Plex Mono for all UI text, sharp-corner components, and the Athena classical 
+figure are all deliberate. The aesthetic says: this tool takes code seriously. It does 
+not borrow from Vercel's minimalist gray or Tailwind's green accent defaults. 
+The visual identity matches the project's name — Gnosis, knowledge — and its 
+subject matter: excavating understanding from undocumented codebases.
+
+The Figma-first workflow (design in Figma Make, then implement) is correct for 
+a portfolio project. It produces a design system that can be presented independently 
+of the code — useful in interviews where you want to show both the engineering 
+architecture and the product design thinking.
 
 ---
 

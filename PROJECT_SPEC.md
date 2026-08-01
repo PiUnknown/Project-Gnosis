@@ -313,6 +313,86 @@ Be specific. Refer to actual function names. Max 300 words.
 ## 7. Dependency Graph
 [ASCII representation or pyvis HTML embed]
 ```
+---
+
+## Frontend Architecture
+
+### Design System
+
+**Colors:**
+  Primary background: #1400FF (electric blue)
+  Secondary/panel:    #0F00CC
+  Content area:       #F0F0FF (light, for readable text on result tabs)
+  Accent/text:        #FFFFFF
+  Input fill:         #FFFFFF (white field, blue text inside)
+  No gray, no black, no green anywhere in the palette.
+
+**Typography:**
+  Playfair Display — hero headings, progress display number. 400 weight. ALL CAPS.
+  IBM Plex Mono    — all UI chrome: labels, buttons, nav, tabs, file paths, 
+                     agent names, status badges, metadata.
+  Inter            — body copy, descriptions, markdown prose.
+
+**Components:**
+  Border-radius: 0px everywhere (sharp corners, no exceptions).
+  Borders: 1px solid rgba(255,255,255,0.25) on blue, rgba(20,0,255,0.15) on light.
+  No drop shadows. No gradients. No glassmorphism.
+
+**Classical figure:**
+  Athena SVG engraving placed in right half of Landing and Progress pages.
+  Rendered in #3D28FF (lighter blue) at 0.28 opacity.
+  Bleeds off right and bottom edge. Monochromatic — no outline color difference.
+
+### Screen: Landing ("/")
+Split layout: left content column (600px), right figure column (840px).
+Form: URL input (white field, blue text), max_explanations number, skip_llm toggle.
+CTA: "ANALYZE REPOSITORY →" — white fill, blue text, full column width, 0px radius.
+Submit flow: validate → POST /analyze → navigate to /jobs/:jobId.
+
+### Screen: Job Progress ("/jobs/:jobId")
+Left column: 7-agent pipeline list with step numbers and status states 
+  (QUEUED / RUNNING with animated dots / COMPLETE ✓).
+Right column: Large Playfair Display percentage (e.g. "67%"), thin 1px progress bar, 
+  current phase in IBM Plex Mono uppercase.
+Polling: GET /jobs/:jobId every 2 seconds via setInterval with useRef cleanup.
+Auto-navigate to results after 1500ms delay once status === "complete".
+
+### Screen: Results ("/jobs/:jobId/results")
+Header: repo name, branch, stats, risk distribution pills, circular dep warning.
+Four tabs (IBM Plex Mono uppercase, white underline on active):
+  ONBOARDING DOC — react-markdown on #F0F0FF background, blue headings, 
+                    Playfair Display h1, IBM Plex Mono h3.
+  DEPENDENCY GRAPH — top files table (in-degree, out-degree, risk), 
+                      reading order numbered list.
+  COMPLEXITY REPORT — sortable/filterable table, risk badges 
+                       (CRITICAL: white-on-blue, HIGH: blue-outline, 
+                        MEDIUM: light-blue-fill, LOW: muted).
+  RAW OUTPUT — four collapsible sections with copy buttons, 
+                JSON syntax coloring in blue palette.
+Sticky download bar: three outlined-white buttons, blue background, 
+  IBM Plex Mono uppercase text.
+
+### Frontend Tech Decisions
+
+**Figma Make for design first:**
+  Produces a complete design system (color, typography, all component states) 
+  before a line of React is written. The Figma file is a standalone deliverable 
+  for portfolio presentation. The design is the specification — not a rough mockup.
+
+**React over Streamlit:**
+  Streamlit is a data science notebook. The blue/white classical aesthetic of 
+  Project Gnosis cannot be achieved in Streamlit without fighting its component 
+  defaults at every step. React with Tailwind implements the Figma design faithfully.
+
+**IBM Plex Mono for UI chrome:**
+  Every non-prose element (labels, buttons, nav, file paths, agent names, status 
+  text, tab labels) uses IBM Plex Mono. This is a design system decision, not 
+  a font preference. It creates visual consistency between the UI chrome and the 
+  code content the tool analyzes.
+
+**No state management library:**
+  Three pages, eight pieces of page-level state. useState + useRef is sufficient. 
+  Redux or Zustand would be over-engineering for this scope.
 
 ---
 
@@ -328,7 +408,8 @@ Be specific. Refer to actual function names. Max 300 words.
 | Embeddings | sentence-transformers (all-MiniLM-L6-v2) | Already in Om's stack, free, runs locally |
 | LLM inference | Groq API (llama-3.3-70b-versatile) | Fast, free tier, Om's standard inference provider |
 | Backend | FastAPI | Async, clean, Om's stack |
-| Frontend | Streamlit v1, Next.js v2 | Streamlit for fast demo, Next.js for production |
+| Frontend Design | Figma Make | Design-first workflow; produces Figma component library before any React code is written |
+| Frontend Implementation | React 18 + TypeScript + Tailwind CSS + shadcn/ui | Standard production React stack implemented from Figma specs |
 | Visualization | pyvis (graph), matplotlib (charts) | pyvis renders interactive HTML graph |
 
 ---
@@ -345,7 +426,7 @@ Be specific. Refer to actual function names. Max 300 words.
 | 6 | Explainability Agent | Given full state, generate explanations for top 5 files |
 | 7 | Doc Generator Agent | Generate full onboarding Markdown from full state |
 | 8 | FastAPI backend | Wrap pipeline in API, accept GitHub URL, return doc |
-| 9 | Streamlit frontend | UI: URL input → progress bar → download onboarding.md |
+| 9 | React Frontend (Figma Make → React) | Design system in Figma. Three-screen SPA: Landing, Progress, Results. Blue/white palette, Playfair Display + IBM Plex Mono typography, classical Athena motif, 0px radius everywhere. |
 
 ---
 
