@@ -299,16 +299,16 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
             paddingBottom: 80,
           }}
         >
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 80, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 72, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
               UNDERSTAND
             </div>
-            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 80, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 72, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
               ANY CODEBASE.
             </div>
           </div>
 
-          <p style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 16, fontWeight: 400, color: 'rgba(255,255,255,0.65)', maxWidth: 420, lineHeight: 1.6, margin: '0 0 48px 0' }}>
+          <p style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 16, fontWeight: 400, color: 'rgba(255,255,255,0.65)', maxWidth: 420, lineHeight: 1.6, margin: '0 0 32px 0' }}>
             Enter a public GitHub URL. Gnosis maps every import, scores every function, and writes the onboarding document your team never did.
           </p>
 
@@ -347,7 +347,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 32, marginTop: 24, alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', gap: 32, marginTop: 16, alignItems: 'flex-start' }}>
               <div>
                 <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.65)', marginBottom: 8 }}>
                   MAX EXPLANATIONS
@@ -392,7 +392,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
               style={{
                 width: 480,
                 height: 56,
-                marginTop: 24,
+                marginTop: 16,
                 background: loading ? 'rgba(255,255,255,0.30)' : hoverSubmit ? 'transparent' : '#FFFFFF',
                 border: loading ? 'none' : hoverSubmit ? '1px solid #FFFFFF' : 'none',
                 color: loading ? 'rgba(255,255,255,0.60)' : hoverSubmit ? '#FFFFFF' : '#1400FF',
@@ -408,7 +408,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
             </button>
           </div>
 
-          <div style={{ position: 'absolute', bottom: 40, left: 96, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)' }}>
+          <div style={{ position: 'absolute', bottom: 40, right: 96, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)' }}>
             v0.1.0 · PiUnknown · Project Gnosis
           </div>
         </div>
