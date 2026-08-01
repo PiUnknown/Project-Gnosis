@@ -70,6 +70,30 @@ const AGENT_DESCS = [
   'Synthesizing all outputs into onboarding.md',
 ]
 
+// ─── GnosisLogo ───────────────────────────────────────────────────────────────
+function GnosisLogo() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 18 18"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ display: 'block', flexShrink: 0 }}
+    >
+      <line x1="1" y1="4"  x2="17" y2="4"  stroke="white" strokeWidth="1.2" />
+      <line x1="1" y1="9"  x2="17" y2="9"  stroke="white" strokeWidth="1.2" />
+      <line x1="1" y1="14" x2="17" y2="14" stroke="white" strokeWidth="1.2" />
+      <line x1="9" y1="1"  x2="9"  y2="17" stroke="white" strokeWidth="1.2" />
+      <rect x="1"    y="1"    width="2.5" height="2.5" fill="white" />
+      <rect x="14.5" y="1"    width="2.5" height="2.5" fill="white" />
+      <rect x="1"    y="14.5" width="2.5" height="2.5" fill="white" />
+      <rect x="14.5" y="14.5" width="2.5" height="2.5" fill="white" />
+      <rect x="7.5"  y="7.5"  width="3"   height="3"   fill="white" />
+    </svg>
+  )
+}
+
 // ─── NavBar ───────────────────────────────────────────────────────────────────
 function NavBar({ onLogoClick }: { onLogoClick: () => void }) {
   return (
@@ -97,9 +121,13 @@ function NavBar({ onLogoClick }: { onLogoClick: () => void }) {
           fontWeight: 500,
           letterSpacing: '0.12em',
           color: '#FFFFFF',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
         }}
       >
-        ○ GNOSIS
+        <GnosisLogo />
+        GNOSIS
       </button>
       <span
         style={{
