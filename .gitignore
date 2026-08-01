@@ -27,6 +27,7 @@ Thumbs.db
 # Test cache
 .pytest_cache/
 .hypothesis/
+explanation_cache/
 
 # Frontend
 node_modules/

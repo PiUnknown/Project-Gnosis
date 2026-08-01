@@ -2,15 +2,17 @@
 Agent 6: Explainability Agent
 
 Reads from state:  complexity_scores, graph_stats, circular_nodes,
-                   chroma_collection_name, symbol_tables, owner, repo_name
+                   chroma_collection_name, symbol_tables, owner, repo_name,
+                   file_manifest (for per-file SHAs used in cache keys)
 Writes to state:   explanations
 
 Pipeline per file:
-1. Get all code chunks for the file from ChromaDB
-2. Assemble context: code + dependency info + risk metadata
-3. Build system + user prompt
-4. Call Groq LLM (llama-3.3-70b-versatile, temp=0.1)
-5. Store explanation string in state.explanations[file_path]
+1. Check explanation cache — if hit, use stored text (zero Groq tokens)
+2. Get all code chunks for the file from ChromaDB
+3. Assemble context: code + dependency info + risk metadata
+4. Build system + user prompt
+5. Call Groq LLM (llama-3.3-70b-versatile, temp=0.1)
+6. Save explanation to cache, store in state.explanations[file_path]
 
 File selection: priority tiers, capped at max_count.
 
@@ -20,6 +22,12 @@ Tier 2: HIGH risk files
 Tier 3: Moderate importance (in_degree >= 2)
 Tier 4: MEDIUM risk files
 Within each tier: sorted by in_degree descending (most imported first)
+
+CACHING:
+  Explanations are cached to disk in ./explanation_cache/ keyed by
+  owner::repo_name::file_path::file_sha. The SHA comes from the GitHub
+  API blob hash stored in state.file_manifest. Cache hits cost zero tokens.
+  Cache entries are automatically invalidated when the file changes.
 """
 
 import os
@@ -28,6 +36,12 @@ from pathlib import PurePosixPath
 from src.state import ArchaeonState
 from src.utils.groq_client import call_llm, sleep_between_calls
 from src.utils.retriever import CodeRetriever, DEFAULT_CHROMA_DB_PATH
+from src.utils.explanation_cache import (
+    make_cache_key,
+    get_cached_explanation,
+    save_explanation,
+    cache_stats
+)
 
 # Default cap for free tier (30 req/min, ~20 files in one run)
 DEFAULT_MAX_EXPLANATIONS = 20
@@ -92,35 +106,72 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
         print(f"  [ERROR] Could not connect to ChromaDB: {exc}")
         return state
 
+    # Build file_path -> sha lookup from manifest
+    # FileMetadata.sha is the GitHub blob SHA — a content hash.
+    # Same file + same content = same SHA = cache hit.
+    sha_lookup: dict = {}
+    for file_meta in state.file_manifest:
+        if hasattr(file_meta, 'sha') and file_meta.sha:
+            sha_lookup[file_meta.path] = file_meta.sha
+
+    # Print cache state
+    stats = cache_stats()
+    if stats["entries"] > 0:
+        print(f"  Cache           : {stats['entries']} entries "
+              f"({stats['size_kb']} KB) in ./explanation_cache/")
+    else:
+        print(f"  Cache           : empty (first run on any repo)")
+
     # Select files
     selected = _select_files_to_explain(state, max_count)
     print(f"  Files selected  : {len(selected)} (cap: {max_count})")
     print(f"  Files skipped   : "
-          f"{len(state.complexity_scores) - len(selected)} (below priority or over cap)")
+          f"{len(state.complexity_scores) - len(selected)} "
+          f"(below priority or over cap)")
 
     if not selected:
         print("  No files to explain.")
         return state
 
     print()
-    explained = 0
-    failed = 0
+    explained  = 0
+    cache_hits = 0
+    failed     = 0
+    groq_calls = 0   # actual API calls made this run
 
     for idx, file_path in enumerate(selected):
         short_name = PurePosixPath(file_path).name
-        score = state.complexity_scores.get(file_path)
-        risk = score.risk_level if score else "UNKNOWN"
+        score  = state.complexity_scores.get(file_path)
+        risk   = score.risk_level if score else "UNKNOWN"
         in_deg = state.graph_stats.get(file_path, {}).get('in_degree', 0)
 
         print(f"  [{idx + 1:>2}/{len(selected)}] {short_name:<35} "
-              f"risk={risk:<8} in_degree={in_deg}")
+              f"risk={risk:<8} in_degree={in_deg}", end="")
 
-        # Assemble context
+        # ---- Cache check -----------------------------------------------
+        file_sha   = sha_lookup.get(file_path, "")
+        cache_key  = make_cache_key(
+            owner=state.owner,
+            repo_name=state.repo_name,
+            file_path=file_path,
+            file_sha=file_sha
+        )
+        cached = get_cached_explanation(cache_key)
+
+        if cached:
+            state.explanations[file_path] = cached
+            explained  += 1
+            cache_hits += 1
+            print("  [CACHE HIT]")
+            continue   # no Groq call, no sleep needed
+
+        print()   # newline after the file header line
+
+        # ---- Groq call -------------------------------------------------
         code_context = _assemble_code_context(file_path, retriever)
         graph_entry  = state.graph_stats.get(file_path, {})
         language     = score.language if score else "Unknown"
 
-        # Build prompts
         user_prompt = _build_user_prompt(
             file_path=file_path,
             language=language,
@@ -129,25 +180,44 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
             code_context=code_context
         )
 
-        # Call Groq
         explanation = call_llm(
             system_prompt=SYSTEM_PROMPT,
             user_prompt=user_prompt,
             temperature=0.1,
             max_tokens=800
         )
+        groq_calls += 1
 
         if explanation:
-            state.explanations[file_path] = explanation.strip()
+            explanation = explanation.strip()
+            state.explanations[file_path] = explanation
             explained += 1
+
+            # Save to cache — non-fatal if it fails
+            if file_sha:
+                save_explanation(
+                    cache_key=cache_key,
+                    explanation=explanation,
+                    owner=state.owner,
+                    repo_name=state.repo_name,
+                    file_path=file_path,
+                    file_sha=file_sha
+                )
         else:
             failed += 1
 
-        # Rate limit: sleep after every call except the last
-        if idx < len(selected) - 1:
+        # Rate limit: sleep after every Groq call except the last
+        is_last_groq_call = (idx == len(selected) - 1) or all(
+            get_cached_explanation(
+                make_cache_key(state.owner, state.repo_name, p,
+                               sha_lookup.get(p, ""))
+            ) is not None
+            for p in selected[idx + 1:]
+        )
+        if not is_last_groq_call:
             sleep_between_calls()
 
-    _print_summary(state, selected, explained, failed)
+    _print_summary(state, selected, explained, cache_hits, groq_calls, failed)
     return state
 
 
@@ -170,7 +240,6 @@ def _select_files_to_explain(state: ArchaeonState, max_count: int) -> list:
       Tier 5: everything else (LOW, files with no complexity score entry)
 
     Within each tier: higher in_degree comes first.
-    Negative in_degree used as secondary sort key to get descending order.
     """
     if not state.complexity_scores:
         return []
@@ -194,7 +263,6 @@ def _select_files_to_explain(state: ArchaeonState, max_count: int) -> list:
         else:
             tier = 5
 
-        # Secondary sort: higher in_degree first within same tier
         candidates.append((tier, -in_degree, file_path))
 
     candidates.sort(key=lambda x: (x[0], x[1]))
@@ -216,15 +284,12 @@ def _assemble_code_context(file_path: str, retriever: CodeRetriever) -> str:
       3. Class chunks — structural overview
 
     Budget: MAX_CODE_CHARS characters across all chunks combined.
-    When the budget is hit, a truncation notice is appended instead of
-    silently cutting mid-chunk.
     """
     chunks = retriever.get_file_chunks(file_path)
 
     if not chunks:
         return ""
 
-    # Separate by type and sort functions by complexity (highest first)
     module_chunks = [c for c in chunks if c['symbol_type'] == 'module']
     fn_chunks     = sorted(
         [c for c in chunks if c['symbol_type'] == 'function'],
@@ -232,8 +297,8 @@ def _assemble_code_context(file_path: str, retriever: CodeRetriever) -> str:
     )
     class_chunks  = [c for c in chunks if c['symbol_type'] == 'class']
 
-    ordered = module_chunks + fn_chunks + class_chunks
-    parts   = []
+    ordered    = module_chunks + fn_chunks + class_chunks
+    parts      = []
     char_count = 0
     truncated  = False
 
@@ -243,10 +308,8 @@ def _assemble_code_context(file_path: str, retriever: CodeRetriever) -> str:
         if char_count + len(content) > MAX_CODE_CHARS:
             remaining = MAX_CODE_CHARS - char_count
             if remaining > 300:
-                # Include partial content rather than nothing
                 parts.append(content[:remaining] + "\n... [truncated — budget reached]")
             else:
-                # Not enough space to show anything useful
                 parts.append(
                     f"# ... {len(ordered) - len(parts)} more chunks "
                     f"not shown (budget limit)"
@@ -277,16 +340,14 @@ def _build_user_prompt(
     """
     Build the user turn of the LLM prompt for one file.
 
-    The prompt contains four sections:
+    Sections:
     1. File header: path, language, risk level with reasons, coupling
     2. Dependencies: what this file imports and what imports it
     3. Source code: from ChromaDB (may be empty for parse-error files)
     4. Task: explicit instruction to the model
     """
-
-    # ---- Section 1: File header ----------------------------------------
     if complexity_score:
-        risk_level = complexity_score.risk_level
+        risk_level  = complexity_score.risk_level
         reasons_str = ""
         if complexity_score.risk_reasons:
             reasons_str = " | ".join(complexity_score.risk_reasons[:2])
@@ -321,9 +382,7 @@ def _build_user_prompt(
         f"{fn_count_str}"
     ).strip()
 
-    # ---- Section 2: Dependencies ----------------------------------------
-    in_degree   = graph_stats_entry.get('in_degree', 0)
-    out_degree  = graph_stats_entry.get('out_degree', 0)
+    in_degree    = graph_stats_entry.get('in_degree', 0)
     dependencies = graph_stats_entry.get('dependencies', [])
     dependents   = graph_stats_entry.get('dependents', [])
 
@@ -341,12 +400,11 @@ def _build_user_prompt(
         if len(dependents) > 8:
             dep_lines.append(f"  ...and {len(dependents) - 8} more")
 
-    if not dep_lines:
-        dep_context = "No internal dependency relationships detected."
-    else:
-        dep_context = '\n'.join(dep_lines)
+    dep_context = (
+        '\n'.join(dep_lines) if dep_lines
+        else "No internal dependency relationships detected."
+    )
 
-    # ---- Section 3: Source code -----------------------------------------
     if code_context.strip():
         code_section = f"Source Code:\n{code_context}"
     else:
@@ -357,7 +415,6 @@ def _build_user_prompt(
             "Explain based on the metadata above.]"
         )
 
-    # ---- Section 4: Task ------------------------------------------------
     task = (
         "Explain this file in 200-300 words for a new engineer. Cover:\n"
         "1. Primary responsibility — what does this file do?\n"
@@ -384,11 +441,17 @@ def _print_summary(
     state: ArchaeonState,
     selected: list,
     explained: int,
+    cache_hits: int,
+    groq_calls: int,
     failed: int
 ) -> None:
+    groq_explained = explained - cache_hits
     print(f"\n[Agent 6: Explainability] Done")
     print(f"  Files attempted  : {len(selected)}")
-    print(f"  Explained        : {explained}")
+    print(f"  Cache hits       : {cache_hits}  (0 tokens spent)")
+    print(f"  Groq calls made  : {groq_calls}")
+    print(f"  Explained        : {explained} ({cache_hits} from cache, "
+          f"{groq_explained} from Groq)")
     print(f"  Failed (Groq)    : {failed}")
     print(f"  Total in state   : {len(state.explanations)}")
 
@@ -397,6 +460,12 @@ def _print_summary(
             f"\n  [INFO] {failed} file(s) failed. Common causes: "
             f"rate limit exceeded, context too long, or API key issue."
         )
+    if cache_hits == len(selected):
+        print(f"\n  [INFO] All explanations served from cache. "
+              f"Zero Groq tokens used this run.")
+    elif cache_hits > 0:
+        tokens_saved = cache_hits * 3000   # rough estimate
+        print(f"\n  [INFO] Cache saved ~{tokens_saved:,} tokens this run.")
 
     if explained > 0:
         print(f"\n  Sample explanation ({explained} total):")
