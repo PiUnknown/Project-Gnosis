@@ -113,7 +113,7 @@ Input: GitHub Repository URL
   |  Agent 6: Explain     |
   |  RAG retrieval        |
   |  Dependency context   |
-  |  Groq LLM inference   |
+  |  NVIDIA NIM inference  |
   |  Per-component prose  |
   +-----------------------+
             |
@@ -173,8 +173,8 @@ Embedded vector database. Stores code chunks as embeddings with metadata (file p
 **sentence-transformers (all-MiniLM-L6-v2)**  
 Embedding model that runs locally. Generates 384-dimensional vectors for code chunks. Free, no API required, fast on CPU. Upgrade path: `nomic-embed-code` for code-specialized embeddings in v2.
 
-**Groq API (llama-3.3-70b-versatile)**  
-LLM inference. Used only in Agent 6 for generating natural language explanations. Free tier with sufficient capacity for development. Temperature set to 0.1 for consistent, accurate explanations.
+**NVIDIA NIM (meta/llama-3.3-70b-instruct)**  
+LLM inference provider. Exposes an OpenAI-compatible REST API. Used only in Agent 6 for generating natural language explanations. Free tier with generous rate limits. Temperature set to 0.1 for consistent, accurate explanations.
 
 ### Infrastructure
 
@@ -204,7 +204,7 @@ This project spans the following AI and engineering domains:
 | Context Engineering | Context window management for large repos, hierarchical summarization via symbol tables, prompt construction and budgeting |
 | Graph Engineering | Dependency graph construction, cycle detection, centrality analysis, topological sort |
 | Static Code Analysis | tree-sitter AST parsing, cyclomatic complexity, coupling metrics, multi-language support |
-| LLM Orchestration | Groq API, prompt design, temperature control, batching, rate limit handling with exponential backoff |
+| LLM Orchestration | NVIDIA NIM API, prompt design, temperature control, batching, rate limit handling with exponential backoff |
 | Backend Engineering | FastAPI async pipeline, stateful multi-step request processing, background tasks |
 | Systems Design | Pipeline decomposition, shared state pattern, interface design between agents |
 
@@ -295,7 +295,7 @@ code-archaeology-agent/
 │   ├── utils/
 │   │   ├── github_api.py        # GitHub REST API client
 │   │   ├── tree_sitter_utils.py # Language parser initialization
-│   │   ├── groq_client.py       # Groq API wrapper with retry logic
+│   │   ├── nvidia_client.py     # NVIDIA NIM API wrapper with retry logic
 │   │   └── filters.py           # File exclusion logic
 │   │
 │   └── api/
@@ -446,7 +446,7 @@ source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# Add GROQ_API_KEY to .env
+# Add NVIDIA_API_KEY to .env
 # Optionally add GITHUB_TOKEN for higher rate limits
 ```
 
@@ -478,8 +478,8 @@ v1 runs agents sequentially. Agents 3, 4, and 5 could run in parallel (all depen
 **ChromaDB vs FAISS**  
 ChromaDB: persistent, metadata filtering, easier API. FAISS: faster at scale, no metadata filtering. For repos under 50k chunks, ChromaDB is fine. FAISS becomes relevant at 500k+ chunks (very large monorepos).
 
-**Groq vs local LLM**  
-Groq's free tier is fast enough (500 tokens/second) and llama-3.3-70b produces high-quality explanations. Running locally (Ollama + mistral) avoids rate limits but requires 8GB+ RAM and is slower. For development and demo, Groq is the right call. Local fallback is a config option.
+**NVIDIA NIM vs Groq/Local LLMs**  
+NVIDIA NIM hosts state-of-the-art open models like `meta/llama-3.3-70b-instruct` and exposes them via an OpenAI-compatible REST API. By pointing the standard `openai` library to NVIDIA's serverless endpoint, we avoid proprietary vendor SDKs. It provides the same llama-3.3-70b model family quality as the previous Groq setup but with more lenient rate limits (40 RPM vs Groq's 30 RPM) and no daily token cap on the free tier.
 
 **Design philosophy: classical academic instrument, not startup SaaS**
 The Nous Research Hermes Agent site (nousr.com/hermes) is the direct visual 
@@ -503,7 +503,7 @@ architecture and the product design thinking.
 - Repos above 10,000 files use a sampling strategy (top 200 by centrality)
 - Languages supported in v1: Python, JavaScript, TypeScript, Go
 - Explanation quality degrades for deeply obfuscated or minified code
-- Groq rate limits cap explanations at approximately 20 files per run on the free tier
+- NVIDIA NIM free tier supports 40 requests/minute per model, capping runs to 20 files by default to avoid rate limits
 - The generated document is a snapshot: it does not update when the repo changes
 
 ---

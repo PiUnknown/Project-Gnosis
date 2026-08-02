@@ -7,11 +7,11 @@ Reads from state:  complexity_scores, graph_stats, circular_nodes,
 Writes to state:   explanations
 
 Pipeline per file:
-1. Check explanation cache — if hit, use stored text (zero Groq tokens)
+1. Check explanation cache — if hit, use stored text (zero API tokens)
 2. Get all code chunks for the file from ChromaDB
 3. Assemble context: code + dependency info + risk metadata
 4. Build system + user prompt
-5. Call Groq LLM (llama-3.3-70b-versatile, temp=0.1)
+5. Call NVIDIA NIM LLM (meta/llama-3.3-70b-instruct, temp=0.1)
 6. Save explanation to cache, store in state.explanations[file_path]
 
 File selection: priority tiers, capped at max_count.
@@ -28,13 +28,18 @@ CACHING:
   owner::repo_name::file_path::file_sha. The SHA comes from the GitHub
   API blob hash stored in state.file_manifest. Cache hits cost zero tokens.
   Cache entries are automatically invalidated when the file changes.
+
+LLM PROVIDER:
+  NVIDIA NIM Serverless Inference via src/utils/nvidia_client.py.
+  Requires NVIDIA_API_KEY in .env.
+  Get a free key at https://build.nvidia.com
 """
 
 import os
 from pathlib import PurePosixPath
 
 from src.state import ArchaeonState
-from src.utils.groq_client import call_llm, sleep_between_calls
+from src.utils.nvidia_client import call_llm, sleep_between_calls
 from src.utils.retriever import CodeRetriever, DEFAULT_CHROMA_DB_PATH
 from src.utils.explanation_cache import (
     make_cache_key,
@@ -43,14 +48,14 @@ from src.utils.explanation_cache import (
     cache_stats
 )
 
-# Default cap for free tier (30 req/min, ~20 files in one run)
+# Default cap — tune based on API tier limits
 DEFAULT_MAX_EXPLANATIONS = 20
 
 # Code context budget in characters (~4 chars per token, targeting ~2000 tokens)
 MAX_CODE_CHARS = 8000
 
 # Tier boundaries for file selection
-TIER_HIGH_INDEGREE = 5
+TIER_HIGH_INDEGREE   = 5
 TIER_MEDIUM_INDEGREE = 2
 
 # -----------------------------------------------------------------------
@@ -90,9 +95,9 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
         return state
 
     # Guard: API key must be present
-    if not os.getenv("GROQ_API_KEY"):
-        print("  [WARNING] GROQ_API_KEY not set in .env.")
-        print("  Get a free key at https://console.groq.com")
+    if not os.getenv("NVIDIA_API_KEY"):
+        print("  [WARNING] NVIDIA_API_KEY not set in .env.")
+        print("  Get a free key at https://build.nvidia.com")
         return state
 
     # Connect to ChromaDB
@@ -120,7 +125,7 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
         print(f"  Cache           : {stats['entries']} entries "
               f"({stats['size_kb']} KB) in ./explanation_cache/")
     else:
-        print(f"  Cache           : empty (first run on any repo)")
+        print(f"  Cache           : empty (first run on this repo)")
 
     # Select files
     selected = _select_files_to_explain(state, max_count)
@@ -137,7 +142,7 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
     explained  = 0
     cache_hits = 0
     failed     = 0
-    groq_calls = 0   # actual API calls made this run
+    api_calls  = 0
 
     for idx, file_path in enumerate(selected):
         short_name = PurePosixPath(file_path).name
@@ -149,8 +154,8 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
               f"risk={risk:<8} in_degree={in_deg}", end="")
 
         # ---- Cache check -----------------------------------------------
-        file_sha   = sha_lookup.get(file_path, "")
-        cache_key  = make_cache_key(
+        file_sha  = sha_lookup.get(file_path, "")
+        cache_key = make_cache_key(
             owner=state.owner,
             repo_name=state.repo_name,
             file_path=file_path,
@@ -163,11 +168,11 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
             explained  += 1
             cache_hits += 1
             print("  [CACHE HIT]")
-            continue   # no Groq call, no sleep needed
+            continue   # no API call, no sleep needed
 
         print()   # newline after the file header line
 
-        # ---- Groq call -------------------------------------------------
+        # ---- NVIDIA NIM call -------------------------------------------
         code_context = _assemble_code_context(file_path, retriever)
         graph_entry  = state.graph_stats.get(file_path, {})
         language     = score.language if score else "Unknown"
@@ -186,7 +191,7 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
             temperature=0.1,
             max_tokens=800
         )
-        groq_calls += 1
+        api_calls += 1
 
         if explanation:
             explanation = explanation.strip()
@@ -206,18 +211,19 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
         else:
             failed += 1
 
-        # Rate limit: sleep after every Groq call except the last
-        is_last_groq_call = (idx == len(selected) - 1) or all(
+        # Rate limit: sleep after every API call except the last
+        remaining = selected[idx + 1:]
+        all_remaining_cached = all(
             get_cached_explanation(
                 make_cache_key(state.owner, state.repo_name, p,
                                sha_lookup.get(p, ""))
             ) is not None
-            for p in selected[idx + 1:]
+            for p in remaining
         )
-        if not is_last_groq_call:
+        if remaining and not all_remaining_cached:
             sleep_between_calls()
 
-    _print_summary(state, selected, explained, cache_hits, groq_calls, failed)
+    _print_summary(state, selected, explained, cache_hits, api_calls, failed)
     return state
 
 
@@ -237,9 +243,7 @@ def _select_files_to_explain(state: ArchaeonState, max_count: int) -> list:
       Tier 2: HIGH risk
       Tier 3: in_degree >= TIER_MEDIUM_INDEGREE
       Tier 4: MEDIUM risk
-      Tier 5: everything else (LOW, files with no complexity score entry)
-
-    Within each tier: higher in_degree comes first.
+      Tier 5: everything else
     """
     if not state.complexity_scores:
         return []
@@ -280,10 +284,10 @@ def _assemble_code_context(file_path: str, retriever: CodeRetriever) -> str:
     Ordering:
       1. Module chunk (imports + docstring) — orientation context
       2. Function chunks sorted by complexity descending — most complex first
-         so if we hit the budget limit, high-complexity functions are preserved
       3. Class chunks — structural overview
 
-    Budget: MAX_CODE_CHARS characters across all chunks combined.
+    Budget: MAX_CODE_CHARS characters. When hit, a truncation notice
+    is appended rather than silently cutting mid-chunk.
     """
     chunks = retriever.get_file_chunks(file_path)
 
@@ -343,7 +347,7 @@ def _build_user_prompt(
     Sections:
     1. File header: path, language, risk level with reasons, coupling
     2. Dependencies: what this file imports and what imports it
-    3. Source code: from ChromaDB (may be empty for parse-error files)
+    3. Source code: from ChromaDB
     4. Task: explicit instruction to the model
     """
     if complexity_score:
@@ -442,29 +446,29 @@ def _print_summary(
     selected: list,
     explained: int,
     cache_hits: int,
-    groq_calls: int,
+    api_calls: int,
     failed: int
 ) -> None:
-    groq_explained = explained - cache_hits
+    api_explained = explained - cache_hits
     print(f"\n[Agent 6: Explainability] Done")
     print(f"  Files attempted  : {len(selected)}")
     print(f"  Cache hits       : {cache_hits}  (0 tokens spent)")
-    print(f"  Groq calls made  : {groq_calls}")
+    print(f"  NVIDIA API calls : {api_calls}")
     print(f"  Explained        : {explained} ({cache_hits} from cache, "
-          f"{groq_explained} from Groq)")
-    print(f"  Failed (Groq)    : {failed}")
+          f"{api_explained} from NVIDIA NIM)")
+    print(f"  Failed           : {failed}")
     print(f"  Total in state   : {len(state.explanations)}")
 
     if failed > 0:
         print(
             f"\n  [INFO] {failed} file(s) failed. Common causes: "
-            f"rate limit exceeded, context too long, or API key issue."
+            f"rate limit exceeded, context too long, or invalid API key."
         )
     if cache_hits == len(selected):
         print(f"\n  [INFO] All explanations served from cache. "
-              f"Zero Groq tokens used this run.")
+              f"Zero API tokens used this run.")
     elif cache_hits > 0:
-        tokens_saved = cache_hits * 3000   # rough estimate
+        tokens_saved = cache_hits * 3000
         print(f"\n  [INFO] Cache saved ~{tokens_saved:,} tokens this run.")
 
     if explained > 0:

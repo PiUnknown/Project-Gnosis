@@ -1,7 +1,7 @@
 """
 Tests for Phase 6: Explainability Agent.
 
-All tests are offline — no Groq API calls, no ChromaDB on disk.
+All tests are offline — no NVIDIA NIM API calls, no ChromaDB on disk.
 
 Strategy:
   - call_llm is patched to return a canned string
@@ -452,7 +452,7 @@ class TestExplainabilityAgent:
                 return_value=call_llm_return
             ):
                 with patch("src.agents.explainability.sleep_between_calls"):
-                    with patch.dict("os.environ", {"GROQ_API_KEY": "test_key"}):
+                    with patch.dict("os.environ", {"NVIDIA_API_KEY": "test_key"}):
                         return run(state, max_count=max_count)
 
     def test_explanations_populated(self):
@@ -472,7 +472,7 @@ class TestExplainabilityAgent:
         result = self._patched_run(state, MockRetriever(), max_count=3)
         assert len(result.explanations) <= 3
 
-    def test_groq_failure_does_not_crash(self):
+    def test_nvidia_failure_does_not_crash(self):
         state = _make_full_state(num_files=3)
         result = self._patched_run(state, MockRetriever(), call_llm_return=None)
         # Pipeline should complete; explanations may be empty but no exception
@@ -481,13 +481,13 @@ class TestExplainabilityAgent:
     def test_missing_collection_name_returns_early(self):
         state = _make_full_state()
         state.chroma_collection_name = None
-        with patch.dict("os.environ", {"GROQ_API_KEY": "test_key"}):
+        with patch.dict("os.environ", {"NVIDIA_API_KEY": "test_key"}):
             result = run(state, max_count=5)
         assert len(result.explanations) == 0
 
     def test_missing_api_key_returns_early(self):
         state = _make_full_state()
-        env = {k: v for k, v in __import__("os").environ.items() if k != "GROQ_API_KEY"}
+        env = {k: v for k, v in __import__("os").environ.items() if k != "NVIDIA_API_KEY"}
         with patch.dict("os.environ", env, clear=True):
             result = run(state, max_count=5)
         assert len(result.explanations) == 0
@@ -509,7 +509,7 @@ class TestExplainabilityAgent:
         with patch("src.agents.explainability.CodeRetriever", return_value=retriever):
             with patch("src.agents.explainability.call_llm", side_effect=capture_call):
                 with patch("src.agents.explainability.sleep_between_calls"):
-                    with patch.dict("os.environ", {"GROQ_API_KEY": "test_key"}):
+                    with patch.dict("os.environ", {"NVIDIA_API_KEY": "test_key"}):
                         run(state, max_count=1)
 
         assert len(captured_prompts) > 0
@@ -532,7 +532,7 @@ class TestExplainabilityAgent:
         with patch("src.agents.explainability.CodeRetriever", return_value=MockRetriever()):
             with patch("src.agents.explainability.call_llm", side_effect=capture_call):
                 with patch("src.agents.explainability.sleep_between_calls"):
-                    with patch.dict("os.environ", {"GROQ_API_KEY": "test_key"}):
+                    with patch.dict("os.environ", {"NVIDIA_API_KEY": "test_key"}):
                         run(state, max_count=1)
 
         assert len(captured_prompts) > 0
@@ -548,7 +548,7 @@ class TestExplainabilityAgent:
         with patch("src.agents.explainability.CodeRetriever", return_value=MockRetriever()):
             with patch("src.agents.explainability.call_llm", return_value=CANNED_EXPLANATION):
                 with patch("src.agents.explainability.sleep_between_calls", side_effect=mock_sleep):
-                    with patch.dict("os.environ", {"GROQ_API_KEY": "test_key"}):
+                    with patch.dict("os.environ", {"NVIDIA_API_KEY": "test_key"}):
                         result = run(state, max_count=3)
 
         explained = len(result.explanations)
@@ -562,7 +562,7 @@ class TestExplainabilityAgent:
         with patch("src.agents.explainability.CodeRetriever", return_value=MockRetriever()):
             with patch("src.agents.explainability.call_llm", return_value=padded):
                 with patch("src.agents.explainability.sleep_between_calls"):
-                    with patch.dict("os.environ", {"GROQ_API_KEY": "test_key"}):
+                    with patch.dict("os.environ", {"NVIDIA_API_KEY": "test_key"}):
                         result = run(state, max_count=1)
 
         for exp in result.explanations.values():
@@ -583,7 +583,7 @@ class TestExplainabilityAgent:
         with patch("src.agents.explainability.CodeRetriever", return_value=MockRetriever()):
             with patch("src.agents.explainability.call_llm", side_effect=alternating_calls):
                 with patch("src.agents.explainability.sleep_between_calls"):
-                    with patch.dict("os.environ", {"GROQ_API_KEY": "test_key"}):
+                    with patch.dict("os.environ", {"NVIDIA_API_KEY": "test_key"}):
                         result = run(state, max_count=4)
 
         # Some explanations stored, some not — but no crash

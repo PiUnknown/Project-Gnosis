@@ -79,7 +79,7 @@ When an LLM generates plausible-sounding but incorrect information. Without RAG,
 ## Context Engineering
 
 **Context Window**  
-The maximum amount of text an LLM can process in one call. Groq llama-3.3-70b has 128,000 tokens. A large codebase can have millions of tokens. You cannot fit everything in context. RAG solves this by selecting only what is relevant.
+The maximum amount of text an LLM can process in one call. meta/llama-3.3-70b-instruct has 128,000 tokens. A large codebase can have millions of tokens. You cannot fit everything in context. RAG solves this by selecting only what is relevant.
 
 **Context Budget**  
 The amount of context window space you allocate per component. In Agent 6: system prompt uses ~500 tokens, retrieved code chunks use ~2000 tokens, dependency information uses ~500 tokens, leaving room for a 300-word explanation.
@@ -187,27 +187,27 @@ GitHub's HTTP API for accessing repo data without cloning. Endpoint `/repos/{own
 **FastAPI**  
 Python web framework for building async HTTP APIs. Handles incoming requests (GitHub URL + options), runs the agent pipeline, and returns results. Chosen for: async support, automatic OpenAPI docs, type validation via Pydantic.
 
-**Streamlit**  
-Python library for building data apps with minimal UI code. Used for the demo frontend: text input for URL, progress bar per agent, download button for the generated doc. Not production-grade. Replaced with Next.js in v2.
-
 **Pydantic**  
 Python library for data validation using type annotations. Used to validate the GitHub URL input and to define the structure of the shared state object.
 
 **Pipeline**  
-In this project: a fixed sequence of agents that runs start-to-finish on a given input. Contrasted with a DAG (directed acyclic graph) where branching is possible. v1 is a linear pipeline. v2 may introduce a DAG for parallel processing (e.g., run AST parsing and Groq calls concurrently).
+In this project: a fixed sequence of agents that runs start-to-finish on a given input. Contrasted with a DAG (directed acyclic graph) where branching is possible. v1 is a linear pipeline. v2 may introduce a DAG for parallel processing (e.g., run AST parsing and LLM calls concurrently).
 
 ---
 
 ## LLM Infrastructure
 
-**Groq**  
-An inference provider offering fast LLM API access via standard OpenAI-compatible endpoints. Free tier with rate limits. Model used: `llama-3.3-70b-versatile`. Chosen for: speed, free access, consistency with Om's existing stack.
+**NVIDIA NIM (Serverless Inference)**  
+The LLM inference provider for this project. NVIDIA NIM exposes hosted foundation models via an OpenAI-compatible REST API, so the standard `openai` Python SDK works with a custom `base_url`. Chosen for: generous free tier, no daily token cap, OpenAI-compatible interface requiring no proprietary SDK, and access to the same llama-3.3-70b model family used previously.
 
-**llama-3.3-70b-versatile**  
-A 70-billion parameter open-source language model. Capable of code understanding, explanation generation, and structured output. Available on Groq's free tier with 6000 requests/day and 100k tokens/minute limits.
+**meta/llama-3.3-70b-instruct**  
+A 70-billion parameter open-source language model hosted on NVIDIA NIM. The "instruct" variant is fine-tuned to follow explicit instructions, making it well-suited for structured documentation generation. Accessed via NVIDIA's serverless endpoint at `https://integrate.api.nvidia.com/v1`.
+
+**OpenAI-Compatible API**  
+A REST API that accepts the same request and response format as OpenAI's `/v1/chat/completions` endpoint. Many inference providers (NVIDIA NIM, Together AI, Fireworks, Anyscale) expose this interface so that switching providers requires only changing `base_url` and `api_key` — no code changes to prompt construction or response parsing.
 
 **Rate Limit**  
-The maximum number of API calls or tokens allowed in a time period. Groq's free tier: 30 requests/minute, 100k tokens/minute. Mitigation: batch explanations, add delays between calls, implement exponential backoff on 429 errors.
+The maximum number of API calls or tokens allowed in a time period. NVIDIA NIM free tier: 40 requests/minute per model. Mitigation: add 2.0s delay between calls, implement exponential backoff on 429 errors.
 
 **Exponential Backoff**  
 A retry strategy: when an API call fails, wait 1 second, retry. If it fails again, wait 2 seconds, retry. Then 4 seconds, 8 seconds, etc. Prevents hammering an API that is already rate-limiting you.
@@ -217,3 +217,6 @@ Instructions given to the LLM at the start of every conversation that shape its 
 
 **Function Calling / Structured Output**  
 A feature where the LLM is constrained to output JSON matching a specific schema instead of free text. Used when you need structured data back from the LLM, not prose. Not used in v1 but available if needed.
+
+**Explanation Cache**  
+A disk-based cache in `./explanation_cache/` that stores LLM-generated explanations keyed by `owner::repo::file_path::file_sha`. On re-runs of the same repo, cached explanations are loaded directly — zero API tokens spent. Cache entries are automatically invalidated when the file's Git SHA changes (i.e., when its content changes).
