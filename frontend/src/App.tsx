@@ -421,7 +421,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
 }
 
 // ─── Screen 2: Progress ───────────────────────────────────────────────────────
-function ProgressPage({ repoUrl, jobId, onComplete }: { repoUrl: string; jobId: string; onComplete: () => void }) {
+function ProgressPage({ repoUrl, jobId, onComplete, onHome }: { repoUrl: string; jobId: string; onComplete: () => void; onHome: () => void }) {
   const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>(
     Array(7).fill('queued' as AgentStatus)
   )
@@ -491,7 +491,7 @@ function ProgressPage({ repoUrl, jobId, onComplete }: { repoUrl: string; jobId: 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#1400FF', position: 'relative', overflow: 'hidden' }}>
       <AthenaFigure brightness={0.55} />
-      <NavBar onLogoClick={() => { }} />
+      <NavBar onLogoClick={onHome} />
 
       {/* Repo context bar */}
       <div style={{ height: 48, borderBottom: '1px solid rgba(255,255,255,0.15)', padding: '0 120px', display: 'flex', alignItems: 'center', gap: 16, position: 'relative', zIndex: 1, flexShrink: 0 }}>
@@ -670,7 +670,7 @@ function CollapsibleSection({ title, count, content, defaultOpen = false }: { ti
   )
 }
 
-function ResultsPage({ repoUrl, jobId }: { repoUrl: string; jobId: string }) {
+function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: string; onHome: () => void }) {
   const [activeTab, setActiveTab] = useState<ResultsTab>('onboarding')
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState(true)
@@ -708,7 +708,7 @@ function ResultsPage({ repoUrl, jobId }: { repoUrl: string; jobId: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#1400FF', paddingBottom: 64 }}>
-      <NavBar onLogoClick={() => { }} />
+      <NavBar onLogoClick={onHome} />
 
       {/* Results header */}
       <div style={{ padding: '28px 96px 24px', borderBottom: '1px solid rgba(255,255,255,0.15)', flexShrink: 0, boxSizing: 'border-box' }}>
@@ -954,8 +954,8 @@ export default function App() {
   return (
     <>
       {screen === 'landing' && <LandingPage onSubmit={handleSubmit} />}
-      {screen === 'progress' && <ProgressPage repoUrl={repoUrl} jobId={jobId} onComplete={() => setScreen('results')} />}
-      {screen === 'results' && <ResultsPage repoUrl={repoUrl} jobId={jobId} />}
+      {screen === 'progress' && <ProgressPage repoUrl={repoUrl} jobId={jobId} onComplete={() => setScreen('results')} onHome={() => setScreen('landing')} />}
+      {screen === 'results' && <ResultsPage repoUrl={repoUrl} jobId={jobId} onHome={() => setScreen('landing')} />}
     </>
   )
 }
