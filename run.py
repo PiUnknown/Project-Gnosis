@@ -35,7 +35,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Full pipeline with LLM explanations (requires GROQ_API_KEY in .env)
+  # Full pipeline with LLM explanations (requires NVIDIA_API_KEY in .env)
   python run.py --url https://github.com/psf/black
 
   # Skip LLM calls (faster, no API key needed)
@@ -69,7 +69,7 @@ Examples:
     )
     parser.add_argument(
         "--max-explain", type=int, default=20,
-        help="Max files to explain via LLM (default: 20, Groq free tier limit)"
+        help="Max files to explain via LLM (default: 20, NVIDIA free tier limit)"
     )
     parser.add_argument(
         "--test-rag", action="store_true",
@@ -79,18 +79,18 @@ Examples:
 
     # Environment validation
     github_token = os.getenv("GITHUB_TOKEN")
-    groq_key     = os.getenv("GROQ_API_KEY")
+    nvidia_key   = os.getenv("NVIDIA_API_KEY")
 
     if not github_token:
         print("[INFO] No GITHUB_TOKEN in .env. Using unauthenticated mode.")
         print("       Limited to 60 GitHub API requests/hour.")
         print("       Add GITHUB_TOKEN to .env for 5000/hour.\n")
 
-    if not groq_key and not args.skip_llm:
-        print("[INFO] No GROQ_API_KEY in .env.")
+    if not nvidia_key and not args.skip_llm:
+        print("[INFO] No NVIDIA_API_KEY in .env.")
         print("       Phase 6 (Explainability) will be skipped.")
-        print("       Get a free key at https://console.groq.com")
-        print("       Add GROQ_API_KEY=gsk_... to your .env file.\n")
+        print("       Get a free key at https://build.nvidia.com")
+        print("       Add NVIDIA_API_KEY=nvapi_... to your .env file.\n")
         args.skip_llm = True
 
     # Run the pipeline
