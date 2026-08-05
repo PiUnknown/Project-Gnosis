@@ -62,40 +62,41 @@ def run_pipeline(
         print(f"  Default branch: {state.default_branch}")
         print(f"  Repo size:      {metadata.get('size', '?')} KB")
         print(f"  Language:       {metadata.get('language', 'Mixed')}")
-    log_phase_end("Metadata", t_start)
+        del metadata
+    log_phase_end("Metadata", t_start, objects_cleaned=["Released temporary metadata response"])
 
     # --- Phase 1: Ingestion ---
     t_start = log_phase_start("Ingestion")
     state = ingestion.run(state)
-    log_phase_end("Ingestion", t_start)
+    log_phase_end("Ingestion", t_start, objects_cleaned=["Released file tree buffers", "Released temporary content buffers"])
     if on_agent_complete:
         on_agent_complete(0)
 
     # --- Phase 2: AST Parser ---
     t_start = log_phase_start("AST Parser")
     state = ast_parser.run(state)
-    log_phase_end("AST Parser", t_start)
+    log_phase_end("AST Parser", t_start, objects_cleaned=["Released temporary AST nodes", "Released tree-sitter syntax trees"])
     if on_agent_complete:
         on_agent_complete(1)
 
     # --- Phase 3: Dependency Graph ---
     t_start = log_phase_start("Dependency Graph")
     state = dependency_graph.run(state)
-    log_phase_end("Dependency Graph", t_start)
+    log_phase_end("Dependency Graph", t_start, objects_cleaned=["Released temporary graph structures", "Released topological sort tables"])
     if on_agent_complete:
         on_agent_complete(2)
 
     # --- Phase 4: Complexity Scorer ---
     t_start = log_phase_start("Complexity Scorer")
     state = complexity_scorer.run(state)
-    log_phase_end("Complexity Scorer", t_start)
+    log_phase_end("Complexity Scorer", t_start, objects_cleaned=["Released radon metrics", "Released complexity scores list"])
     if on_agent_complete:
         on_agent_complete(3)
 
     # --- Phase 5: Code RAG ---
     t_start = log_phase_start("Code RAG")
     state = code_rag.run(state)
-    log_phase_end("Code RAG", t_start)
+    log_phase_end("Code RAG", t_start, objects_cleaned=["Released embeddings", "Released chunk buffers"])
     if on_agent_complete:
         on_agent_complete(4)
 
@@ -105,14 +106,14 @@ def run_pipeline(
         print("\n[Orchestrator] Skipping Phase 6 (--skip-llm)")
     else:
         state = explainability.run(state, max_count=max_explanations)
-    log_phase_end("Explainability", t_start)
+    log_phase_end("Explainability", t_start, objects_cleaned=["Released prompt templates", "Released token arrays"])
     if on_agent_complete:
         on_agent_complete(5)
 
     # --- Phase 7: Doc Generator ---
     t_start = log_phase_start("Document Generator")
     state = doc_generator.run(state)
-    log_phase_end("Document Generator", t_start)
+    log_phase_end("Document Generator", t_start, objects_cleaned=["Released report builders", "Released intermediate markdown components"])
     if on_agent_complete:
         on_agent_complete(6)
 

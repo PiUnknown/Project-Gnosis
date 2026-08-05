@@ -30,9 +30,29 @@ def log_phase_start(phase_name: str) -> float:
     print(f"================================================")
     return time.time()
 
-def log_phase_end(phase_name: str, start_time: float) -> None:
+def log_phase_end(phase_name: str, start_time: float, objects_cleaned: Optional[list] = None) -> None:
     elapsed = time.time() - start_time
+    
+    # 1. Print Cleanup Diagnostics
+    print("\n[Cleanup]")
+    if objects_cleaned:
+        for obj in objects_cleaned:
+            print(obj)
+    print("GC complete")
+    
+    # 2. Run Garbage Collection
+    gc.collect()
+    
+    # 3. Retrieve and Log RSS Memory
     rss, vms = get_memory_usage()
+    if psutil:
+        print(f"RSS: {rss:.0f} MB")
+        
+    print(f"\n[Memory after {phase_name}]")
+    if psutil:
+        print(f"RSS: {rss:.0f} MB")
+        
+    # 4. Standard Metrics Summary
     print(f"\n------------------------------------------------")
     print(f"[Metrics]")
     print(f"Phase: {phase_name}")
@@ -41,6 +61,3 @@ def log_phase_end(phase_name: str, start_time: float) -> None:
         print(f"RSS: {rss:.0f} MB")
         print(f"VMS: {vms:.0f} MB")
     print(f"------------------------------------------------")
-    
-    # Free heap aggressively
-    gc.collect()

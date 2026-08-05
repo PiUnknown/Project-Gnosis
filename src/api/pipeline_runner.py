@@ -59,42 +59,43 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
         t_start = log_phase_start("Metadata")
         metadata = fetch_repo_metadata(owner, repo_name, github_token)
         state.default_branch = metadata["default_branch"]
-        log_phase_end("Metadata", t_start)
+        del metadata
+        log_phase_end("Metadata", t_start, objects_cleaned=["Released temporary metadata response"])
         _end_phase(job_id, "metadata")
 
         # ---- Phase 1: Ingestion ------------------------------------
         _start_phase(job_id, "ingestion")
         t_start = log_phase_start("Ingestion")
         state = ingestion.run(state)
-        log_phase_end("Ingestion", t_start)
+        log_phase_end("Ingestion", t_start, objects_cleaned=["Released file tree buffers", "Released temporary content buffers"])
         _end_phase(job_id, "ingestion")
 
         # ---- Phase 2: AST Parser -----------------------------------
         _start_phase(job_id, "ast_parser")
         t_start = log_phase_start("AST Parser")
         state = ast_parser.run(state)
-        log_phase_end("AST Parser", t_start)
+        log_phase_end("AST Parser", t_start, objects_cleaned=["Released temporary AST nodes", "Released tree-sitter syntax trees"])
         _end_phase(job_id, "ast_parser")
 
         # ---- Phase 3: Dependency Graph -----------------------------
         _start_phase(job_id, "dependency_graph")
         t_start = log_phase_start("Dependency Graph")
         state = dependency_graph.run(state)
-        log_phase_end("Dependency Graph", t_start)
+        log_phase_end("Dependency Graph", t_start, objects_cleaned=["Released temporary graph structures", "Released topological sort tables"])
         _end_phase(job_id, "dependency_graph")
 
         # ---- Phase 4: Complexity Scorer ----------------------------
         _start_phase(job_id, "complexity_scorer")
         t_start = log_phase_start("Complexity Scorer")
         state = complexity_scorer.run(state)
-        log_phase_end("Complexity Scorer", t_start)
+        log_phase_end("Complexity Scorer", t_start, objects_cleaned=["Released radon metrics", "Released complexity scores list"])
         _end_phase(job_id, "complexity_scorer")
 
         # ---- Phase 5: Code RAG ------------------------------------
         _start_phase(job_id, "code_rag")
         t_start = log_phase_start("Code RAG")
         state = code_rag.run(state)
-        log_phase_end("Code RAG", t_start)
+        log_phase_end("Code RAG", t_start, objects_cleaned=["Released embeddings", "Released chunk buffers"])
         _end_phase(job_id, "code_rag")
 
         # ---- Phase 6: Explainability (optional) -------------------
@@ -102,14 +103,14 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
         t_start = log_phase_start("Explainability")
         if not skip_llm and os.getenv("NVIDIA_API_KEY"):
             state = explainability.run(state, max_count=max_explanations)
-        log_phase_end("Explainability", t_start)
+        log_phase_end("Explainability", t_start, objects_cleaned=["Released prompt templates", "Released token arrays"])
         _end_phase(job_id, "explainability")
 
         # ---- Phase 7: Doc Generator --------------------------------
         _start_phase(job_id, "doc_generator")
         t_start = log_phase_start("Document Generator")
         state = doc_generator.run(state)
-        log_phase_end("Document Generator", t_start)
+        log_phase_end("Document Generator", t_start, objects_cleaned=["Released report builders", "Released intermediate markdown components"])
         _end_phase(job_id, "doc_generator")
 
         # ---- Serialize result --------------------------------------

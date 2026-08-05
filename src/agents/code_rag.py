@@ -119,17 +119,23 @@ def run(state: ArchaeonState) -> ArchaeonState:
 
             texts = [chunk.content for chunk in batch_to_process]
             embeddings = embed_texts(texts)
+            ids = [c.chunk_id for c in batch_to_process]
+            documents = [c.content for c in batch_to_process]
+            metadatas = [_to_metadata(c) for c in batch_to_process]
 
             collection.add(
-                ids=[c.chunk_id for c in batch_to_process],
+                ids=ids,
                 embeddings=embeddings,
-                documents=[c.content for c in batch_to_process],
-                metadatas=[_to_metadata(c) for c in batch_to_process]
+                documents=documents,
+                metadatas=metadatas
             )
             total_stored += len(batch_to_process)
 
             del texts
             del embeddings
+            del ids
+            del documents
+            del metadatas
             del batch_to_process
             import gc
             gc.collect()
@@ -140,16 +146,23 @@ def run(state: ArchaeonState) -> ArchaeonState:
     if current_batch:
         texts = [chunk.content for chunk in current_batch]
         embeddings = embed_texts(texts)
+        ids = [c.chunk_id for c in current_batch]
+        documents = [c.content for c in current_batch]
+        metadatas = [_to_metadata(c) for c in current_batch]
+
         collection.add(
-            ids=[c.chunk_id for c in current_batch],
+            ids=ids,
             embeddings=embeddings,
-            documents=[c.content for c in current_batch],
-            metadatas=[_to_metadata(c) for c in current_batch]
+            documents=documents,
+            metadatas=metadatas
         )
         total_stored += len(current_batch)
 
         del texts
         del embeddings
+        del ids
+        del documents
+        del metadatas
         del current_batch
         import gc
         gc.collect()

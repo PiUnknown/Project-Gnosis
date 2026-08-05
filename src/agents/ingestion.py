@@ -79,15 +79,27 @@ def run(state: ArchaeonState) -> ArchaeonState:
         delay=0.05
     )
     state.raw_contents = raw_contents
+    
+    del paths
 
     # Step 6: Update line counts now that content is available
     for metadata in state.file_manifest:
         if metadata.path in state.raw_contents:
             content = state.raw_contents[metadata.path]
             metadata.line_count = content.count("\n") + 1
+            del content
 
     # Summary
     _print_summary(state)
+    
+    # Aggressively release ingestion references
+    del tree_entries
+    del filtered
+    del file_manifest
+    del raw_contents
+    import gc
+    gc.collect()
+
     return state
 
 

@@ -115,14 +115,23 @@ def fetch_file_content_raw(
     response = requests.get(url)
 
     if response.status_code == 404:
+        response.close()
+        del response
         return None
     if response.status_code != 200:
+        response.close()
+        del response
         return None
 
     # If the response is binary (images, compiled files), decoding will fail
     try:
-        return response.text
+        text = response.text
+        response.close()
+        del response
+        return text
     except Exception:
+        response.close()
+        del response
         return None
 
 
@@ -148,6 +157,7 @@ def fetch_file_contents_batch(
         content = fetch_file_content_raw(owner, repo, branch, path)
         if content is not None:
             results[path] = content
+        del content
         time.sleep(delay)
 
     print()  # newline after progress

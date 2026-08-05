@@ -47,51 +47,63 @@ def run(state: ArchaeonState) -> ArchaeonState:
             skipped_count += 1
             continue
 
-        parser = get_parser(lang)
-        if not parser:
-            skipped_count += 1
-            continue
-
-        source = state.raw_contents[path]
-        source_bytes = bytes(source, 'utf-8')
-
-        # Parse the source into an AST
-        tree = parser.parse(source_bytes)
-        has_error = tree.root_node.has_error
-
-        # Extract symbols using the language-appropriate extractor
+        parser = None
+        source = None
+        source_bytes = None
+        tree = None
         try:
-            if lang == 'Python':
-                docstring, functions, classes, imports = extract_python(tree, source_bytes)
-            elif lang in ('JavaScript', 'TypeScript'):
-                docstring, functions, classes, imports = extract_js(tree, source_bytes, lang)
-            else:
+            parser = get_parser(lang)
+            if not parser:
                 skipped_count += 1
                 continue
 
-        except Exception as exc:
-            # Extraction itself failed (not a parse error, but our code failing)
+            source = state.raw_contents[path]
+            source_bytes = bytes(source, 'utf-8')
+
+            # Parse the source into an AST
+            tree = parser.parse(source_bytes)
+            has_error = tree.root_node.has_error
+
+            # Extract symbols using the language-appropriate extractor
+            try:
+                if lang == 'Python':
+                    docstring, functions, classes, imports = extract_python(tree, source_bytes)
+                elif lang in ('JavaScript', 'TypeScript'):
+                    docstring, functions, classes, imports = extract_js(tree, source_bytes, lang)
+                else:
+                    skipped_count += 1
+                    continue
+            except Exception as exc:
+                state.symbol_tables[path] = SymbolTable(
+                    file_path=path,
+                    language=lang,
+                    module_docstring=None,
+                    parse_error=True,
+                    parse_error_detail=f"Extraction error: {exc}"
+                )
+                error_count += 1
+                continue
+
             state.symbol_tables[path] = SymbolTable(
                 file_path=path,
                 language=lang,
-                module_docstring=None,
-                parse_error=True,
-                parse_error_detail=f"Extraction error: {exc}"
+                module_docstring=docstring,
+                functions=functions,
+                classes=classes,
+                imports=imports,
+                parse_error=has_error,
+                parse_error_detail="tree-sitter detected syntax errors" if has_error else None
             )
-            error_count += 1
-            continue
-
-        state.symbol_tables[path] = SymbolTable(
-            file_path=path,
-            language=lang,
-            module_docstring=docstring,
-            functions=functions,
-            classes=classes,
-            imports=imports,
-            parse_error=has_error,
-            parse_error_detail="tree-sitter detected syntax errors" if has_error else None
-        )
-        parsed_count += 1
+            parsed_count += 1
+        finally:
+            if parser is not None:
+                del parser
+            if source is not None:
+                del source
+            if source_bytes is not None:
+                del source_bytes
+            if tree is not None:
+                del tree
 
     print()
 
@@ -103,6 +115,11 @@ def run(state: ArchaeonState) -> ArchaeonState:
     _resolve_internal_imports(state, file_paths)
 
     _print_summary(state, parsed_count, skipped_count, error_count)
+    
+    del file_paths
+    import gc
+    gc.collect()
+    
     return state
 
 

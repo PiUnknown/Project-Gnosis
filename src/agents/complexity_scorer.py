@@ -104,8 +104,16 @@ def run(state: ArchaeonState) -> ArchaeonState:
         state.complexity_scores[file_path] = score
         scored += 1
 
+        del source
+        del score
+
     print()
     _print_summary(state, scored, skipped)
+    
+    del line_counts
+    import gc
+    gc.collect()
+    
     return state
 
 

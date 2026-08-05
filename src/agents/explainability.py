@@ -168,7 +168,16 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
             explained  += 1
             cache_hits += 1
             print("  [CACHE HIT]")
-            continue   # no API call, no sleep needed
+            
+            # Release memory for cache hit
+            del short_name
+            del score
+            del risk
+            del in_deg
+            del file_sha
+            del cache_key
+            del cached
+            continue
 
         print()   # newline after the file header line
 
@@ -223,7 +232,33 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
         if remaining and not all_remaining_cached:
             sleep_between_calls()
 
+        # Aggressively release iteration variables
+        del short_name
+        del score
+        del risk
+        del in_deg
+        del file_sha
+        del cache_key
+        del cached
+        del code_context
+        del graph_entry
+        del language
+        del user_prompt
+        del explanation
+        del remaining
+        del all_remaining_cached
+        import gc
+        gc.collect()
+
     _print_summary(state, selected, explained, cache_hits, api_calls, failed)
+    
+    # Release method-level references
+    del selected
+    del sha_lookup
+    del retriever
+    import gc
+    gc.collect()
+
     return state
 
 
