@@ -15,6 +15,7 @@ from src.agents import complexity_scorer
 from src.agents import code_rag
 from src.agents import explainability
 from src.agents import doc_generator
+from src.utils.metrics import log_phase_start, log_phase_end
 
 
 def run_pipeline(
@@ -52,6 +53,8 @@ def run_pipeline(
     print(f"  Repository : {state.owner}/{state.repo_name}")
     print(f"{'=' * 55}")
 
+    # --- Metadata Phase ---
+    t_start = log_phase_start("Metadata")
     if not state.default_branch:
         print(f"\n[Orchestrator] Fetching repo metadata...")
         metadata = fetch_repo_metadata(state.owner, state.repo_name, state.github_token)
@@ -59,42 +62,57 @@ def run_pipeline(
         print(f"  Default branch: {state.default_branch}")
         print(f"  Repo size:      {metadata.get('size', '?')} KB")
         print(f"  Language:       {metadata.get('language', 'Mixed')}")
+    log_phase_end("Metadata", t_start)
 
     # --- Phase 1: Ingestion ---
+    t_start = log_phase_start("Ingestion")
     state = ingestion.run(state)
+    log_phase_end("Ingestion", t_start)
     if on_agent_complete:
         on_agent_complete(0)
 
     # --- Phase 2: AST Parser ---
+    t_start = log_phase_start("AST Parser")
     state = ast_parser.run(state)
+    log_phase_end("AST Parser", t_start)
     if on_agent_complete:
         on_agent_complete(1)
 
     # --- Phase 3: Dependency Graph ---
+    t_start = log_phase_start("Dependency Graph")
     state = dependency_graph.run(state)
+    log_phase_end("Dependency Graph", t_start)
     if on_agent_complete:
         on_agent_complete(2)
 
     # --- Phase 4: Complexity Scorer ---
+    t_start = log_phase_start("Complexity Scorer")
     state = complexity_scorer.run(state)
+    log_phase_end("Complexity Scorer", t_start)
     if on_agent_complete:
         on_agent_complete(3)
 
     # --- Phase 5: Code RAG ---
+    t_start = log_phase_start("Code RAG")
     state = code_rag.run(state)
+    log_phase_end("Code RAG", t_start)
     if on_agent_complete:
         on_agent_complete(4)
 
     # --- Phase 6: Explainability ---
+    t_start = log_phase_start("Explainability")
     if skip_llm:
         print("\n[Orchestrator] Skipping Phase 6 (--skip-llm)")
     else:
         state = explainability.run(state, max_count=max_explanations)
+    log_phase_end("Explainability", t_start)
     if on_agent_complete:
         on_agent_complete(5)
 
     # --- Phase 7: Doc Generator ---
+    t_start = log_phase_start("Document Generator")
     state = doc_generator.run(state)
+    log_phase_end("Document Generator", t_start)
     if on_agent_complete:
         on_agent_complete(6)
 

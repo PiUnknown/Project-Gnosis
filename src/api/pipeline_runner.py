@@ -27,6 +27,7 @@ from src.agents import complexity_scorer
 from src.agents import code_rag
 from src.agents import explainability
 from src.agents import doc_generator
+from src.utils.metrics import log_phase_start, log_phase_end
 
 
 def run(job_id: str, repo_url: str, options: dict) -> None:
@@ -55,44 +56,60 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
 
         # ---- Phase: metadata ----------------------------------------
         _start_phase(job_id, "metadata")
+        t_start = log_phase_start("Metadata")
         metadata = fetch_repo_metadata(owner, repo_name, github_token)
         state.default_branch = metadata["default_branch"]
+        log_phase_end("Metadata", t_start)
         _end_phase(job_id, "metadata")
 
         # ---- Phase 1: Ingestion ------------------------------------
         _start_phase(job_id, "ingestion")
+        t_start = log_phase_start("Ingestion")
         state = ingestion.run(state)
+        log_phase_end("Ingestion", t_start)
         _end_phase(job_id, "ingestion")
 
         # ---- Phase 2: AST Parser -----------------------------------
         _start_phase(job_id, "ast_parser")
+        t_start = log_phase_start("AST Parser")
         state = ast_parser.run(state)
+        log_phase_end("AST Parser", t_start)
         _end_phase(job_id, "ast_parser")
 
         # ---- Phase 3: Dependency Graph -----------------------------
         _start_phase(job_id, "dependency_graph")
+        t_start = log_phase_start("Dependency Graph")
         state = dependency_graph.run(state)
+        log_phase_end("Dependency Graph", t_start)
         _end_phase(job_id, "dependency_graph")
 
         # ---- Phase 4: Complexity Scorer ----------------------------
         _start_phase(job_id, "complexity_scorer")
+        t_start = log_phase_start("Complexity Scorer")
         state = complexity_scorer.run(state)
+        log_phase_end("Complexity Scorer", t_start)
         _end_phase(job_id, "complexity_scorer")
 
         # ---- Phase 5: Code RAG ------------------------------------
         _start_phase(job_id, "code_rag")
+        t_start = log_phase_start("Code RAG")
         state = code_rag.run(state)
+        log_phase_end("Code RAG", t_start)
         _end_phase(job_id, "code_rag")
 
         # ---- Phase 6: Explainability (optional) -------------------
         _start_phase(job_id, "explainability")
+        t_start = log_phase_start("Explainability")
         if not skip_llm and os.getenv("NVIDIA_API_KEY"):
             state = explainability.run(state, max_count=max_explanations)
+        log_phase_end("Explainability", t_start)
         _end_phase(job_id, "explainability")
 
         # ---- Phase 7: Doc Generator --------------------------------
         _start_phase(job_id, "doc_generator")
+        t_start = log_phase_start("Document Generator")
         state = doc_generator.run(state)
+        log_phase_end("Document Generator", t_start)
         _end_phase(job_id, "doc_generator")
 
         # ---- Serialize result --------------------------------------

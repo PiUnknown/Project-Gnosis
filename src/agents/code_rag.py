@@ -63,16 +63,23 @@ def run(state: ArchaeonState) -> ArchaeonState:
     )
 
     # ----------------------------------------------------------------
-    # Step 2: Produce chunks
+    # Step 2: Produce, Embed, and Store chunks in streaming batches
     # ----------------------------------------------------------------
-    print(f"\n  Chunking files...")
+    print(f"\n  Chunking & embedding files in streaming batches...")
 
-    all_chunks = []
-    total_files = len(state.symbol_tables)
+    current_batch = []
+    total_stored = 0
+    total_chunks = 0
     skipped = 0
+    total_files = len(state.symbol_tables)
+
+    type_dist = {}
+    lang_dist = {}
+
+    STREAM_BATCH_SIZE = 128  # Keep memory low by processing 128 chunks at a time
 
     for idx, (file_path, symbol_table) in enumerate(state.symbol_tables.items()):
-        print(f"\r  Chunking: {idx + 1}/{total_files}", end="", flush=True)
+        print(f"\r  Processing files: {idx + 1}/{total_files}", end="", flush=True)
 
         lang = symbol_table.language
 
@@ -81,10 +88,6 @@ def run(state: ArchaeonState) -> ArchaeonState:
             continue
 
         if symbol_table.parse_error:
-            # Don't chunk files with syntax errors.
-            # Malformed source produces malformed chunks.
-            # Bad chunks add noise to the vector space and lower
-            # retrieval precision for all future queries.
             skipped += 1
             continue
 
@@ -102,51 +105,76 @@ def run(state: ArchaeonState) -> ArchaeonState:
             symbol_table=symbol_table,
             complexity_score=complexity_score
         )
-        all_chunks.extend(chunks)
 
-    print()
-    print(f"  Files chunked    : {total_files - skipped}")
+        for c in chunks:
+            type_dist[c.symbol_type] = type_dist.get(c.symbol_type, 0) + 1
+            lang_dist[c.language] = lang_dist.get(c.language, 0) + 1
+
+        current_batch.extend(chunks)
+        total_chunks += len(chunks)
+
+        while len(current_batch) >= STREAM_BATCH_SIZE:
+            batch_to_process = current_batch[:STREAM_BATCH_SIZE]
+            current_batch = current_batch[STREAM_BATCH_SIZE:]
+
+            texts = [chunk.content for chunk in batch_to_process]
+            embeddings = embed_texts(texts)
+
+            collection.add(
+                ids=[c.chunk_id for c in batch_to_process],
+                embeddings=embeddings,
+                documents=[c.content for c in batch_to_process],
+                metadatas=[_to_metadata(c) for c in batch_to_process]
+            )
+            total_stored += len(batch_to_process)
+
+            del texts
+            del embeddings
+            del batch_to_process
+            import gc
+            gc.collect()
+
+    print()  # newline after progress prints
+
+    # Process remaining chunks
+    if current_batch:
+        texts = [chunk.content for chunk in current_batch]
+        embeddings = embed_texts(texts)
+        collection.add(
+            ids=[c.chunk_id for c in current_batch],
+            embeddings=embeddings,
+            documents=[c.content for c in current_batch],
+            metadatas=[_to_metadata(c) for c in current_batch]
+        )
+        total_stored += len(current_batch)
+
+        del texts
+        del embeddings
+        del current_batch
+        import gc
+        gc.collect()
+
+    print(f"  Files processed  : {total_files - skipped}")
     print(f"  Files skipped    : {skipped}")
-    print(f"  Total chunks     : {len(all_chunks)}")
+    print(f"  Total chunks     : {total_chunks}")
+    print(f"  Total stored     : {total_stored}")
 
-    if not all_chunks:
+    if total_stored == 0:
         print("  [WARNING] No chunks produced.")
         state.chroma_collection_name = collection_name
         return state
 
     # ----------------------------------------------------------------
-    # Step 3: Embed
-    # ----------------------------------------------------------------
-    print(f"\n  Embedding chunks...")
-    texts = [chunk.content for chunk in all_chunks]
-    embeddings = embed_texts(texts)
-
-    # ----------------------------------------------------------------
-    # Step 4: Store in ChromaDB
-    # ----------------------------------------------------------------
-    print(f"\n  Storing in ChromaDB...")
-    total_stored = 0
-
-    for batch_start in range(0, len(all_chunks), CHROMA_BATCH_SIZE):
-        batch_chunks = all_chunks[batch_start:batch_start + CHROMA_BATCH_SIZE]
-        batch_embeddings = embeddings[batch_start:batch_start + CHROMA_BATCH_SIZE]
-
-        collection.add(
-            ids=[c.chunk_id for c in batch_chunks],
-            embeddings=batch_embeddings,
-            documents=[c.content for c in batch_chunks],
-            metadatas=[_to_metadata(c) for c in batch_chunks]
-        )
-        total_stored += len(batch_chunks)
-        print(f"\r  Stored: {total_stored}/{len(all_chunks)}", end="", flush=True)
-
-    print()
-
-    # ----------------------------------------------------------------
-    # Step 5: Write to state
+    # Step 3: Write to state & clean up raw contents
     # ----------------------------------------------------------------
     state.chroma_collection_name = collection_name
-    _print_summary(all_chunks, total_stored)
+    
+    # Clean up raw_contents to free up peak memory for downstream agents
+    state.raw_contents = {}
+    import gc
+    gc.collect()
+
+    _print_summary(type_dist, lang_dist, total_stored)
     return state
 
 
@@ -172,14 +200,7 @@ def _to_metadata(chunk) -> dict:
     }
 
 
-def _print_summary(all_chunks: list, stored: int) -> None:
-    type_dist: dict = {}
-    lang_dist: dict = {}
-
-    for c in all_chunks:
-        type_dist[c.symbol_type] = type_dist.get(c.symbol_type, 0) + 1
-        lang_dist[c.language] = lang_dist.get(c.language, 0) + 1
-
+def _print_summary(type_dist: dict, lang_dist: dict, stored: int) -> None:
     print(f"\n[Agent 5: Code RAG] Done")
     print(f"  Total stored     : {stored}")
 

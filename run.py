@@ -95,7 +95,7 @@ Examples:
 
     # Run the pipeline
     state = run_pipeline(
-        repo_url=args.url,
+        args.url,
         github_token=github_token,
         max_explanations=args.max_explain,
         skip_llm=args.skip_llm
