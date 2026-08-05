@@ -2,10 +2,12 @@
 
 > Give it a GitHub URL. Get back a complete architectural map of the codebase.
 
-**Status:** In Development  
-**Author:** Om Kumar Jha  
-**GitHub:** [github.com/PiUnknown](https://github.com/PiUnknown)  
+**Status:** In Development (Agents 1–4 production-stable; Agent 5 embedding investigation in progress)
+**Codename:** Project Gnosis
+**Author:** Om Kumar Jha
+**GitHub:** [github.com/PiUnknown](https://github.com/PiUnknown)
 **LinkedIn:** [linkedin.com/in/omkumarjha043](https://linkedin.com/in/omkumarjha043)
+**Production URL:** [gnosis.piunknown.dev](https://gnosis.piunknown.dev)
 
 ---
 
@@ -37,22 +39,22 @@ Code Archaeology automates the mental model construction that every senior engin
 
 ## Use Cases
 
-**1. New engineer onboarding**  
+**1. New engineer onboarding**
 An engineering manager runs Code Archaeology on the codebase before a new hire starts. The new hire gets a structured document: what each module does, which files are critical, where to start reading, what to avoid touching without understanding first.
 
-**2. Open-source contribution**  
+**2. Open-source contribution**
 A developer wants to contribute to an open-source project but the repo has no architecture doc. They run the tool, get a component map in 3 minutes, and know exactly which files are relevant to the issue they want to fix.
 
-**3. Code review due diligence**  
+**3. Code review due diligence**
 A senior engineer is reviewing a large PR that touches files they are not familiar with. They run the tool scoped to those specific files to quickly understand the dependency surface before reviewing.
 
-**4. Technical debt audit**  
+**4. Technical debt audit**
 A tech lead wants to know which files are highest risk before a refactor. The complexity report surfaces: cyclomatic complexity per function, coupling scores, circular dependencies, parse failures, and a ranked list of files by risk level.
 
-**5. Acquisition or integration due diligence**  
+**5. Acquisition or integration due diligence**
 A startup is integrating a third-party codebase or being acquired. Their engineers have days, not weeks, to understand the foreign codebase. Code Archaeology produces a structural map in minutes.
 
-**6. Self-documentation**  
+**6. Self-documentation**
 A solo developer runs it on their own project after 6 months away. The tool reconstructs what they built and why, faster than reading their own code.
 
 ---
@@ -113,7 +115,7 @@ Input: GitHub Repository URL
   |  Agent 6: Explain     |
   |  RAG retrieval        |
   |  Dependency context   |
-  |  NVIDIA NIM inference  |
+  |  NVIDIA NIM inference |
   |  Per-component prose  |
   +-----------------------+
             |
@@ -158,40 +160,54 @@ This pattern makes each agent independently testable: mock the state, test the a
 
 ### Core Pipeline
 
-**tree-sitter**  
+**tree-sitter**
 Language-agnostic AST parser. Parses Python, JavaScript, TypeScript, Go (and 50+ others) using the same Python API. Handles broken code gracefully: produces partial ASTs instead of throwing. Used in production by GitHub Copilot, Neovim, and VS Code. The only serious option for multi-language AST parsing in Python.
 
-**NetworkX**  
+**NetworkX**
 Python graph library. Used to construct the directed dependency graph: nodes are file paths, edges are import relationships. Provides `simple_cycles()` for circular dependency detection and centrality algorithms for identifying core files.
 
-**radon**  
+**radon**
 Python-specific code metrics library. Computes cyclomatic complexity per function, raw LOC metrics, and maintainability index. For JS/TS/Go, cyclomatic complexity is computed by walking the tree-sitter AST and counting branch nodes.
 
-**ChromaDB**  
-Embedded vector database. Stores code chunks as embeddings with metadata (file path, symbol name, language, complexity score). Runs as a Python library with no server. Persistent client mode saves the collection to disk between runs.
+**ChromaDB**
+Embedded vector database. Stores code chunks as embeddings with metadata (file path, symbol name, language, complexity score). Requires SQLite >= 3.35 — on Azure, the system SQLite is too old and must be patched with `pysqlite3-binary` (see Deployment section).
 
-**sentence-transformers (all-MiniLM-L6-v2)**  
+**sentence-transformers (all-MiniLM-L6-v2)**
 Embedding model that runs locally. Generates 384-dimensional vectors for code chunks. Free, no API required, fast on CPU. Upgrade path: `nomic-embed-code` for code-specialized embeddings in v2.
 
-**NVIDIA NIM (meta/llama-3.3-70b-instruct)**  
-LLM inference provider. Exposes an OpenAI-compatible REST API. Used only in Agent 6 for generating natural language explanations. Free tier with generous rate limits. Temperature set to 0.1 for consistent, accurate explanations.
+**NVIDIA NIM (meta/llama-3.3-70b-instruct)**
+LLM inference via NVIDIA's serverless NIM API. Accessed through an OpenAI-compatible client pointed at the NVIDIA endpoint. Replaced Groq in August 2026. Model: `meta/llama-3.3-70b-instruct`. Temperature set to 0.1 for consistent, accurate explanations.
 
 ### Infrastructure
 
-**FastAPI**  
-Async Python web framework. Exposes a POST endpoint `/analyze` that accepts `{ "repo_url": str, "options": {} }` and returns the generated document. Runs the agent pipeline as a background task.
+**FastAPI**
+Async Python web framework. Exposes a POST endpoint `/analyze` that accepts `{ "repo_url": str, "options": {} }` and returns the generated document. Runs the agent pipeline as a background task via a thread pool executor.
 
-**GitPython**  
-Used to clone repositories programmatically for private repos or when the full file tree is needed. For public repos, the GitHub REST API is preferred (no disk I/O, faster).
+**GitPython**
+Used to clone repositories programmatically. For public repos, the GitHub REST API is preferred (no disk I/O, faster).
 
-**GitHub REST API**  
+**GitHub REST API**
 For public repositories: fetches the complete file tree and individual file contents via HTTP. No cloning required. Rate limit: 60 requests/hour unauthenticated, 5000/hour with a PAT.
 
-**Frontend Design & Implementation (Figma Make → React 18 + TypeScript + Tailwind + shadcn/ui)**  
-Professional SPA; Figma-first workflow; dark blue/white palette; 0px border-radius aesthetic.
-
-**pyvis**  
+**pyvis**
 Renders the NetworkX dependency graph as an interactive HTML file using D3.js. Users can zoom, pan, and click nodes to see file details. Zero frontend code required.
+
+### Frontend
+
+**React 18 + TypeScript + Tailwind CSS + shadcn/ui**
+Production SPA hosted on Vercel at [gnosis.piunknown.dev](https://gnosis.piunknown.dev).
+Designed via Figma Make with the Nous Research Hermes Agent site as visual reference.
+Deep electric blue (#1400FF) primary palette, IBM Plex Mono for UI chrome, Playfair Display serif for hero type, 0px border-radius everywhere.
+Three screens: Landing → Job Progress (live polling) → Results (four-tab output viewer).
+
+### Deployment
+
+| Layer | Service | Details |
+|---|---|---|
+| Frontend | Vercel | Auto-deploys from GitHub on push to main |
+| Backend | Azure App Service | eastasia region, auto-deploys via GitHub Actions |
+| Domain | gnosis.piunknown.dev | Points to Vercel; API calls proxied to Azure |
+| CI/CD | GitHub Actions | Build, test, and deploy on push to master |
 
 ### Domain Coverage
 
@@ -205,8 +221,9 @@ This project spans the following AI and engineering domains:
 | Graph Engineering | Dependency graph construction, cycle detection, centrality analysis, topological sort |
 | Static Code Analysis | tree-sitter AST parsing, cyclomatic complexity, coupling metrics, multi-language support |
 | LLM Orchestration | NVIDIA NIM API, prompt design, temperature control, batching, rate limit handling with exponential backoff |
-| Backend Engineering | FastAPI async pipeline, stateful multi-step request processing, background tasks |
+| Backend Engineering | FastAPI async pipeline, stateful multi-step request processing, background tasks, job store |
 | Systems Design | Pipeline decomposition, shared state pattern, interface design between agents |
+| DevOps | Azure App Service deployment, GitHub Actions CI/CD, Vercel hosting, custom domain, CORS configuration |
 
 ---
 
@@ -292,17 +309,35 @@ code-archaeology-agent/
 │   │   ├── explainability.py    # Agent 6
 │   │   └── doc_generator.py     # Agent 7
 │   │
+│   ├── parsers/
+│   │   ├── base.py              # Shared data models
+│   │   ├── python_parser.py     # Python AST extraction
+│   │   ├── js_parser.py         # JS/TS AST extraction
+│   │   └── complexity.py        # Complexity computation
+│   │
 │   ├── utils/
 │   │   ├── github_api.py        # GitHub REST API client
 │   │   ├── tree_sitter_utils.py # Language parser initialization
-│   │   ├── nvidia_client.py     # NVIDIA NIM API wrapper with retry logic
+│   │   ├── groq_client.py       # LLM API wrapper (now points to NVIDIA NIM)
+│   │   ├── chunker.py           # AST-based code chunker
+│   │   ├── embedder.py          # sentence-transformers wrapper
+│   │   ├── retriever.py         # ChromaDB retrieval interface
+│   │   ├── graph_utils.py       # Import resolution + pyvis rendering
 │   │   └── filters.py           # File exclusion logic
 │   │
 │   └── api/
-│       └── main.py              # FastAPI application
+│       ├── main.py              # FastAPI application
+│       ├── models.py            # Pydantic request/response models
+│       ├── job_store.py         # In-memory thread-safe job store
+│       └── pipeline_runner.py   # API-specific pipeline runner
 │
-├── frontend/
-│   └── app.py                   # Streamlit frontend
+├── frontend/                    # React 18 + TypeScript + Tailwind
+│   ├── src/
+│   │   ├── pages/               # LandingPage, JobProgressPage, ResultsPage
+│   │   ├── components/          # TopBar, RiskBadge, LoadingSpinner, ErrorBanner
+│   │   ├── lib/                 # api.ts, download.ts
+│   │   └── types/               # api.ts (TypeScript interfaces)
+│   └── ...
 │
 ├── tests/
 │   ├── test_ingestion.py
@@ -310,8 +345,15 @@ code-archaeology-agent/
 │   ├── test_dependency_graph.py
 │   ├── test_complexity_scorer.py
 │   ├── test_code_rag.py
+│   ├── test_explainability.py
+│   ├── test_doc_generator.py
+│   ├── test_api.py
 │   └── fixtures/
-│       └── sample_repo/         # Tiny synthetic repo for testing
+│       └── sample_repo/
+│
+├── .github/
+│   └── workflows/
+│       └── azure-deploy.yml     # GitHub Actions → Azure App Service
 │
 ├── outputs/                     # Generated docs (gitignored)
 │   ├── onboarding.md
@@ -327,59 +369,137 @@ code-archaeology-agent/
 
 ## Build Order
 
-Each phase has a concrete deliverable that can be demonstrated independently.
+Each phase has a concrete deliverable. Current production status is shown.
 
-**Phase 1: Ingestion Agent**  
-Given a GitHub URL, print a JSON file manifest with file paths, languages, and line counts.  
-Deliverable: `python -m src.agents.ingestion --url https://github.com/X/Y`
+| Phase | Description | Status |
+|---|---|---|
+| 1 | Ingestion Agent — file manifest from GitHub API | ✅ Production |
+| 2 | AST Parser Agent — symbol tables via tree-sitter | ✅ Production |
+| 3 | Dependency Graph Agent — NetworkX DiGraph, cycle detection | ✅ Production |
+| 4 | Complexity Scorer Agent — radon, risk levels | ✅ Production |
+| 5 | Code RAG Agent — ChromaDB + sentence-transformers | 🔧 Investigating (embedding stall) |
+| 6 | Explainability Agent — NVIDIA NIM LLM inference | ⏳ Pending Agent 5 |
+| 7 | Doc Generator Agent — synthesizes all output | ⏳ Pending Agent 5 |
+| 8 | FastAPI Backend — async job queue, status polling | ✅ Production (Azure) |
+| 9 | React Frontend — three-screen SPA (Figma Make design) | ✅ Production (Vercel) |
 
-**Phase 2: AST Parser Agent**  
-Given the file manifest, print symbol tables for every Python and JS file.  
-Deliverable: symbol_tables.json showing functions, classes, and imports per file.
+---
 
-**Phase 3: Dependency Graph Agent**  
-Given the symbol tables, print the dependency graph and any circular dependencies.  
-Deliverable: dependency_graph.html that renders in a browser.
+## Deployment
 
-**Phase 4: Complexity Scorer Agent**  
-Given symbol tables and file contents, print a ranked complexity report.  
-Deliverable: complexity_report.json with risk levels per file.
+### Production Architecture
 
-**Phase 5: Code RAG Agent**  
-Populate ChromaDB. Test retrieval: `query_code("where does authentication happen?")` should return relevant chunks.  
-Deliverable: interactive terminal to test retrieval queries.
+```
+User
+  ↓
+Vercel (gnosis.piunknown.dev)
+React Frontend
+  ↓
+Azure App Service (eastasia)
+FastAPI Backend
+  ↓
+Pipeline Agents 1–7
+  ↓
+GitHub API → tree-sitter → NetworkX → radon → ChromaDB → sentence-transformers → NVIDIA NIM
+  ↓
+Generated onboarding document
+```
 
-**Phase 6: Explainability Agent**  
-Given a file path, print a natural language explanation of that file.  
-Deliverable: readable, accurate explanation of a file Om has not read before.
+### Environment Setup (Local Development)
 
-**Phase 7: Doc Generator Agent**  
-Full pipeline run: URL in, onboarding.md out.  
-Deliverable: a complete onboarding doc for a real open-source repo.
+```bash
+git clone https://github.com/PiUnknown/code-archaeology-agent
+cd code-archaeology-agent
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+pip install -r requirements.txt
 
-**Phase 8: FastAPI Backend**  
-Wrap the pipeline in an API. POST `/analyze` → returns the doc as JSON.
+cp .env.example .env
+# Add NVIDIA_API_KEY to .env       ← NVIDIA NIM API key
+# Add GITHUB_TOKEN for higher rate limits (optional)
+```
 
-**Phase 9: React Frontend (designed via Figma Make)**
-Production-quality web UI. Design system built in Figma using Figma Make, 
-implemented in React 18 + TypeScript + Tailwind CSS + shadcn/ui.
+**Running the FastAPI server locally:**
+```bash
+uvicorn src.api.main:app --reload --port 8000
+```
 
-Visual direction: deep electric blue (#1400FF) primary palette, IBM Plex Mono 
-for all UI chrome, Playfair Display serif for hero type, classical Athena figure 
-as background motif. Inspired by the Nous Research Hermes Agent site. Sharp corners 
-everywhere, no gradients, no gray, no green.
+**Running the frontend locally:**
+```bash
+cd frontend
+npm install
+npm run dev                     # Runs on localhost:5173
+```
 
-Three screens:
-  1. Landing     — URL input, options, classical split-screen composition
-  2. Job Progress — live pipeline visualizer, large serif progress percentage
-  3. Results     — four-tab output viewer (doc, graph, complexity, JSON) 
-                    with sticky download bar
+**Running a full CLI analysis:**
+```bash
+python run.py --url https://github.com/tiangolo/fastapi --output ./outputs
+```
 
-Deliverables:
-  - Complete Figma design system (colors, typography, all component states)
-  - Figma prototypes for all three screens at 1440px
-  - React implementation built from the Figma design
-  - Demo video: full pipeline run from URL input to onboarding doc
+### Azure App Service Deployment
+
+The backend deploys automatically via GitHub Actions on every push to `master`.
+
+The workflow in `.github/workflows/azure-deploy.yml`:
+1. Checks out the repository
+2. Sets up Python environment
+3. Installs dependencies
+4. Deploys to Azure App Service
+
+Manual deployment if needed:
+```bash
+az webapp up --name project-gnosis-api --resource-group gnosis-rg --runtime PYTHON:3.11
+```
+
+### Critical Azure Fix: SQLite for ChromaDB
+
+Azure App Service ships with SQLite 3.31, but ChromaDB requires SQLite >= 3.35. The fix is applied at the top of `src/api/main.py` before any ChromaDB import:
+
+```python
+# Must run before any chromadb import — Azure SQLite is too old
+__import__("pysqlite3")
+import sys
+sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+```
+
+And in `requirements.txt`:
+```
+pysqlite3-binary
+```
+
+Without this fix, Agent 5 crashes immediately with `unsupported sqlite3 version`. With the fix, Agent 5 reaches the embedding stage.
+
+### Environment Variables
+
+| Variable | Required For | Description |
+|---|---|---|
+| `NVIDIA_API_KEY` | Agent 6 (Explainability) | NVIDIA NIM serverless API key |
+| `GITHUB_TOKEN` | All agents (higher rate limit) | GitHub PAT for 5000 req/hr vs 60 |
+
+For production on Azure, these are set via Azure App Service Application Settings, not `.env` files.
+
+---
+
+## Current Investigation: Agent 5 Embedding Stall
+
+**Observed behavior:** The pipeline progresses through Agents 1–4 cleanly. Agent 5 begins, chunks all files successfully (700 chunks from 41 files for a mid-sized repo), then stalls during the embedding phase with no further output.
+
+**Azure logs show:**
+```
+Chunking files...
+Files chunked: 41
+Total chunks: 700
+Embedding chunks...
+[no further output]
+```
+
+**Working hypothesis:** sentence-transformers' CPU-based embedding of 700 chunks in a single batch may be running into Azure App Service memory limits or the default request timeout. The embedding model (`all-MiniLM-L6-v2`) runs locally with no API calls. At 700 chunks × 384 dimensions, the numpy allocations are substantial on a constrained App Service plan.
+
+**Planned fixes:**
+- Reduce batch size in `embedder.py` from 64 to 16 or 8
+- Add per-batch logging to confirm progress continues
+- Consider upgrading the Azure App Service plan (B2 or B3) for more RAM
+- Alternatively: investigate NVIDIA NIM or OpenAI embedding API as a replacement for local sentence-transformers
 
 ---
 
@@ -407,7 +527,6 @@ fastapi_users/
   router/         ← imported by 12 files (CRITICAL)
   db/             ← imported by 8 files
   authentication/ ← imports 6 modules, imported by 9
-  ...
 
 ## Core Components
 
@@ -420,8 +539,6 @@ authentication module.
 **Depends on:** authentication, db, schemas
 **Depended on by:** 12 files
 **Risk level:** HIGH (avg complexity: 8.2, coupling: 6)
-
-...
 
 ## Tech Debt Report
 - fastapi_users/db/sqlalchemy.py: cyclomatic complexity 23 in `get_user`
@@ -436,65 +553,29 @@ authentication module.
 
 ---
 
-## Environment Setup
-
-```bash
-git clone https://github.com/PiUnknown/code-archaeology-agent
-cd code-archaeology-agent
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-
-cp .env.example .env
-# Add NVIDIA_API_KEY to .env
-# Optionally add GITHUB_TOKEN for higher rate limits
-```
-
-**Running a full analysis:**
-```bash
-python -m src.orchestrator --url https://github.com/tiangolo/fastapi --output ./outputs
-```
-
-**Running the Streamlit UI:**
-```bash
-streamlit run frontend/app.py
-```
-
-**Running the FastAPI server:**
-```bash
-uvicorn src.api.main:app --reload
-```
-
----
-
 ## Design Decisions and Tradeoffs
 
-**Sequential pipeline vs parallel DAG**  
+**Sequential pipeline vs parallel DAG**
 v1 runs agents sequentially. Agents 3, 4, and 5 could run in parallel (all depend on Agent 2's output but not on each other). Sequential is simpler to debug and the total runtime is acceptable for repos under 500 files. Parallel execution is a v2 optimization.
 
-**Local embeddings vs API embeddings**  
-`all-MiniLM-L6-v2` runs locally, no API cost, no rate limits, works offline. OpenAI's `text-embedding-3-small` produces better code embeddings but costs money and requires network access. The local model is accurate enough for v1. Swap-in is one line of code.
+**Local embeddings vs API embeddings**
+`all-MiniLM-L6-v2` runs locally, no API cost, no rate limits, works offline. OpenAI's `text-embedding-3-small` produces better code embeddings but costs money and requires network access. The local model is accurate enough for v1. A swap to the NVIDIA NIM embedding endpoint is the natural v2 path given the existing NVIDIA integration.
 
-**ChromaDB vs FAISS**  
+**ChromaDB vs FAISS**
 ChromaDB: persistent, metadata filtering, easier API. FAISS: faster at scale, no metadata filtering. For repos under 50k chunks, ChromaDB is fine. FAISS becomes relevant at 500k+ chunks (very large monorepos).
 
-**NVIDIA NIM vs Groq/Local LLMs**  
-NVIDIA NIM hosts state-of-the-art open models like `meta/llama-3.3-70b-instruct` and exposes them via an OpenAI-compatible REST API. By pointing the standard `openai` library to NVIDIA's serverless endpoint, we avoid proprietary vendor SDKs. It provides the same llama-3.3-70b model family quality as the previous Groq setup but with more lenient rate limits (40 RPM vs Groq's 30 RPM) and no daily token cap on the free tier.
+**NVIDIA NIM over Groq**
+Groq was the original inference provider (free tier, llama-3.3-70b-versatile). Migrated to NVIDIA NIM in August 2026. NVIDIA NIM provides the same OpenAI-compatible API surface, the same model family (llama-3.3-70b-instruct), and integrates cleanly with the existing OpenAI client pointed at the NVIDIA endpoint. The migration required only an endpoint URL change and an API key swap.
 
-**Design philosophy: classical academic instrument, not startup SaaS**
-The Nous Research Hermes Agent site (nousr.com/hermes) is the direct visual 
-reference. The #1400FF electric blue, Playfair Display serif headlines in all-caps, 
-IBM Plex Mono for all UI text, sharp-corner components, and the Athena classical 
-figure are all deliberate. The aesthetic says: this tool takes code seriously. It does 
-not borrow from Vercel's minimalist gray or Tailwind's green accent defaults. 
-The visual identity matches the project's name — Gnosis, knowledge — and its 
-subject matter: excavating understanding from undocumented codebases.
+**Azure App Service over Render**
+Render was the original deployment target. Migrated to Azure App Service in August 2026. Azure provides GitHub Actions integration, better uptime SLAs, and is the correct choice for a project targeting enterprise engineering teams. The main operational complexity introduced was the SQLite version issue (fixed with pysqlite3-binary).
 
-The Figma-first workflow (design in Figma Make, then implement) is correct for 
-a portfolio project. It produces a design system that can be presented independently 
-of the code — useful in interviews where you want to show both the engineering 
-architecture and the product design thinking.
-  
+**React via Figma Make over Streamlit**
+Streamlit produces a working demo in 30 minutes but looks like a data science notebook. Project Gnosis is a developer tool being presented in interviews and on LinkedIn. A React frontend with the Nous Research Hermes Agent site as visual reference signals production intent. The Figma-first workflow (design in Figma Make, implement in React) also produces a standalone design deliverable.
+
+**In-memory job store over Redis**
+All job state lives in a module-level dict with a threading lock. Jobs are lost on server restart. This is acceptable for v1 (single-server, development tool with short-lived jobs). A Redis-backed store is the v2 upgrade path and a one-file change.
+
 ---
 
 ## Limitations (v1)
@@ -503,23 +584,28 @@ architecture and the product design thinking.
 - Repos above 10,000 files use a sampling strategy (top 200 by centrality)
 - Languages supported in v1: Python, JavaScript, TypeScript, Go
 - Explanation quality degrades for deeply obfuscated or minified code
-- NVIDIA NIM free tier supports 40 requests/minute per model, capping runs to 20 files by default to avoid rate limits
+- Agent 5 (embedding) is currently under investigation for stall on Azure
 - The generated document is a snapshot: it does not update when the repo changes
+- Job state is in-memory and lost on server restart
 
 ---
 
 ## Roadmap
 
-**v1.0 — Core pipeline**  
-All 7 agents working end-to-end. Streamlit demo. Supports Python and JS repos.
+**v1.0 — Core pipeline**
+All 7 agents working end-to-end. React frontend. Azure + Vercel deployment.
+*Current status: Agents 1–4 and 8–9 complete. Agent 5 embedding stall under investigation.*
 
-**v1.1 — Language expansion**  
+**v1.1 — Embedding fix + language expansion**
+Resolve Agent 5 embedding stall (batch size reduction or NVIDIA NIM embeddings).
 Add Rust, Java, C++ via tree-sitter grammars.
 
-**v2.0 — Product features**  
-Private repo support, GitHub Action integration (auto-generate docs on push), changelog-aware analysis (what changed since last run), team collaboration (annotate the generated doc).
+**v2.0 — Product features**
+Private repo support, GitHub Action integration (auto-generate docs on push),
+changelog-aware analysis (what changed since last run), team collaboration (annotate the generated doc).
+Redis job store for multi-server deployment.
 
-**v3.0 — Agent loop**  
+**v3.0 — Agent loop**
 Replace sequential pipeline with an agent loop: the explainability agent notices gaps in its understanding, re-queries ChromaDB, and iterates until it has sufficient context. True agentic behavior.
 
 ---
@@ -528,4 +614,4 @@ Replace sequential pipeline with an agent loop: the explainability agent notices
 
 This is a portfolio project built to demonstrate production-level AI engineering skills: not just calling an LLM API, but designing a system where multiple specialized agents work together, each with clear interfaces, testable in isolation, grounded by retrieval, and producing output that is genuinely useful to a real user.
 
-The problem is real. The architecture reflects how a senior engineer would actually approach it. Every design decision has a documented rationale. Every component can be explained in an interview.
+The problem is real. The architecture reflects how a senior engineer would actually approach it. Every design decision has a documented rationale. Every component can be explained in an interview. The project is deployed, publicly accessible at [gnosis.piunknown.dev](https://gnosis.piunknown.dev), and actively under development.
