@@ -17,3 +17,4 @@ pyvis>=0.3.2
 openai>=1.0.0
 pytest>=8.0.0
 gunicorn>=21.2.0
+pysqlite3-binary
