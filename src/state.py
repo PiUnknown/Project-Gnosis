@@ -23,6 +23,12 @@ class ArchaeonState:
     # --- Input ---
     repo_url: str
     github_token: Optional[str] = None
+    job_id: Optional[str] = None
+
+    def __post_init__(self):
+        if not self.job_id:
+            import uuid
+            self.job_id = str(uuid.uuid4())
 
     # --- Parsed from URL by orchestrator before pipeline starts ---
     owner: str = None

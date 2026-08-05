@@ -48,7 +48,7 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
         max_explanations = options.get("max_explanations", 20)
         skip_llm = options.get("skip_llm", False)
 
-        state = ArchaeonState(repo_url=repo_url, github_token=github_token)
+        state = ArchaeonState(repo_url=repo_url, github_token=github_token, job_id=job_id)
         owner, repo_name = parse_github_url(repo_url)
         state.owner     = owner
         state.repo_name = repo_name

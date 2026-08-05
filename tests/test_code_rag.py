@@ -114,7 +114,8 @@ def mock_embed():
 
     with patch("src.utils.embedder.embed_texts", side_effect=fake_embed_texts):
         with patch("src.utils.embedder.embed_query", side_effect=fake_embed_query):
-            yield
+            with patch("src.agents.code_rag.embed_texts", side_effect=fake_embed_texts):
+                yield
 
 
 @pytest.fixture
@@ -356,6 +357,20 @@ class TestCollectionNaming:
 
     def test_different_repos_give_different_names(self):
         assert make_collection_name("owner", "repo1") != make_collection_name("owner", "repo2")
+
+    def test_job_id_suffix(self):
+        name = make_collection_name("owner", "repo", "job-1234")
+        assert name == "gnosis_owner_repo_job-1234"
+
+    def test_job_id_truncation(self):
+        job_id = "job-1234-5678-9012-3456-7890-1234-5678"
+        name = make_collection_name(
+            "verylongownernamethatwillbetruncated",
+            "verylongreponamethatwillbetruncated",
+            job_id
+        )
+        assert len(name) <= 63
+        assert name.endswith("job-1234-5678-9012-3456-7890-1234-5678")
 
 
 # -----------------------------------------------------------------------

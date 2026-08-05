@@ -1,8 +1,11 @@
 # src/api/main.py
 
-__import__("pysqlite3")
-import sys
-sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+try:
+    __import__("pysqlite3")
+    import sys
+    sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+except ImportError:
+    pass
 
 import os
 import uuid
@@ -197,6 +200,25 @@ def get_api_job_result(job_id: str):
 @app.delete("/jobs/{job_id}", tags=["Jobs"])
 @app.delete("/api/jobs/{job_id}")
 def delete_job(job_id: str):
+    job = store.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Attempt to clean up the ChromaDB collection associated with this job
+    try:
+        from src.utils.github_api import parse_github_url
+        from src.utils.retriever import make_collection_name, DEFAULT_CHROMA_DB_PATH
+        import chromadb
+
+        owner, repo = parse_github_url(job.repo_url)
+        collection_name = make_collection_name(owner, repo, job_id)
+
+        client = chromadb.PersistentClient(path=DEFAULT_CHROMA_DB_PATH)
+        client.delete_collection(name=collection_name)
+        print(f"Cleaned up Chroma collection '{collection_name}' for deleted job {job_id}")
+    except Exception as exc:
+        print(f"Non-fatal: could not delete Chroma collection for job {job_id}: {exc}")
+
     deleted = store.delete(job_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Job not found")

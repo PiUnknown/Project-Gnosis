@@ -35,7 +35,7 @@ def run(state: ArchaeonState) -> ArchaeonState:
     # ----------------------------------------------------------------
     # Step 1: Setup ChromaDB collection
     # ----------------------------------------------------------------
-    collection_name = make_collection_name(state.owner, state.repo_name)
+    collection_name = make_collection_name(state.owner, state.repo_name, state.job_id)
     chroma_path = DEFAULT_CHROMA_DB_PATH
     print(f"  Collection name  : {collection_name}")
     print(f"  ChromaDB path    : {chroma_path}")

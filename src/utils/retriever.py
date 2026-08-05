@@ -22,9 +22,9 @@ DEFAULT_CHROMA_DB_PATH = "./chroma_db"
 # Collection name
 # -----------------------------------------------------------------------
 
-def make_collection_name(owner: str, repo: str) -> str:
+def make_collection_name(owner: str, repo: str, job_id: Optional[str] = None) -> str:
     """
-    Derive a valid ChromaDB collection name from owner/repo.
+    Derive a valid ChromaDB collection name from owner/repo, optionally scoped by job_id.
 
     ChromaDB constraints:
       - 3 to 63 characters
@@ -34,19 +34,31 @@ def make_collection_name(owner: str, repo: str) -> str:
     "tiangolo/fastapi"       → "gnosis_tiangolo_fastapi"
     "my-org/my.repo.v2"     → "gnosis_my-org_my_repo_v2"
     """
-    raw = f"gnosis_{owner}_{repo}"
+    clean_owner = _INVALID_CHARS.sub('_', owner)
+    clean_repo = _INVALID_CHARS.sub('_', repo)
+
+    if job_id:
+        clean_job_id = _INVALID_CHARS.sub('_', job_id)
+        suffix = f"_{clean_job_id}"
+    else:
+        suffix = ""
+
+    # Ensure total length <= 63 characters by truncating the mid section
+    # prefix is "gnosis_" (7 chars)
+    # suffix is suffix (len(suffix) chars)
+    max_mid_len = _COLLECTION_NAME_MAX - 7 - len(suffix)
+    mid = f"{clean_owner}_{clean_repo}"
+    if len(mid) > max_mid_len:
+        mid = mid[:max_mid_len]
+
+    raw = f"gnosis_{mid}{suffix}"
     sanitized = _INVALID_CHARS.sub('_', raw)
-
-    if len(sanitized) > _COLLECTION_NAME_MAX:
-        sanitized = sanitized[:_COLLECTION_NAME_MAX]
-
     sanitized = sanitized.strip('_-')
 
     if len(sanitized) < 3:
         sanitized = f"gno_{sanitized}"
 
     return sanitized
-
 
 # -----------------------------------------------------------------------
 # Retriever

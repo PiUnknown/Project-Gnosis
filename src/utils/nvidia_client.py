@@ -138,10 +138,11 @@ def call_llm(
     for attempt in range(MAX_RETRIES):
         try:
             response = client.chat.completions.create(
-                model=model or os.getenv("NVIDIA_MODEL", NVIDIA_MODEL_DEFAULT),
+                model=resolved_model,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                timeout=30.0
             )
             return response.choices[0].message.content
 
@@ -163,10 +164,19 @@ def call_llm(
                 or "502" in exc_str
                 or "503" in exc_str
             )
-            is_retriable = is_rate_limit or is_server_error
+            is_timeout = (
+                "timeout" in exc_type
+                or "timeout" in exc_str
+            )
+            is_retriable = is_rate_limit or is_server_error or is_timeout
 
             if is_retriable and attempt < MAX_RETRIES - 1:
-                label = "Rate limit" if is_rate_limit else "Server error"
+                if is_rate_limit:
+                    label = "Rate limit"
+                elif is_timeout:
+                    label = "Timeout"
+                else:
+                    label = "Server error"
                 print(
                     f"\n  [NVIDIA] {label} on attempt {attempt + 1}. "
                     f"Retrying in {delay:.0f}s..."
