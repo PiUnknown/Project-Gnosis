@@ -67,7 +67,7 @@ const AGENT_DESCS = [
   'Building directed import graph with NetworkX',
   'Scoring cyclomatic complexity and tech debt',
   'Embedding code chunks into ChromaDB',
-  'Generating explanations via Groq LLM',
+  'Generating explanations via LLM',
   'Synthesizing all outputs into onboarding.md',
 ]
 
@@ -374,7 +374,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
                     </button>
                     {showTooltip && (
                       <div style={{ position: 'absolute', left: 24, top: -8, width: 220, background: '#0F00CC', border: '1px solid #FFFFFF', padding: '10px 14px', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#FFFFFF', lineHeight: 1.5, zIndex: 10 }}>
-                        Skips Groq LLM calls. Pipeline completes faster but without per-file explanations.
+                        Skips LLM calls. Pipeline completes faster but without per-file explanations.
                       </div>
                     )}
                   </div>

@@ -17,7 +17,7 @@ The 7 agents run sequentially:
   3. Dependency Graph — builds import graph with NetworkX
   4. Complexity Scorer — scores cyclomatic complexity and tech debt
   5. Code RAG — embeds code chunks into ChromaDB
-  6. Explainability — generates prose explanations via Groq LLM
+  6. Explainability — generates prose explanations via LLM
   7. Doc Generator — synthesizes everything into onboarding.md
 
 Key outputs:
@@ -282,7 +282,7 @@ FORM BLOCK (48px below subheadline):
       Tooltip icon (?) next to label:
         16px circle with "?" in IBM Plex Mono
         Border: 1px solid rgba(255,255,255,0.40)
-        Tooltip content: "Skips Groq LLM calls. Pipeline completes 
+        Tooltip content: "Skips LLM calls. Pipeline completes 
                           faster but without per-file explanations."
         Tooltip: #0F00CC background, white text, 1px white border, 0px radius
 
@@ -390,7 +390,7 @@ Agent list (in order):
   03 | DEPENDENCY GRAPH   | Building directed import graph with NetworkX
   04 | COMPLEXITY SCORER  | Scoring cyclomatic complexity and tech debt
   05 | CODE RAG           | Embedding code chunks into ChromaDB
-  06 | EXPLAINABILITY     | Generating explanations via Groq LLM
+  06 | EXPLAINABILITY     | Generating explanations via LLM
   07 | DOC GENERATOR      | Synthesizing all outputs into onboarding.md
 
 --- RIGHT COLUMN: PROGRESS DISPLAY ---

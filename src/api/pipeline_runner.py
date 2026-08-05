@@ -86,7 +86,7 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
 
         # ---- Phase 6: Explainability (optional) -------------------
         _start_phase(job_id, "explainability")
-        if not skip_llm and os.getenv("GROQ_API_KEY"):
+        if not skip_llm and os.getenv("NVIDIA_API_KEY"):
             state = explainability.run(state, max_count=max_explanations)
         _end_phase(job_id, "explainability")
 

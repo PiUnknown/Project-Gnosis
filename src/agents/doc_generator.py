@@ -318,7 +318,7 @@ def _build_core_components(state: ArchaeonState) -> str:
         return (
             "## Core Components\n\n"
             "*No LLM explanations available. "
-            "Run Phase 6 with a valid GROQ_API_KEY to generate explanations.*"
+            "Run Phase 6 with a valid NVIDIA_API_KEY to generate explanations.*"
         )
 
     # Sort explained files by in-degree descending
