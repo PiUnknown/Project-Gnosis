@@ -10,6 +10,12 @@ Usage:
   python run.py --url https://github.com/realpython/codetiming --skip-llm
   python run.py --url https://github.com/tiangolo/fastapi --test-rag
 """
+import sys
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
+
 import os
 import argparse
 from dotenv import load_dotenv
