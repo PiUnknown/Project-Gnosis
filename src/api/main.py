@@ -12,6 +12,7 @@ import uuid
 import concurrent.futures
 from typing import Optional
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
@@ -139,6 +140,19 @@ def analyze(req: UnifiedAnalyzeRequest):
         if opt_skip is not None:
             skip_llm = opt_skip
         github_token = req.options.get("github_token")
+
+    # Deduplication check
+    for job in store.list_all():
+        if (job.repo_url == req.repo_url 
+                and job.status in ("queued", "running")):
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "job_id": job.job_id,
+                    "status": job.status,
+                    "message": "A job for this repository is already running."
+                }
+            )
 
     options = {
         "max_explanations": max_explanations,

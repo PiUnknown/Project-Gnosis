@@ -64,6 +64,10 @@ class JobStore:
         self._jobs: dict = {}
         self._lock = threading.Lock()
 
+    def clear(self) -> None:
+        with self._lock:
+            self._jobs.clear()
+
     # ----------------------------------------------------------------
     # Write operations (acquire lock)
     # ----------------------------------------------------------------

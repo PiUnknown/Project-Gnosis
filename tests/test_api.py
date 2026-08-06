@@ -46,6 +46,13 @@ def client():
         yield c
 
 
+@pytest.fixture(autouse=True)
+def clear_store():
+    """Clear job store to isolate tests."""
+    from src.api.job_store import store
+    store.clear()
+
+
 # -----------------------------------------------------------------------
 # Fake pipeline runners
 # -----------------------------------------------------------------------
@@ -247,6 +254,25 @@ class TestAnalyzeEndpoint:
         mock_executor.submit.assert_called_once()
         args = mock_executor.submit.call_args[0]
         assert args[0] == pipeline_runner.run
+
+    def test_duplicate_submission_returns_409(self, client):
+        with patch("src.api.main._executor") as mock_executor:
+            mock_executor.submit.return_value = None
+            r1 = client.post(
+                "/analyze",
+                json={"repo_url": "https://github.com/owner/repo"}
+            )
+            assert r1.status_code == 202
+            
+            r2 = client.post(
+                "/analyze",
+                json={"repo_url": "https://github.com/owner/repo"}
+            )
+            assert r2.status_code == 409
+            body = r2.json()
+            assert body["job_id"] == r1.json()["job_id"]
+            assert body["status"] == "queued"
+            assert "already running" in body["message"]
 
 
 # -----------------------------------------------------------------------
