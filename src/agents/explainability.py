@@ -3,39 +3,15 @@ Agent 6: Explainability Agent
 
 Reads from state:  complexity_scores, graph_stats, circular_nodes,
                    chroma_collection_name, symbol_tables, owner, repo_name,
-                   file_manifest (for per-file SHAs used in cache keys)
+                   file_manifest
 Writes to state:   explanations
 
-Pipeline per file:
-1. Check explanation cache — if hit, use stored text (zero API tokens)
-2. Get all code chunks for the file from ChromaDB
-3. Assemble context: code + dependency info + risk metadata
-4. Build system + user prompt
-5. Call NVIDIA NIM LLM (meta/llama-3.3-70b-instruct, temp=0.1)
-6. Save explanation to cache, store in state.explanations[file_path]
-
-File selection: priority tiers, capped at max_count.
-
-Tier 0: CRITICAL risk files (parse errors, circular deps, complexity >= 21)
-Tier 1: High structural importance (in_degree >= 5)
-Tier 2: HIGH risk files
-Tier 3: Moderate importance (in_degree >= 2)
-Tier 4: MEDIUM risk files
-Within each tier: sorted by in_degree descending (most imported first)
-
-CACHING:
-  Explanations are cached to disk in ./explanation_cache/ keyed by
-  owner::repo_name::file_path::file_sha. The SHA comes from the GitHub
-  API blob hash stored in state.file_manifest. Cache hits cost zero tokens.
-  Cache entries are automatically invalidated when the file changes.
-
-LLM PROVIDER:
-  NVIDIA NIM Serverless Inference via src/utils/nvidia_client.py.
-  Requires NVIDIA_API_KEY in .env.
-  Get a free key at https://build.nvidia.com
+LLM PROVIDER: NVIDIA NIM via src/utils/nvidia_client.py
+CACHING: ./explanation_cache/ keyed by owner::repo::file_path::sha
 """
 
 import os
+import time
 from pathlib import PurePosixPath
 
 from src.state import ArchaeonState
@@ -48,19 +24,10 @@ from src.utils.explanation_cache import (
     cache_stats
 )
 
-# Default cap — tune based on API tier limits
 DEFAULT_MAX_EXPLANATIONS = 20
-
-# Code context budget in characters (~4 chars per token, targeting ~2000 tokens)
-MAX_CODE_CHARS = 8000
-
-# Tier boundaries for file selection
-TIER_HIGH_INDEGREE   = 5
-TIER_MEDIUM_INDEGREE = 2
-
-# -----------------------------------------------------------------------
-# System prompt (static, sent with every call)
-# -----------------------------------------------------------------------
+MAX_CODE_CHARS           = 8000
+TIER_HIGH_INDEGREE       = 5
+TIER_MEDIUM_INDEGREE     = 2
 
 SYSTEM_PROMPT = """You are a senior software engineer writing onboarding documentation \
 for a new team member joining a project they have never seen before.
@@ -86,21 +53,20 @@ parse errors), name them explicitly and specifically.
 # -----------------------------------------------------------------------
 
 def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> ArchaeonState:
+    t_agent_start = time.time()
     print(f"\n[Agent 6: Explainability]")
+    print(f"  [Agent 6] Started at {time.strftime('%H:%M:%S')}")
 
-    # Guard: Phase 5 must have run
     if not state.chroma_collection_name:
-        print("  [WARNING] No ChromaDB collection in state.")
-        print("  Run Phase 5 (code_rag) before Phase 6 (explainability).")
+        print("  [WARNING] No ChromaDB collection in state. Run Phase 5 first.")
         return state
 
-    # Guard: API key must be present
     if not os.getenv("NVIDIA_API_KEY"):
-        print("  [WARNING] NVIDIA_API_KEY not set in .env.")
-        print("  Get a free key at https://build.nvidia.com")
+        print("  [WARNING] NVIDIA_API_KEY not set. Get a key at https://build.nvidia.com")
         return state
 
-    # Connect to ChromaDB
+    # ---- ChromaDB connection -------------------------------------------
+    print(f"  [Agent 6] Connecting to ChromaDB...")
     try:
         retriever = CodeRetriever(
             collection_name=state.chroma_collection_name,
@@ -111,23 +77,16 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
         print(f"  [ERROR] Could not connect to ChromaDB: {exc}")
         return state
 
-    # Build file_path -> sha lookup from manifest
-    # FileMetadata.sha is the GitHub blob SHA — a content hash.
-    # Same file + same content = same SHA = cache hit.
+    # ---- SHA lookup from manifest --------------------------------------
     sha_lookup: dict = {}
     for file_meta in state.file_manifest:
         if hasattr(file_meta, 'sha') and file_meta.sha:
             sha_lookup[file_meta.path] = file_meta.sha
 
-    # Print cache state
     stats = cache_stats()
-    if stats["entries"] > 0:
-        print(f"  Cache           : {stats['entries']} entries "
-              f"({stats['size_kb']} KB) in ./explanation_cache/")
-    else:
-        print(f"  Cache           : empty (first run on this repo)")
+    print(f"  Cache           : {stats['entries']} entries ({stats['size_kb']} KB)")
 
-    # Select files
+    # ---- File selection ------------------------------------------------
     selected = _select_files_to_explain(state, max_count)
     print(f"  Files selected  : {len(selected)} (cap: {max_count})")
     print(f"  Files skipped   : "
@@ -145,13 +104,17 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
     api_calls  = 0
 
     for idx, file_path in enumerate(selected):
-        short_name = PurePosixPath(file_path).name
-        score  = state.complexity_scores.get(file_path)
-        risk   = score.risk_level if score else "UNKNOWN"
-        in_deg = state.graph_stats.get(file_path, {}).get('in_degree', 0)
+        t_file_start = time.time()
+        short_name   = PurePosixPath(file_path).name
+        score        = state.complexity_scores.get(file_path)
+        risk         = score.risk_level if score else "UNKNOWN"
+        in_deg       = state.graph_stats.get(file_path, {}).get('in_degree', 0)
 
-        print(f"  [{idx + 1:>2}/{len(selected)}] {short_name:<35} "
-              f"risk={risk:<8} in_degree={in_deg}", end="")
+        print(
+            f"\n  [{idx + 1:>2}/{len(selected)}] {short_name:<35} "
+            f"risk={risk:<8} in_degree={in_deg}  "
+            f"[{time.strftime('%H:%M:%S')}]"
+        )
 
         # ---- Cache check -----------------------------------------------
         file_sha  = sha_lookup.get(file_path, "")
@@ -167,25 +130,21 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
             state.explanations[file_path] = cached
             explained  += 1
             cache_hits += 1
-            print("  [CACHE HIT]")
-            
-            # Release memory for cache hit
-            del short_name
-            del score
-            del risk
-            del in_deg
-            del file_sha
-            del cache_key
-            del cached
+            print(f"  [Agent 6] Cache hit — skipping API call")
             continue
 
-        print()   # newline after the file header line
-
-        # ---- NVIDIA NIM call -------------------------------------------
+        # ---- Context assembly ------------------------------------------
+        print(f"  [Agent 6] Assembling code context from ChromaDB...")
+        t0           = time.time()
         code_context = _assemble_code_context(file_path, retriever)
-        graph_entry  = state.graph_stats.get(file_path, {})
-        language     = score.language if score else "Unknown"
+        print(f"  [Agent 6] Context assembled in {time.time()-t0:.2f}s "
+              f"({len(code_context)} chars)")
 
+        graph_entry = state.graph_stats.get(file_path, {})
+        language    = score.language if score else "Unknown"
+
+        # ---- Prompt construction ---------------------------------------
+        print(f"  [Agent 6] Building prompt...")
         user_prompt = _build_user_prompt(
             file_path=file_path,
             language=language,
@@ -193,6 +152,16 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
             graph_stats_entry=graph_entry,
             code_context=code_context
         )
+        total_prompt_chars = len(SYSTEM_PROMPT) + len(user_prompt)
+        print(f"  [Agent 6] Prompt ready: system={len(SYSTEM_PROMPT)}chars  "
+              f"user={len(user_prompt)}chars  total={total_prompt_chars}chars")
+
+        # ---- NVIDIA NIM call -------------------------------------------
+        # call_llm() prints its own [NVIDIA] log lines with timing.
+        # If this is the last log line you see before a crash, the hang
+        # is inside the HTTP request inside call_llm().
+        print(f"  [Agent 6] Calling NVIDIA NIM... [{time.strftime('%H:%M:%S')}]")
+        t_api = time.time()
 
         explanation = call_llm(
             system_prompt=SYSTEM_PROMPT,
@@ -201,15 +170,19 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
             max_tokens=800
         )
         api_calls += 1
+        api_elapsed = time.time() - t_api
 
+        print(f"  [Agent 6] call_llm returned in {api_elapsed:.1f}s  "
+              f"result={'OK' if explanation else 'NONE'}")
+
+        # ---- Result handling -------------------------------------------
         if explanation:
             explanation = explanation.strip()
             state.explanations[file_path] = explanation
             explained += 1
 
-            # Save to cache — non-fatal if it fails
             if file_sha:
-                save_explanation(
+                ok = save_explanation(
                     cache_key=cache_key,
                     explanation=explanation,
                     owner=state.owner,
@@ -217,10 +190,15 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
                     file_path=file_path,
                     file_sha=file_sha
                 )
+                print(f"  [Agent 6] Cached: {ok}")
         else:
             failed += 1
+            print(f"  [Agent 6] No explanation returned — continuing to next file")
 
-        # Rate limit: sleep after every API call except the last
+        file_elapsed = time.time() - t_file_start
+        print(f"  [Agent 6] File done in {file_elapsed:.1f}s")
+
+        # ---- Inter-call sleep ------------------------------------------
         remaining = selected[idx + 1:]
         all_remaining_cached = all(
             get_cached_explanation(
@@ -232,33 +210,8 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
         if remaining and not all_remaining_cached:
             sleep_between_calls()
 
-        # Aggressively release iteration variables
-        del short_name
-        del score
-        del risk
-        del in_deg
-        del file_sha
-        del cache_key
-        del cached
-        del code_context
-        del graph_entry
-        del language
-        del user_prompt
-        del explanation
-        del remaining
-        del all_remaining_cached
-        import gc
-        gc.collect()
-
-    _print_summary(state, selected, explained, cache_hits, api_calls, failed)
-    
-    # Release method-level references
-    del selected
-    del sha_lookup
-    del retriever
-    import gc
-    gc.collect()
-
+    agent_elapsed = time.time() - t_agent_start
+    _print_summary(state, selected, explained, cache_hits, api_calls, failed, agent_elapsed)
     return state
 
 
@@ -267,27 +220,13 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
 # -----------------------------------------------------------------------
 
 def _select_files_to_explain(state: ArchaeonState, max_count: int) -> list:
-    """
-    Select and prioritize files for LLM explanation.
-
-    Returns list[str] of file paths, ordered by priority, capped at max_count.
-
-    Priority (lower number = explain first):
-      Tier 0: CRITICAL risk
-      Tier 1: in_degree >= TIER_HIGH_INDEGREE (structurally critical)
-      Tier 2: HIGH risk
-      Tier 3: in_degree >= TIER_MEDIUM_INDEGREE
-      Tier 4: MEDIUM risk
-      Tier 5: everything else
-    """
     if not state.complexity_scores:
         return []
 
     candidates = []
-
     for file_path, score in state.complexity_scores.items():
         in_degree = state.graph_stats.get(file_path, {}).get('in_degree', 0)
-        risk = score.risk_level
+        risk      = score.risk_level
 
         if risk == "CRITICAL":
             tier = 0
@@ -313,19 +252,7 @@ def _select_files_to_explain(state: ArchaeonState, max_count: int) -> list:
 # -----------------------------------------------------------------------
 
 def _assemble_code_context(file_path: str, retriever: CodeRetriever) -> str:
-    """
-    Assemble the code section of the prompt for one file.
-
-    Ordering:
-      1. Module chunk (imports + docstring) — orientation context
-      2. Function chunks sorted by complexity descending — most complex first
-      3. Class chunks — structural overview
-
-    Budget: MAX_CODE_CHARS characters. When hit, a truncation notice
-    is appended rather than silently cutting mid-chunk.
-    """
     chunks = retriever.get_file_chunks(file_path)
-
     if not chunks:
         return ""
 
@@ -343,19 +270,14 @@ def _assemble_code_context(file_path: str, retriever: CodeRetriever) -> str:
 
     for chunk in ordered:
         content = chunk['content']
-
         if char_count + len(content) > MAX_CODE_CHARS:
             remaining = MAX_CODE_CHARS - char_count
             if remaining > 300:
-                parts.append(content[:remaining] + "\n... [truncated — budget reached]")
+                parts.append(content[:remaining] + "\n... [truncated]")
             else:
-                parts.append(
-                    f"# ... {len(ordered) - len(parts)} more chunks "
-                    f"not shown (budget limit)"
-                )
+                parts.append(f"# ... {len(ordered) - len(parts)} more chunks not shown")
             truncated = True
             break
-
         parts.append(content)
         char_count += len(content)
 
@@ -376,33 +298,22 @@ def _build_user_prompt(
     graph_stats_entry: dict,
     code_context: str
 ) -> str:
-    """
-    Build the user turn of the LLM prompt for one file.
-
-    Sections:
-    1. File header: path, language, risk level with reasons, coupling
-    2. Dependencies: what this file imports and what imports it
-    3. Source code: from ChromaDB
-    4. Task: explicit instruction to the model
-    """
     if complexity_score:
         risk_level  = complexity_score.risk_level
         reasons_str = ""
         if complexity_score.risk_reasons:
             reasons_str = " | ".join(complexity_score.risk_reasons[:2])
             reasons_str = f"\nRisk reasons: {reasons_str}"
-
-        max_fn_str = ""
-        if complexity_score.max_complexity_function:
-            max_fn_str = f" in `{complexity_score.max_complexity_function}`"
-
+        max_fn_str = (
+            f" in `{complexity_score.max_complexity_function}`"
+            if complexity_score.max_complexity_function else ""
+        )
         complexity_str = (
             f"Avg cyclomatic complexity: {complexity_score.avg_complexity:.1f} | "
             f"Max: {int(complexity_score.max_complexity)}{max_fn_str}"
         )
         coupling_str = (
-            f"Coupling: imports from "
-            f"{complexity_score.coupling_score} internal file(s)"
+            f"Coupling: imports from {complexity_score.coupling_score} internal file(s)"
         )
         fn_count_str = f"Functions: {complexity_score.function_count}"
     else:
@@ -433,26 +344,19 @@ def _build_user_prompt(
             dep_lines.append(f"  ...and {len(dependencies) - 8} more")
     if dependents:
         dep_names = [PurePosixPath(d).name for d in dependents[:8]]
-        dep_lines.append(
-            f"Imported by {in_degree} file(s): {', '.join(dep_names)}"
-        )
+        dep_lines.append(f"Imported by {in_degree} file(s): {', '.join(dep_names)}")
         if len(dependents) > 8:
             dep_lines.append(f"  ...and {len(dependents) - 8} more")
 
-    dep_context = (
-        '\n'.join(dep_lines) if dep_lines
-        else "No internal dependency relationships detected."
-    )
+    dep_context = '\n'.join(dep_lines) if dep_lines else "No internal dependency relationships detected."
 
-    if code_context.strip():
-        code_section = f"Source Code:\n{code_context}"
-    else:
-        code_section = (
-            "Source Code:\n"
-            "[No code chunks available. This file may have parse errors "
-            "or was not included in the RAG collection. "
-            "Explain based on the metadata above.]"
+    code_section = (
+        f"Source Code:\n{code_context}" if code_context.strip()
+        else (
+            "Source Code:\n[No code chunks available — file may have parse errors "
+            "or was not included in the RAG collection.]"
         )
+    )
 
     task = (
         "Explain this file in 200-300 words for a new engineer. Cover:\n"
@@ -460,8 +364,7 @@ def _build_user_prompt(
         "2. Architecture role — where does it sit in the dependency chain?\n"
         "3. Key entry points — which functions or classes should they read first?\n"
         "4. Risks or cautions — what must they know before modifying this file?\n"
-        "\n"
-        "Be specific. Use actual function and class names. Do not speculate."
+        "\nBe specific. Use actual function and class names. Do not speculate."
     )
 
     return (
@@ -482,10 +385,11 @@ def _print_summary(
     explained: int,
     cache_hits: int,
     api_calls: int,
-    failed: int
+    failed: int,
+    agent_elapsed: float
 ) -> None:
     api_explained = explained - cache_hits
-    print(f"\n[Agent 6: Explainability] Done")
+    print(f"\n[Agent 6: Explainability] Done in {agent_elapsed:.1f}s")
     print(f"  Files attempted  : {len(selected)}")
     print(f"  Cache hits       : {cache_hits}  (0 tokens spent)")
     print(f"  NVIDIA API calls : {api_calls}")
@@ -496,15 +400,13 @@ def _print_summary(
 
     if failed > 0:
         print(
-            f"\n  [INFO] {failed} file(s) failed. Common causes: "
-            f"rate limit exceeded, context too long, or invalid API key."
+            f"\n  [INFO] {failed} file(s) failed. Check [NVIDIA] log lines above "
+            f"for timeout or rate limit details."
         )
     if cache_hits == len(selected):
-        print(f"\n  [INFO] All explanations served from cache. "
-              f"Zero API tokens used this run.")
+        print(f"\n  [INFO] All explanations from cache. Zero API tokens used.")
     elif cache_hits > 0:
-        tokens_saved = cache_hits * 3000
-        print(f"\n  [INFO] Cache saved ~{tokens_saved:,} tokens this run.")
+        print(f"\n  [INFO] Cache saved ~{cache_hits * 3000:,} tokens this run.")
 
     if explained > 0:
         print(f"\n  Sample explanation ({explained} total):")
