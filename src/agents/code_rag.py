@@ -14,6 +14,7 @@ Steps:
 6. Write collection name to state
 """
 import os
+import threading
 
 from src.state import ArchaeonState
 from src.utils.chunker import make_chunks
@@ -22,6 +23,8 @@ from src.utils.retriever import make_collection_name, DEFAULT_CHROMA_DB_PATH
 
 CHUNKABLE_LANGUAGES = frozenset({'Python', 'JavaScript', 'TypeScript'})
 CHROMA_BATCH_SIZE = 500   # chunks per ChromaDB add() call
+
+_chroma_lock = threading.Lock()
 
 
 def run(state: ArchaeonState) -> ArchaeonState:
@@ -41,7 +44,8 @@ def run(state: ArchaeonState) -> ArchaeonState:
     print(f"  ChromaDB path    : {chroma_path}")
 
     os.makedirs(chroma_path, exist_ok=True)
-    client = chromadb.PersistentClient(path=chroma_path)
+    with _chroma_lock:
+        client = chromadb.PersistentClient(path=chroma_path)
 
     # Delete and recreate on re-runs.
     # WHY DELETE INSTEAD OF UPSERT:
