@@ -53,6 +53,10 @@ parse errors), name them explicitly and specifically.
 # -----------------------------------------------------------------------
 
 def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> ArchaeonState:
+    import os
+    key = os.getenv("NVIDIA_API_KEY", "NOT_FOUND")
+    print(f"  [Agent 6 DEBUG] NVIDIA_API_KEY = {'SET (' + key[:8] + '...)' if key != 'NOT_FOUND' else 'NOT FOUND'}")
+
     t_agent_start = time.time()
     print(f"\n[Agent 6: Explainability]")
     print(f"  [Agent 6] Started at {time.strftime('%H:%M:%S')}")

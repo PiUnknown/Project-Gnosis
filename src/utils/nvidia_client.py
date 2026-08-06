@@ -11,23 +11,21 @@ PUBLIC INTERFACE:
 CONFIGURATION:
   NVIDIA_API_KEY   (required) — from https://build.nvidia.com
   NVIDIA_BASE_URL  (optional) — defaults to NVIDIA NIM serverless endpoint
-  NVIDIA_MODEL     (optional) — defaults to meta/llama-3.3-70b-instruct
+  NVIDIA_MODEL     (optional) — overrides NVIDIA_MODEL_DEFAULT at runtime
 
-TIMEOUT DESIGN:
-  The OpenAI SDK default timeout is 10 minutes. On Azure App Service, a
-  blocked worker thread causes the health check to fail and the container
-  to restart — silently, with no Python exception.
+MODEL CHOICE:
+  Default: meta/llama-3.1-8b-instruct
+  The 8B model responds in 5-15s on NVIDIA NIM free tier.
+  The 70B model responds in 60-270s on cold starts.
+  For code explanation the quality difference is small — the 70B advantage
+  is in nuanced multi-step reasoning, not in describing what a function does.
+  Switch to meta/llama-3.3-70b-instruct via NVIDIA_MODEL env var if needed.
 
-  We set explicit timeouts at the client level:
-    connect : 15s  — time to establish TCP connection to NVIDIA
-    read    : 90s  — time to receive the full response body
-    write   : 15s  — time to send the request body
-    pool    : 10s  — time to acquire a connection from the pool
-
-  90s read covers slow NVIDIA responses on the free tier without blocking
-  the Azure worker long enough to trigger a health-check restart (~230s).
-  If NVIDIA does not respond within 90s, httpx raises ReadTimeout, which
-  is caught and treated as a retriable error.
+TIMEOUT:
+  120s read timeout per call. Covers NVIDIA free tier cold starts (~60-90s)
+  with a safety margin, while still terminating if the API is truly hung.
+  Timeout is set per-call on create() — this is more reliable than setting
+  it on the client constructor, which the OpenAI SDK may override internally.
 """
 
 import os
@@ -35,19 +33,21 @@ import time
 from typing import Optional
 
 NVIDIA_BASE_URL_DEFAULT = "https://integrate.api.nvidia.com/v1"
-NVIDIA_MODEL_DEFAULT    = "meta/llama-3.3-70b-instruct"
 
-MAX_RETRIES          = 4
-BASE_DELAY_SECONDS   = 1.0
+# Option C: 8B model — 5-15s responses vs 60-270s for 70B on free tier.
+# Override at runtime with NVIDIA_MODEL env var.
+NVIDIA_MODEL_DEFAULT = "meta/llama-3.1-8b-instruct"
 
-# Inter-call delay — 2.0s gives comfortable margin under NVIDIA's 40 req/min
+MAX_RETRIES        = 2     # fail fast: 2 attempts max
+BASE_DELAY_SECONDS = 1.0
+
+# Option B: 120s per-call read timeout.
+# Covers NVIDIA cold starts without blocking indefinitely.
+# Set per-call on create(), not on the client constructor.
+PER_CALL_TIMEOUT_SECONDS = 120.0
+
+# Inter-call delay to respect rate limits
 INTER_CALL_DELAY_SECONDS = 2.0
-
-# Timeout values in seconds
-_TIMEOUT_CONNECT = 15.0
-_TIMEOUT_READ    = 90.0
-_TIMEOUT_WRITE   = 15.0
-_TIMEOUT_POOL    = 10.0
 
 _client = None
 
@@ -55,18 +55,11 @@ _client = None
 def get_client():
     """
     Lazy-initialize the OpenAI client pointed at NVIDIA NIM on first call.
-
-    WHY EXPLICIT TIMEOUT ON THE CLIENT:
-    The OpenAI SDK default is httpx.Timeout(None) — no timeout at all.
-    On Azure App Service, a thread blocked waiting for a network response
-    causes the health check to eventually fail and the container to restart.
-    No Python exception is raised. The process just disappears. Setting
-    explicit timeouts converts silent hangs into catchable exceptions.
+    No timeout on the client itself — timeout is applied per create() call.
     """
     global _client
     if _client is None:
         try:
-            import httpx
             from openai import OpenAI
         except ImportError:
             raise ImportError(
@@ -83,21 +76,13 @@ def get_client():
 
         base_url = os.getenv("NVIDIA_BASE_URL", NVIDIA_BASE_URL_DEFAULT)
 
-        timeout = httpx.Timeout(
-            connect=_TIMEOUT_CONNECT,
-            read=_TIMEOUT_READ,
-            write=_TIMEOUT_WRITE,
-            pool=_TIMEOUT_POOL
-        )
-
         _client = OpenAI(
             base_url=base_url,
-            api_key=api_key,
-            timeout=timeout
+            api_key=api_key
         )
         print(f"  [NVIDIA] Client initialised → {base_url}")
-        print(f"  [NVIDIA] Timeout: connect={_TIMEOUT_CONNECT}s  "
-              f"read={_TIMEOUT_READ}s  write={_TIMEOUT_WRITE}s")
+        print(f"  [NVIDIA] Model  : {os.getenv('NVIDIA_MODEL', NVIDIA_MODEL_DEFAULT)}")
+        print(f"  [NVIDIA] Timeout: {PER_CALL_TIMEOUT_SECONDS}s per call")
 
     return _client
 
@@ -110,19 +95,16 @@ def call_llm(
     max_tokens: int = 800
 ) -> Optional[str]:
     """
-    Call the NVIDIA NIM LLM with explicit timeout and exponential backoff.
+    Call the NVIDIA NIM LLM with per-call timeout and exponential backoff.
 
     Returns the response text on success, None if all retries fail.
 
-    Retriable errors:
-      - 429 Rate Limit Exceeded
-      - 500 / 502 / 503 Server errors
-      - httpx.TimeoutException (read/connect timeout — most common hang cause)
+    Timeout is passed directly to create() — this is the only reliable
+    way to apply it in the OpenAI SDK. Setting it on the client constructor
+    can be overridden by the SDK's internal timeout wrapping.
 
-    Non-retriable errors (return None immediately):
-      - 400 Bad Request
-      - 401 Unauthorized
-      - 404 Model not found
+    Retriable errors: 429, 5xx, timeout.
+    Non-retriable: 400, 401, 404.
     """
     client         = get_client()
     resolved_model = model or os.getenv("NVIDIA_MODEL", NVIDIA_MODEL_DEFAULT)
@@ -132,9 +114,8 @@ def call_llm(
     ]
 
     prompt_chars = len(system_prompt) + len(user_prompt)
-
-    delay      = BASE_DELAY_SECONDS
-    last_error = None
+    delay        = BASE_DELAY_SECONDS
+    last_error   = None
 
     for attempt in range(MAX_RETRIES):
         t_start = time.time()
@@ -142,7 +123,7 @@ def call_llm(
             f"  [NVIDIA] → attempt {attempt + 1}/{MAX_RETRIES}  "
             f"model={resolved_model}  "
             f"prompt={prompt_chars}chars  "
-            f"max_tokens={max_tokens}"
+            f"timeout={PER_CALL_TIMEOUT_SECONDS}s"
         )
 
         try:
@@ -150,10 +131,11 @@ def call_llm(
                 model=resolved_model,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                timeout=PER_CALL_TIMEOUT_SECONDS   # Option B: applied here
             )
-            elapsed = time.time() - t_start
-            content = response.choices[0].message.content
+            elapsed     = time.time() - t_start
+            content     = response.choices[0].message.content
             tokens_used = getattr(
                 getattr(response, 'usage', None), 'total_tokens', '?'
             )
@@ -165,12 +147,12 @@ def call_llm(
             return content
 
         except Exception as exc:
-            elapsed    = time.time() - t_start
-            exc_type   = type(exc).__name__
-            exc_str    = str(exc).lower()
+            elapsed   = time.time() - t_start
+            exc_type  = type(exc).__name__
+            exc_str   = str(exc).lower()
 
             is_timeout = (
-                "timeout"   in exc_type.lower()
+                "timeout"    in exc_type.lower()
                 or "timeout" in exc_str
             )
             is_rate_limit = (
@@ -209,7 +191,6 @@ def call_llm(
                 delay *= 2
                 continue
 
-            # Non-retriable or all retries exhausted
             print(
                 f"  [NVIDIA] ✗ {label} — giving up after "
                 f"{attempt + 1} attempt(s) ({elapsed:.1f}s). "
@@ -222,7 +203,6 @@ def call_llm(
 
 def sleep_between_calls(delay: float = INTER_CALL_DELAY_SECONDS) -> None:
     """Sleep between consecutive LLM calls to respect the rate limit."""
-    print(f"  [NVIDIA] sleeping {delay}s between calls...")
     time.sleep(delay)
 
 

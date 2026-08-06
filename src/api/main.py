@@ -1,4 +1,6 @@
 # src/api/main.py
+from dotenv import load_dotenv
+load_dotenv()
 
 try:
     __import__("pysqlite3")

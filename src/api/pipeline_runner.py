@@ -101,7 +101,8 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
         # ---- Phase 6: Explainability (optional) -------------------
         _start_phase(job_id, "explainability")
         t_start = log_phase_start("Explainability")
-        if not skip_llm and os.getenv("NVIDIA_API_KEY"):
+        print(f"  [Pipeline] skip_llm={options.get('skip_llm')}  type={type(options.get('skip_llm'))}")
+        if not skip_llm:
             state = explainability.run(state, max_count=max_explanations)
         log_phase_end("Explainability", t_start, objects_cleaned=["Released prompt templates", "Released token arrays"])
         _end_phase(job_id, "explainability")
