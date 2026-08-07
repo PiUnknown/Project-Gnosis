@@ -340,9 +340,9 @@ def _build_core_components(state: ArchaeonState) -> str:
     if not state.explanations:
         return (
             "## Core Components\n\n"
-            "*LLM explanations were skipped for this analysis."
-            "Enable 'Generate AI Explanations' and run the analysis again "
-            "if you want file-by-file architectural explanations.*"
+            "*LLM explanations were skipped for this analysis.*\n\n"
+            "Enable **'Generate AI Explanations'** and run the analysis again "
+            "if you want file-by-file architectural explanations."
         )
 
     # Sort explained files by in-degree descending
