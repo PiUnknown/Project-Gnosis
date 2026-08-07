@@ -164,6 +164,52 @@ def run(state: ArchaeonState) -> ArchaeonState:
         print(f"\n  Reading order skipped — resolve circular dependencies first")
 
     # ----------------------------------------------------------------
+    # Step 7: Sampled subset selection (if in Sampled mode)
+    # ----------------------------------------------------------------
+    if state.analysis_mode == "Sampled":
+        import os
+        MAX_FULL_ANALYSIS_FILES = int(os.getenv("MAX_FULL_ANALYSIS_FILES", 300))
+        
+        candidates = []
+        for file_meta in state.file_manifest:
+            path = file_meta.path
+            g_s = graph_stats.get(path, {})
+            pr = g_s.get("pagerank", 0.0)
+            in_deg = g_s.get("in_degree", 0)
+            out_deg = g_s.get("out_degree", 0)
+            
+            symbol_table = state.symbol_tables.get(path)
+            symbol_count = 0
+            if symbol_table:
+                symbol_count = len(symbol_table.functions) + len(symbol_table.classes)
+                
+            depth = path.count("/")
+            candidates.append({
+                "path": path,
+                "pagerank": pr,
+                "in_degree": in_deg,
+                "out_degree": out_deg,
+                "symbol_count": symbol_count,
+                "depth": depth
+            })
+            
+        candidates.sort(key=lambda x: (
+            -x["pagerank"],
+            -x["in_degree"],
+            -x["symbol_count"],
+            x["depth"],
+            x["path"]
+        ))
+        
+        selected_paths = {c["path"] for c in candidates[:MAX_FULL_ANALYSIS_FILES]}
+        state.analyzed_paths = selected_paths
+        state.files_analyzed = len(selected_paths)
+        print(f"  [Sampled Mode] Selected {state.files_analyzed} of {len(state.file_manifest)} files for detailed analysis.")
+    else:
+        state.analyzed_paths = None
+        state.files_analyzed = len(state.file_manifest)
+
+    # ----------------------------------------------------------------
     # Summary
     # ----------------------------------------------------------------
     _print_summary(state, graph_stats, circular_nodes)

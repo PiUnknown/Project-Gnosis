@@ -99,6 +99,30 @@ Examples:
         print("       Add NVIDIA_API_KEY=nvapi_... to your .env file.\n")
         args.skip_llm = True
 
+    # Pre-validate repository size
+    try:
+        from src.utils.github_api import parse_github_url, fetch_repo_metadata, fetch_file_tree
+        from src.utils.filters import should_include_file
+        
+        print("[Orchestrator] Validating repository size...")
+        owner, repo_name = parse_github_url(args.url)
+        metadata = fetch_repo_metadata(owner, repo_name, github_token)
+        default_branch = metadata.get("default_branch", "main")
+        tree_entries = fetch_file_tree(owner, repo_name, default_branch, github_token)
+        filtered_files = [
+            entry for entry in tree_entries 
+            if should_include_file(entry["path"], entry.get("size", 0))
+        ]
+        
+        max_sampled = int(os.getenv("MAX_SAMPLED_ANALYSIS_FILES", 3000))
+        if len(filtered_files) > max_sampled:
+            print(f"[ERROR] Repository {owner}/{repo_name} exceeds the maximum file limit of {max_sampled} files (found {len(filtered_files)}). Analysis rejected.")
+            sys.exit(1)
+        print(f"[Orchestrator] Validation complete. Found {len(filtered_files)} files. Proceeding with analysis.\n")
+    except Exception as exc:
+        print(f"[ERROR] Failed to validate repository size: {exc}")
+        sys.exit(1)
+
     # Run the pipeline
     state = run_pipeline(
         args.url,

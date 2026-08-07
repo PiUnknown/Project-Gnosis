@@ -706,6 +706,31 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
     URL.revokeObjectURL(url)
   }
 
+  const explainedValue = (() => {
+    if (!result) return '—'
+    if (result.skip_llm === true) {
+      return 'Skipped'
+    }
+    if (result.explanations) {
+      return Object.keys(result.explanations).length
+    }
+    if (s?.explained !== undefined && s?.explained !== null) {
+      return s.explained
+    }
+    return 0
+  })()
+
+  const importEdgesValue = (() => {
+    if (!result) return '—'
+    if (s?.import_edges !== undefined && s?.import_edges !== null) {
+      return s.import_edges
+    }
+    if (result.dependency_rows) {
+      return result.dependency_rows.reduce((acc, r) => acc + (r.imports || 0), 0)
+    }
+    return 0
+  })()
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#1400FF', paddingBottom: 64 }}>
       <NavBar onLogoClick={onHome} />
@@ -721,8 +746,8 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
             { n: s?.total_files ?? '—', l: 'FILES' },
             { n: s?.total_functions ?? '—', l: 'FUNCTIONS' },
             { n: s?.total_classes ?? '—', l: 'CLASSES' },
-            { n: s?.import_edges ?? '—', l: 'IMPORT EDGES' },
-            { n: s?.explained ?? '—', l: 'EXPLAINED' },
+            { n: importEdgesValue, l: 'IMPORT EDGES' },
+            { n: explainedValue, l: 'EXPLAINED' },
           ].map(stat => (
             <div key={stat.l}>
               <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 16, fontWeight: 500, color: '#FFFFFF' }}>{String(stat.n)}</div>

@@ -115,7 +115,7 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
         _end_phase(job_id, "doc_generator")
 
         # ---- Serialize result --------------------------------------
-        result = _serialize_result(job_id, state)
+        result = _serialize_result(job_id, state, skip_llm=skip_llm)
         store.finish(job_id, result)
 
     except Exception as exc:
@@ -140,7 +140,7 @@ def _end_phase(job_id: str, phase: str) -> None:
     store.complete_phase(job_id, phase)
 
 
-def _serialize_result(job_id: str, state: ArchaeonState) -> dict:
+def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False) -> dict:
     """
     Convert ArchaeonState to a JSON-serializable result dict.
 
@@ -237,8 +237,15 @@ def _serialize_result(job_id: str, state: ArchaeonState) -> dict:
         "repo": f"{state.owner}/{state.repo_name}",
         "branch": state.default_branch or "main",
         "onboarding_doc": state.final_doc or "",
+        "analysis_mode": state.analysis_mode,
+        "files_discovered": state.files_discovered,
+        "files_analyzed": state.files_analyzed,
+        "skip_llm": skip_llm,
         "summary": {
-            "total_files": len(state.file_manifest),
+            "total_files": state.files_analyzed,
+            "files_discovered": state.files_discovered,
+            "files_analyzed": state.files_analyzed,
+            "analysis_mode": state.analysis_mode,
             "language_breakdown": lang_counts,
             "total_functions": sum(
                 len(st.functions) for st in state.symbol_tables.values()
@@ -250,9 +257,14 @@ def _serialize_result(job_id: str, state: ArchaeonState) -> dict:
                 state.dependency_graph.number_of_edges()
                 if state.dependency_graph else 0
             ),
+            "import_edges": (
+                state.dependency_graph.number_of_edges()
+                if state.dependency_graph else 0
+            ),
             "circular_dep_count": len(state.circular_deps),
             "risk_distribution": risk_dist,
             "files_explained": len(state.explanations),
+            "explained": len(state.explanations),
             "top_complex_functions": top_fns,
         },
         "complexity_report": {

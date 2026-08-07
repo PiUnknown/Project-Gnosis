@@ -2,7 +2,7 @@
 
 > Give it a GitHub URL. Get back a complete architectural map of the codebase.
 
-**Status:** In Development (Agents 1–4 production-stable; Agent 5 embedding investigation in progress)
+**Status:** In Development (Agents 1–7 production-stable; Improving the file urgency ranking)
 **Codename:** Project Gnosis
 **Author:** Om Kumar Jha
 **GitHub:** [github.com/PiUnknown](https://github.com/PiUnknown)

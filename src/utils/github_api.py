@@ -143,22 +143,35 @@ def fetch_file_contents_batch(
     delay: float = 0.05
 ) -> dict[str, str]:
     """
-    Fetch content for multiple files with a small delay between requests.
+    Fetch content for multiple files concurrently using a ThreadPoolExecutor.
     Uses raw.githubusercontent.com for all fetches (no API rate limit impact).
 
     Returns dict: { path -> content_string }
     Binary files and 404s are excluded from the result.
     """
+    import concurrent.futures
+
     results = {}
     total = len(paths)
+    if total == 0:
+        return results
 
-    for i, path in enumerate(paths):
-        print(f"\r  Fetching file contents: {i + 1}/{total}", end="", flush=True)
-        content = fetch_file_content_raw(owner, repo, branch, path)
-        if content is not None:
-            results[path] = content
-        del content
-        time.sleep(delay)
+    max_workers = min(15, total)
+
+    def fetch_one(p):
+        return p, fetch_file_content_raw(owner, repo, branch, p)
+
+    print(f"  Fetching {total} file contents concurrently (max {max_workers} threads)...")
+    completed = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(fetch_one, path): path for path in paths}
+        for future in concurrent.futures.as_completed(futures):
+            path, content = future.result()
+            if content is not None:
+                results[path] = content
+            completed += 1
+            if completed % 10 == 0 or completed == total:
+                print(f"\r  Fetched {completed}/{total} files...", end="", flush=True)
 
     print()  # newline after progress
     return results

@@ -53,6 +53,18 @@ def clear_store():
     store.clear()
 
 
+@pytest.fixture(autouse=True)
+def mock_github_api_size_validation():
+    """Mock GitHub API calls used in size validation to prevent real network requests during unit tests."""
+    with patch("src.api.main.fetch_repo_metadata") as mock_meta, \
+         patch("src.api.main.fetch_file_tree") as mock_tree:
+        mock_meta.return_value = {"default_branch": "main"}
+        mock_tree.return_value = [
+            {"path": "src/main.py", "size": 100, "sha": "sha_1", "type": "blob"}
+        ]
+        yield
+
+
 # -----------------------------------------------------------------------
 # Fake pipeline runners
 # -----------------------------------------------------------------------
@@ -68,9 +80,11 @@ FAKE_RESULT = {
         "total_functions": 150,
         "total_classes": 12,
         "total_import_edges": 87,
+        "import_edges": 87,
         "circular_dep_count": 0,
         "risk_distribution": {"CRITICAL": 0, "HIGH": 3, "MEDIUM": 10, "LOW": 29},
         "files_explained": 15,
+        "explained": 15,
         "top_complex_functions": []
     },
     "complexity_report": {"critical_and_high": [], "circular_deps": []},
@@ -79,7 +93,8 @@ FAKE_RESULT = {
         "topological_order_available": True,
         "reading_order_top_10": []
     },
-    "explanations": {"src/state.py": "This file defines shared state."}
+    "explanations": {"src/state.py": "This file defines shared state."},
+    "skip_llm": False
 }
 
 

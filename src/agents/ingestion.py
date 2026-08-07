@@ -3,10 +3,17 @@ from src.utils.github_api import fetch_file_tree, fetch_file_contents_batch
 from src.utils.filters import should_include_file, detect_language
 
 
-# How many files to cap at for content fetching.
-# Above this, we sort by path depth (shorter = more likely to be core files)
-# and take the top N. Adjustable.
-MAX_FILES_TO_FETCH = 300
+import os
+
+# Limit thresholds for dynamic repository tiers. Configurable via env.
+def get_max_full_analysis_files():
+    return int(os.getenv("MAX_FULL_ANALYSIS_FILES", 300))
+
+def get_max_warning_analysis_files():
+    return int(os.getenv("MAX_WARNING_ANALYSIS_FILES", 1000))
+
+def get_max_sampled_analysis_files():
+    return int(os.getenv("MAX_SAMPLED_ANALYSIS_FILES", 3000))
 
 
 def run(state: ArchaeonState) -> ArchaeonState:
@@ -44,14 +51,26 @@ def run(state: ArchaeonState) -> ArchaeonState:
 
     print(f"  Files after filtering: {len(filtered)}")
 
-    # Step 3: Cap
+    # Step 3: Cap & Determine analysis mode
     # Sort by path depth first (fewer slashes = closer to root = more likely core)
     # then alphabetically for determinism
     filtered.sort(key=lambda e: (e["path"].count("/"), e["path"]))
 
-    if len(filtered) > MAX_FILES_TO_FETCH:
-        print(f"  [INFO] Capping at {MAX_FILES_TO_FETCH} files")
-        filtered = filtered[:MAX_FILES_TO_FETCH]
+    file_count = len(filtered)
+    state.files_discovered = file_count
+
+    if file_count <= get_max_full_analysis_files():
+        state.analysis_mode = "Full"
+    elif file_count <= get_max_warning_analysis_files():
+        state.analysis_mode = "Full (Warning)"
+        print(f"  [WARNING] High file count detected ({file_count} files). Running full analysis with warning.")
+    else:
+        state.analysis_mode = "Sampled"
+        print(f"  [INFO] Sampled analysis mode enabled ({file_count} files discovered).")
+
+    if len(filtered) > get_max_sampled_analysis_files():
+        print(f"  [WARNING] Capping at {get_max_sampled_analysis_files()} files for ingestion.")
+        filtered = filtered[:get_max_sampled_analysis_files()]
 
     # Step 4: Build manifest (no content yet, line_count is 0 for now)
     file_manifest = []

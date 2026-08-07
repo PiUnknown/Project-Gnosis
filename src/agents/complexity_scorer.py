@@ -67,6 +67,10 @@ def run(state: ArchaeonState) -> ArchaeonState:
     for idx, (file_path, symbol_table) in enumerate(state.symbol_tables.items()):
         print(f"\r  Scoring files: {idx + 1}/{total}", end="", flush=True)
 
+        if state.analyzed_paths is not None and file_path not in state.analyzed_paths:
+            skipped += 1
+            continue
+
         lang = symbol_table.language
 
         if lang not in SCORED_LANGUAGES:

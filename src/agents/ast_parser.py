@@ -11,6 +11,24 @@ Pipeline:
 4. Extract symbols using language-specific parser module
 5. Build SymbolTable and store in state.symbol_tables[file_path]
 6. SECOND PASS: resolve which imports are internal
+
+GRAMMAR SELECTION:
+  .ts  files → "TypeScript" → language_typescript()
+  .tsx files → "TSX"        → language_tsx()     ← JSX-aware superset
+  .js  files → "JavaScript" → language_javascript() (includes JSX natively)
+  .jsx files → "JavaScript" → language_javascript() (includes JSX natively)
+  .py  files → "Python"     → language_python()
+
+WHY TSX IS SEPARATE:
+  tree-sitter-typescript ships two grammars: language_typescript() and
+  language_tsx(). The TypeScript grammar does not parse JSX — any
+  <Component /> expression triggers a has_error on the root node, causing
+  every function/class in the file to still be extracted but the file to
+  be flagged as CRITICAL (parse error signal). The TSX grammar is a
+  strict superset of TypeScript that adds JSX node types. All TypeScript
+  node types (function_declaration, class_declaration, import_statement)
+  are identical in both grammars, so extract_js() works unchanged for
+  both. Only the grammar binary selected at parse time differs.
 """
 from src.state import ArchaeonState
 from src.parsers.base import SymbolTable
@@ -37,12 +55,10 @@ def run(state: ArchaeonState) -> ArchaeonState:
         path = file_meta.path
         lang = file_meta.language
 
-        # Skip if we have no content (fetch may have failed or been binary)
         if path not in state.raw_contents:
             skipped_count += 1
             continue
 
-        # Skip unsupported languages (YAML, Markdown, etc.)
         if lang not in PARSEABLE:
             skipped_count += 1
             continue
@@ -52,7 +68,15 @@ def run(state: ArchaeonState) -> ArchaeonState:
         source_bytes = None
         tree = None
         try:
-            parser = get_parser(lang)
+            # FIX: .tsx files need the TSX grammar (language_tsx), not the
+            # TypeScript grammar (language_typescript). The TypeScript grammar
+            # has no JSX support — any <Component /> triggers a parse error.
+            # tree_sitter_utils already has a "TSX" case; we just need to
+            # route .tsx files to it. Language label stays "TypeScript" for
+            # all downstream agents (complexity scorer, doc generator, stats).
+            grammar_key = "TSX" if path.endswith(".tsx") else lang
+
+            parser = get_parser(grammar_key)
             if not parser:
                 skipped_count += 1
                 continue
@@ -60,11 +84,9 @@ def run(state: ArchaeonState) -> ArchaeonState:
             source = state.raw_contents[path]
             source_bytes = bytes(source, 'utf-8')
 
-            # Parse the source into an AST
             tree = parser.parse(source_bytes)
             has_error = tree.root_node.has_error
 
-            # Extract symbols using the language-appropriate extractor
             try:
                 if lang == 'Python':
                     docstring, functions, classes, imports = extract_python(tree, source_bytes)
@@ -107,19 +129,13 @@ def run(state: ArchaeonState) -> ArchaeonState:
 
     print()
 
-    # Second pass: resolve is_internal on all imports
-    # WHY SECOND PASS: during parsing we only have the current file's imports.
-    # We need the complete file_paths set (all files in the manifest) to
-    # check if an import like "src.utils.github_api" resolves to a real file.
-    # That set is only complete after all files are in the symbol table.
     _resolve_internal_imports(state, file_paths)
-
     _print_summary(state, parsed_count, skipped_count, error_count)
-    
+
     del file_paths
     import gc
     gc.collect()
-    
+
     return state
 
 
@@ -138,14 +154,6 @@ def _resolve_internal_imports(state: ArchaeonState, file_paths: set) -> None:
 
 
 def _is_internal_python(module: str, file_paths: set) -> bool:
-    """
-    Check if a Python import module string resolves to a file in our manifest.
-
-    Relative imports (starting with '.') are always internal.
-    For absolute imports, we try two path patterns:
-      "src.utils.github_api"  →  "src/utils/github_api.py"
-      "src.utils"             →  "src/utils/__init__.py"
-    """
     if not module:
         return False
     if module.startswith('.'):
@@ -158,10 +166,6 @@ def _is_internal_python(module: str, file_paths: set) -> bool:
 
 
 def _is_internal_js(module: str) -> bool:
-    """
-    JS/TS imports starting with './' or '../' are relative = internal.
-    Bare specifiers like 'react', 'lodash' are external packages.
-    """
     return module.startswith('./') or module.startswith('../')
 
 
@@ -170,11 +174,11 @@ def _is_internal_js(module: str) -> bool:
 # -----------------------------------------------------------------------
 
 def _print_summary(state: ArchaeonState, parsed: int, skipped: int, errors: int) -> None:
-    total_functions = sum(len(st.functions) for st in state.symbol_tables.values())
-    total_classes = sum(len(st.classes) for st in state.symbol_tables.values())
-    total_internal = sum(len(st.internal_imports) for st in state.symbol_tables.values())
+    total_functions   = sum(len(st.functions)            for st in state.symbol_tables.values())
+    total_classes     = sum(len(st.classes)              for st in state.symbol_tables.values())
+    total_internal    = sum(len(st.internal_imports)     for st in state.symbol_tables.values())
     total_undocumented = sum(len(st.undocumented_functions) for st in state.symbol_tables.values())
-    error_files = [p for p, st in state.symbol_tables.items() if st.parse_error]
+    error_files       = [p for p, st in state.symbol_tables.items() if st.parse_error]
 
     print(f"\n[Agent 2: AST Parser] Done")
     print(f"  Files parsed       : {parsed}")

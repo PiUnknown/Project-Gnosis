@@ -61,3 +61,9 @@ class ArchaeonState:
     # --- Agent 7: Doc Generator (Phase 7) ---
     final_doc: str = None
     complexity_report_json: str = None
+
+    # --- Repository Analysis Tiers ---
+    analysis_mode: str = "Full"
+    files_discovered: int = 0
+    files_analyzed: int = 0
+    analyzed_paths: Optional[set] = None

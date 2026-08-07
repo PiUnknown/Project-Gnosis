@@ -141,6 +141,7 @@ class AnalysisResult(BaseModel):
     complexity_report: dict
     explanations: dict
     graph_summary: dict
+    skip_llm: Optional[bool] = False
 
 
 # -----------------------------------------------------------------------

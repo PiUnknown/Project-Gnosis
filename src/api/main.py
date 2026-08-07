@@ -27,6 +27,8 @@ from pydantic import BaseModel, field_validator
 
 from src.api import pipeline_runner
 from src.api.job_store import store
+from src.utils.github_api import parse_github_url, fetch_repo_metadata, fetch_file_tree
+from src.utils.filters import should_include_file
 from src.api.models import (
     PHASE_PROGRESS,
     JobStatusResponse,
@@ -161,6 +163,31 @@ def analyze(req: UnifiedAnalyzeRequest):
                     "message": "A job for this repository is already running."
                 }
             )
+
+    # Validate file count before enqueuing a job
+    try:
+        owner, repo_name = parse_github_url(req.repo_url)
+        metadata = fetch_repo_metadata(owner, repo_name, github_token)
+        default_branch = metadata.get("default_branch", "main")
+        tree_entries = fetch_file_tree(owner, repo_name, default_branch, github_token)
+        filtered_files = [
+            entry for entry in tree_entries 
+            if should_include_file(entry["path"], entry.get("size", 0))
+        ]
+        
+        max_sampled = int(os.getenv("MAX_SAMPLED_ANALYSIS_FILES", 3000))
+        if len(filtered_files) > max_sampled:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Repository exceeds the maximum file limit of {max_sampled} files (found {len(filtered_files)}). Analysis rejected."
+            )
+    except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise exc
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to validate repository size: {exc}"
+        )
 
     options = {
         "max_explanations": max_explanations,
