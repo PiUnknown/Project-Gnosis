@@ -336,10 +336,10 @@ class TestArchitectureMap:
         # module_0 has in_degree=4 (highest)
         assert "module_0" in result
 
-    def test_code_block_present(self):
+    def test_table_present(self):
         state = make_full_state()
         result = _build_architecture_map(state)
-        assert "```" in result
+        assert "| FILE | IMPORTS | RISK |" in result
 
     def test_circular_node_flagged(self):
         state = make_full_state(with_cycles=True)
@@ -381,7 +381,7 @@ class TestCoreComponents:
     def test_no_explanations_shows_fallback_message(self):
         state = make_full_state(with_explanations=False)
         result = _build_core_components(state)
-        assert "No LLM explanations" in result or "GROQ_API_KEY" in result
+        assert "skipped for this analysis" in result or "No LLM explanations" in result
 
     def test_dependency_context_shown(self):
         state = make_full_state(num_files=4, with_explanations=True)
@@ -660,7 +660,7 @@ class TestFullAgentRun:
         state = make_full_state(with_explanations=False)
         result = run(state)
         assert "Core Components" in result.final_doc
-        assert "No LLM explanations" in result.final_doc
+        assert "skipped for this analysis" in result.final_doc
 
     def test_doc_generation_with_cycles(self):
         state = make_full_state(with_cycles=True)

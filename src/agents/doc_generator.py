@@ -297,11 +297,8 @@ def _build_architecture_map(state: ArchaeonState) -> str:
         "Files ranked by how many other files import them. "
         "Higher in-degree means changing this file has wider impact.\n"
     )
-    lines.append("```")
-    lines.append(
-        f"{'FILE':<45} {'IMPORTS':>7}  {'RISK':<8}"
-    )
-    lines.append("─" * 65)
+    lines.append("| FILE | IMPORTS | RISK |")
+    lines.append("|:---|---:|:---:|")
 
     for path, stats in ranked:
         in_deg   = stats['in_degree']
@@ -315,10 +312,8 @@ def _build_architecture_map(state: ArchaeonState) -> str:
         circ_tag = " ⚠" if is_circ else ""
 
         lines.append(
-            f"  {bar}  {name:<35}{circ_tag:2}  {in_deg:>4}    {risk_lvl}"
+            f"| `{bar}` `{name}`{circ_tag} | {in_deg} | {risk_lvl} |"
         )
-
-    lines.append("```")
 
     isolated = sum(
         1 for p, s in state.graph_stats.items()
@@ -345,8 +340,9 @@ def _build_core_components(state: ArchaeonState) -> str:
     if not state.explanations:
         return (
             "## Core Components\n\n"
-            "*No LLM explanations available. "
-            "Run Phase 6 with a valid NVIDIA_API_KEY to generate explanations.*"
+            "*LLM explanations were skipped for this analysis."
+            "Enable 'Generate AI Explanations' and run the analysis again "
+            "if you want file-by-file architectural explanations.*"
         )
 
     # Sort explained files by in-degree descending
