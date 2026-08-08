@@ -16,11 +16,15 @@ from pathlib import PurePosixPath
 
 from src.state import ArchaeonState
 from src.parsers.base import ComplexityScore
-from src.parsers.complexity import compute_python_complexity, compute_js_complexity
+from src.parsers.complexity import compute_python_complexity, compute_js_complexity, compute_generic_complexity
 
 # Languages for which we compute complexity.
 # YAML, Markdown, TOML are skipped — no meaningful complexity metrics apply.
-SCORED_LANGUAGES = frozenset({'Python', 'JavaScript', 'TypeScript'})
+SCORED_LANGUAGES = frozenset({
+    'Python', 'JavaScript', 'TypeScript',
+    'Go', 'Rust', 'Java', 'C', 'C++',
+    'C/C++ Header', 'C++ Header'
+})
 
 # -----------------------------------------------------------------------
 # Risk thresholds — all constants in one dict for easy tuning and testing
@@ -140,7 +144,10 @@ def _score_file(
     if language == 'Python' and source:
         function_scores = compute_python_complexity(source)
     elif language in ('JavaScript', 'TypeScript') and source:
-        function_scores = compute_js_complexity(source, language, symbol_table)
+        grammar_key = "TSX" if file_path.endswith(".tsx") else language
+        function_scores = compute_js_complexity(source, language, symbol_table, grammar_key=grammar_key)
+    elif language in ('Go', 'Rust', 'Java', 'C', 'C++', 'C/C++ Header', 'C++ Header') and source:
+        function_scores = compute_generic_complexity(source, language, symbol_table)
     else:
         function_scores = {}
 

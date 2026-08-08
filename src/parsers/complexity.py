@@ -120,7 +120,7 @@ def compute_python_complexity(source: str) -> dict:
 # JS / TS: custom tree-sitter branch counter
 # -----------------------------------------------------------------------
 
-def compute_js_complexity(source: str, language: str, symbol_table) -> dict:
+def compute_js_complexity(source: str, language: str, symbol_table, grammar_key: str = None) -> dict:
     """
     Compute cyclomatic complexity per function in a JS/TS file.
 
@@ -150,7 +150,7 @@ def compute_js_complexity(source: str, language: str, symbol_table) -> dict:
     if not source:
         return {}
 
-    parser = get_parser(language)
+    parser = get_parser(grammar_key or language)
     if parser is None:
         return {}
 
@@ -241,5 +241,104 @@ def _count_branches(node) -> int:
 
     for child in node.children:
         count += _count_branches(child)
+
+    return count
+
+
+# -----------------------------------------------------------------------
+# Generic Cyclomatic Complexity Walker
+# -----------------------------------------------------------------------
+
+_GENERIC_BRANCH_TYPES = {
+    'Go': frozenset({'if_statement', 'for_statement', 'expression_case', 'select_statement'}),
+    'Rust': frozenset({'if_expression', 'if_let_expression', 'while_expression', 'while_let_expression', 'for_expression', 'loop_expression', 'match_arm'}),
+    'Java': frozenset({'if_statement', 'for_statement', 'enhanced_for_statement', 'while_statement', 'do_statement', 'catch_clause', 'ternary_expression', 'switch_label'}),
+    'C': frozenset({'if_statement', 'for_statement', 'while_statement', 'do_statement', 'case_statement', 'conditional_expression'}),
+    'C++': frozenset({'if_statement', 'for_statement', 'while_statement', 'do_statement', 'case_statement', 'conditional_expression', 'catch_clause'}),
+}
+
+# Header mapping to base language branch rules
+_GENERIC_BRANCH_TYPES['C/C++ Header'] = _GENERIC_BRANCH_TYPES['C']
+_GENERIC_BRANCH_TYPES['C++ Header'] = _GENERIC_BRANCH_TYPES['C++']
+
+_GENERIC_FUNC_TYPES = {
+    'Go': frozenset({'function_declaration', 'method_declaration'}),
+    'Rust': frozenset({'function_item'}),
+    'Java': frozenset({'method_declaration', 'constructor_declaration'}),
+    'C': frozenset({'function_definition'}),
+    'C++': frozenset({'function_definition'}),
+}
+_GENERIC_FUNC_TYPES['C/C++ Header'] = _GENERIC_FUNC_TYPES['C']
+_GENERIC_FUNC_TYPES['C++ Header'] = _GENERIC_FUNC_TYPES['C++']
+
+_GENERIC_LOGICAL_OPS = frozenset({'&&', '||'})
+
+
+def compute_generic_complexity(source: str, language: str, symbol_table) -> dict:
+    """
+    Compute cyclomatic complexity per function in Go, Rust, Java, C, and C++ files.
+    """
+    try:
+        from src.utils.tree_sitter_utils import get_parser
+    except ImportError:
+        return {}
+
+    if not source:
+        return {}
+
+    # Grammar key routing (Headers map to C or C++)
+    grammar_key = language
+    if language == 'C/C++ Header':
+        grammar_key = 'C'
+    elif language == 'C++ Header':
+        grammar_key = 'C++'
+
+    parser = get_parser(grammar_key)
+    if parser is None:
+        return {}
+
+    try:
+        source_bytes = bytes(source, 'utf-8')
+        tree = parser.parse(source_bytes)
+    except Exception:
+        return {}
+
+    # Build line → name lookup from symbol table
+    line_to_name: dict = {}
+    for func in symbol_table.functions:
+        line_to_name[func.line_start] = func.name
+
+    result: dict = {}
+    branch_types = _GENERIC_BRANCH_TYPES.get(language, frozenset())
+    func_types = _GENERIC_FUNC_TYPES.get(language, frozenset())
+
+    def _walk(node):
+        if node.type in func_types:
+            line = node.start_point[0] + 1
+            func_name = line_to_name.get(line)
+            if func_name:
+                branch_count = _count_generic_branches(node, branch_types)
+                complexity = 1 + branch_count
+                result[func_name] = max(result.get(func_name, 0), complexity)
+
+        for child in node.children:
+            _walk(child)
+
+    _walk(tree.root_node)
+    return result
+
+
+def _count_generic_branches(node, branch_types) -> int:
+    count = 0
+    if node.type in branch_types:
+        count += 1
+
+    if node.type == 'binary_expression':
+        for child in node.children:
+            if child.type in _GENERIC_LOGICAL_OPS:
+                count += 1
+
+    for child in node.children:
+        count += _count_generic_branches(child, branch_types)
 
     return count

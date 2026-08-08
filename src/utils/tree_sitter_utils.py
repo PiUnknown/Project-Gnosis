@@ -66,6 +66,22 @@ def _build_language(language: str):
             import tree_sitter_go as tsg
             return Language(tsg.language())
 
+        elif language == "Rust":
+            import tree_sitter_rust as tsr
+            return Language(tsr.language())
+
+        elif language == "Java":
+            import tree_sitter_java as tsj_java
+            return Language(tsj_java.language())
+
+        elif language in ("C", "C/C++ Header"):
+            import tree_sitter_c as tsc
+            return Language(tsc.language())
+
+        elif language in ("C++", "C++ Header"):
+            import tree_sitter_cpp as tscpp
+            return Language(tscpp.language())
+
         else:
             return None
 
@@ -98,4 +114,4 @@ def _create_parser(language_object):
 
 
 def supported_languages() -> list:
-    return ["Python", "JavaScript", "TypeScript", "Go"]
+    return ["Python", "JavaScript", "TypeScript", "Go", "Rust", "Java", "C", "C++"]

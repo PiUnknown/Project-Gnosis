@@ -35,9 +35,14 @@ from src.parsers.base import SymbolTable
 from src.utils.tree_sitter_utils import get_parser
 from src.parsers.python_parser import extract_symbols as extract_python
 from src.parsers.js_parser import extract_symbols as extract_js
+from src.parsers.generic_parser import extract_symbols as extract_generic
 
 # Languages we attempt to parse in Phase 2
-PARSEABLE = {"Python", "JavaScript", "TypeScript"}
+PARSEABLE = {
+    "Python", "JavaScript", "TypeScript",
+    "Go", "Rust", "Java", "C", "C++",
+    "C/C++ Header", "C++ Header"
+}
 
 
 def run(state: ArchaeonState) -> ArchaeonState:
@@ -92,6 +97,8 @@ def run(state: ArchaeonState) -> ArchaeonState:
                     docstring, functions, classes, imports = extract_python(tree, source_bytes)
                 elif lang in ('JavaScript', 'TypeScript'):
                     docstring, functions, classes, imports = extract_js(tree, source_bytes, lang)
+                elif lang in ("Go", "Rust", "Java", "C", "C++", "C/C++ Header", "C++ Header"):
+                    docstring, functions, classes, imports = extract_generic(tree, source_bytes, lang)
                 else:
                     skipped_count += 1
                     continue
@@ -151,6 +158,14 @@ def _resolve_internal_imports(state: ArchaeonState, file_paths: set) -> None:
                 imp.is_internal = _is_internal_python(imp.module, file_paths)
             elif lang in ('JavaScript', 'TypeScript'):
                 imp.is_internal = _is_internal_js(imp.module)
+            elif lang == 'Go':
+                imp.is_internal = _is_internal_go(imp.module, file_paths)
+            elif lang == 'Rust':
+                imp.is_internal = _is_internal_rust(imp.module)
+            elif lang == 'Java':
+                imp.is_internal = _is_internal_java(imp.module, file_paths)
+            elif lang in ('C', 'C++', 'C/C++ Header', 'C++ Header'):
+                imp.is_internal = _is_internal_c(imp.module)
 
 
 def _is_internal_python(module: str, file_paths: set) -> bool:
@@ -167,6 +182,39 @@ def _is_internal_python(module: str, file_paths: set) -> bool:
 
 def _is_internal_js(module: str) -> bool:
     return module.startswith('./') or module.startswith('../')
+
+
+def _is_internal_go(module: str, file_paths: set) -> bool:
+    if not module:
+        return False
+    # stdlib has no dots in first path component
+    first_part = module.split('/')[0]
+    if '.' not in first_part:
+        return False
+    # internal if path matches manifest files
+    return any(module in f or f.startswith(module.split('/')[-1]) for f in file_paths)
+
+
+def _is_internal_rust(module: str) -> bool:
+    if not module:
+        return False
+    # internal if starts with "crate::", "super::", or "self::"
+    return module.startswith("crate::") or module.startswith("super::") or module.startswith("self::")
+
+
+def _is_internal_java(module: str, file_paths: set) -> bool:
+    if not module:
+        return False
+    # internal if module path maps to a .java file in manifest
+    path_prefix = module.replace('.', '/')
+    return any(f.startswith(path_prefix) for f in file_paths)
+
+
+def _is_internal_c(module: str) -> bool:
+    if not module:
+        return False
+    # internal if module does NOT start with "<" (quoted includes are local)
+    return not module.startswith("<")
 
 
 # -----------------------------------------------------------------------
