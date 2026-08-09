@@ -801,6 +801,7 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [fileFilter, setFileFilter] = useState('')
+  const [sortBy, setSortBy] = useState<'risk' | 'avg_cc' | 'max_cc'>('risk')
   const reducedMotion = useReducedMotion()
 
   useEffect(() => {
@@ -823,7 +824,26 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
   const riskDist = s?.risk_distribution || {}
   const depRows = result?.dependency_rows || []
   const readingOrder = result?.reading_order || []
-  const complexityRows = (result?.complexity_rows || []).filter(r => !fileFilter || r.file.toLowerCase().includes(fileFilter.toLowerCase()))
+
+  const RISK_WEIGHTS: Record<RiskLevel, number> = {
+    CRITICAL: 4,
+    HIGH: 3,
+    MEDIUM: 2,
+    LOW: 1,
+  }
+
+  const complexityRows = [...(result?.complexity_rows || [])]
+    .filter(r => !fileFilter || r.file.toLowerCase().includes(fileFilter.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === 'risk') {
+        return (RISK_WEIGHTS[b.risk] || 0) - (RISK_WEIGHTS[a.risk] || 0)
+      } else if (sortBy === 'avg_cc') {
+        return b.avg_cc - a.avg_cc
+      } else if (sortBy === 'max_cc') {
+        return b.max_cc - a.max_cc
+      }
+      return 0
+    })
 
   const handleDownload = (content: string, filename: string, mime = 'text/plain') => {
     const blob = new Blob([content], { type: mime })
@@ -1029,10 +1049,14 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
         {!loading && activeTab === 'complexity' && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-              <select style={{ height: 40, border: '1px solid rgba(20,0,255,0.20)', background: '#FFFFFF', fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: '0.10em', color: '#1400FF', textTransform: 'uppercase', padding: '0 12px', outline: 'none', cursor: 'pointer' }}>
-                <option>SORT BY RISK</option>
-                <option>SORT BY AVG CC</option>
-                <option>SORT BY MAX CC</option>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'risk' | 'avg_cc' | 'max_cc')}
+                style={{ height: 40, border: '1px solid rgba(20,0,255,0.20)', background: '#FFFFFF', fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: '0.10em', color: '#1400FF', textTransform: 'uppercase', padding: '0 12px', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="risk">SORT BY RISK</option>
+                <option value="avg_cc">SORT BY AVG CC</option>
+                <option value="max_cc">SORT BY MAX CC</option>
               </select>
               <input type="text" value={fileFilter} onChange={e => setFileFilter(e.target.value)} placeholder="FILTER BY FILENAME..." style={{ height: 40, width: 240, border: '1px solid rgba(20,0,255,0.20)', background: '#FFFFFF', fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: '#1400FF', padding: '0 12px', outline: 'none' }} />
               <span style={{ marginLeft: 'auto', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.10em', color: 'rgba(10,10,26,0.40)' }}>
