@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, useReducedMotion } from 'motion/react'
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
 function useWindowWidth() {
@@ -120,8 +121,10 @@ function NavBar({ onLogoClick }: { onLogoClick: () => void }) {
         flexShrink: 0,
       }}
     >
-      <button
+      <motion.button
         onClick={onLogoClick}
+        whileTap={{ scale: 0.97 }}
+        transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
         style={{
           background: 'none',
           border: 'none',
@@ -139,7 +142,7 @@ function NavBar({ onLogoClick }: { onLogoClick: () => void }) {
       >
         <GnosisLogo />
         GNOSIS
-      </button>
+      </motion.button>
       {!isMobile && (
         <span
           style={{
@@ -217,9 +220,12 @@ function RiskBadge({ level, onLight = false }: { level: RiskLevel; onLight?: boo
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  const reducedMotion = useReducedMotion()
   return (
-    <button
+    <motion.button
       onClick={() => onChange(!on)}
+      whileTap={{ scale: 0.97 }}
+      transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
       style={{
         width: 44,
         height: 24,
@@ -229,21 +235,26 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
         position: 'relative',
         display: 'flex',
         alignItems: 'center',
-        transition: 'background 0.15s, border 0.15s',
         flexShrink: 0,
       }}
     >
-      <div
+      <motion.div
+        animate={{
+          left: on ? 24 : 2,
+          background: on ? '#1400FF' : 'rgba(255,255,255,0.60)',
+        }}
+        transition={
+          reducedMotion
+            ? { duration: 0.1 }
+            : { type: 'spring', bounce: 0, duration: 0.3 }
+        }
         style={{
           width: 16,
           height: 16,
-          background: on ? '#1400FF' : 'rgba(255,255,255,0.60)',
           position: 'absolute',
-          left: on ? 24 : 2,
-          transition: 'left 0.15s, background 0.15s',
         }}
       />
-    </button>
+    </motion.button>
   )
 }
 
@@ -368,13 +379,15 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
                     SKIP LLM
                   </div>
                   <div style={{ position: 'relative' }}>
-                    <button
+                    <motion.button
                       onMouseEnter={() => setShowTooltip(true)}
                       onMouseLeave={() => setShowTooltip(false)}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
                       style={{ width: 16, height: 16, background: 'transparent', border: '1px solid rgba(255,255,255,0.40)', color: 'rgba(255,255,255,0.65)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, cursor: 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
                     >
                       ?
-                    </button>
+                    </motion.button>
                     {showTooltip && (
                       <div style={{ position: 'absolute', left: 24, top: -8, width: 220, background: '#0F00CC', border: '1px solid #FFFFFF', padding: '10px 14px', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#FFFFFF', lineHeight: 1.5, zIndex: 10 }}>
                         Skips LLM calls. Pipeline completes faster but without per-file explanations.
@@ -386,11 +399,13 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
               </div>
             </div>
 
-            <button
+            <motion.button
               onClick={handleSubmit}
               disabled={loading}
               onMouseEnter={() => !loading && setHoverSubmit(true)}
               onMouseLeave={() => setHoverSubmit(false)}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
               style={{
                 width: 480,
                 height: 56,
@@ -407,7 +422,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
               }}
             >
               {loading ? 'SUBMITTING ···' : 'ANALYZE REPOSITORY →'}
-            </button>
+            </motion.button>
           </div>
 
           <div style={{ position: 'fixed', bottom: 32, right: 96, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)' }}>
@@ -491,6 +506,27 @@ function ProgressPage({ repoUrl, jobId, onComplete, onHome }: { repoUrl: string;
   const currentName = runningIdx !== -1 ? agentNames[runningIdx] : agentNames[Math.min(completeCount, 6)]
   const displayRepo = repoUrl.replace(/^https?:\/\//, '') || 'github.com/owner/repo'
 
+  const reducedMotion = useReducedMotion()
+  const smoothProgress = useMotionValue(0)
+  const springProgress = useSpring(smoothProgress, {
+    duration: 0.6,
+    bounce: 0,
+  })
+  const displayProgress = useTransform(springProgress, (v) => Math.round(v))
+
+  // Keep a ref to track displayed value for the counter
+  const [displayValue, setDisplayValue] = useState(0)
+  useEffect(() => {
+    smoothProgress.set(progress)
+  }, [progress, smoothProgress])
+
+  useEffect(() => {
+    const unsubscribe = displayProgress.on('change', (v) => {
+      setDisplayValue(Math.round(v))
+    })
+    return unsubscribe
+  }, [displayProgress])
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#1400FF', position: 'relative', overflow: 'hidden' }}>
       <AthenaFigure brightness={0.55} />
@@ -526,57 +562,87 @@ function ProgressPage({ repoUrl, jobId, onComplete, onHome }: { repoUrl: string;
           <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.50)', marginBottom: 32 }}>
             PIPELINE STATUS
           </div>
-          {agentNames.map((name, idx) => {
-            const status = agentStatuses[idx]
-            const isRunning = status === 'running'
-            const isComplete = status === 'complete'
-            const isQueued = status === 'queued'
-            return (
-              <div
-                key={idx}
-                style={{
-                  height: 72,
-                  borderBottom: '1px solid rgba(255,255,255,0.10)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 16,
-                  paddingRight: 16,
-                  opacity: isQueued ? 0.35 : 1,
-                  borderLeft: isRunning ? '2px solid #FFFFFF' : '2px solid transparent',
-                  paddingLeft: isRunning ? 14 : 0,
-                  transition: 'opacity 0.3s, border-left 0.3s',
-                }}
-              >
-                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 400, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.30)', width: 28, flexShrink: 0 }}>
-                  {String(idx + 1).padStart(2, '0')}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 500, letterSpacing: '0.10em', color: '#FFFFFF' }}>{name}</div>
-                  <div style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 3 }}>{AGENT_DESCS[idx]}</div>
-                </div>
-                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: isComplete ? 500 : 400, letterSpacing: '0.08em', color: isComplete ? '#FFFFFF' : isRunning ? '#FFFFFF' : 'rgba(255,255,255,0.25)', minWidth: 100, textAlign: 'right' }}>
-                  {isQueued && '—'}
-                  {isRunning && <span>RUNNING <span className="running-dots" /></span>}
-                  {isComplete && 'COMPLETE ✓'}
-                  {status === 'failed' && <span style={{ color: '#FF3B3B' }}>FAILED</span>}
-                </div>
-              </div>
-            )
-          })}
+          <motion.div
+            initial="hidden"
+            animate="show"
+            variants={
+              reducedMotion
+                ? undefined
+                : { show: { transition: { staggerChildren: 0.06 } } }
+            }
+          >
+            {agentNames.map((name, idx) => {
+              const status = agentStatuses[idx]
+              const isRunning = status === 'running'
+              const isComplete = status === 'complete'
+              const isQueued = status === 'queued'
+              return (
+                <motion.div
+                  key={idx}
+                  variants={
+                    reducedMotion
+                      ? undefined
+                      : {
+                          hidden: { opacity: 0, x: -12 },
+                          show: { opacity: 1, x: 0 },
+                        }
+                  }
+                  transition={
+                    reducedMotion
+                      ? { duration: 0.1 }
+                      : { type: 'spring', bounce: 0, duration: 0.3 }
+                  }
+                  style={{
+                    height: 72,
+                    borderBottom: '1px solid rgba(255,255,255,0.10)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 16,
+                    paddingRight: 16,
+                    opacity: isQueued ? 0.35 : 1,
+                    borderLeft: isRunning ? '2px solid #FFFFFF' : '2px solid transparent',
+                    paddingLeft: isRunning ? 14 : 0,
+                  }}
+                >
+                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 400, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.30)', width: 28, flexShrink: 0 }}>
+                    {String(idx + 1).padStart(2, '0')}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 500, letterSpacing: '0.10em', color: '#FFFFFF' }}>{name}</div>
+                    <div style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 3 }}>{AGENT_DESCS[idx]}</div>
+                  </div>
+                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: isComplete ? 500 : 400, letterSpacing: '0.08em', color: isComplete ? '#FFFFFF' : isRunning ? '#FFFFFF' : 'rgba(255,255,255,0.25)', minWidth: 100, textAlign: 'right' }}>
+                    {isQueued && '—'}
+                    {isRunning && <span>RUNNING <span className="running-dots" /></span>}
+                    {isComplete && 'COMPLETE ✓'}
+                    {status === 'failed' && <span style={{ color: '#FF3B3B' }}>FAILED</span>}
+                  </div>
+                </motion.div>
+              )
+            })}
+          </motion.div>
         </div>
 
         {/* Right: Progress display */}
         <div style={{ flex: 1, paddingTop: 64, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start', paddingLeft: 80 }}>
           {jobStatus === 'running' && (
             <>
-              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 120, fontWeight: 400, color: '#FFFFFF', letterSpacing: '-0.02em', lineHeight: 1.0, transition: 'all 0.5s' }}>
-                {progress}%
+              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 120, fontWeight: 400, color: '#FFFFFF', letterSpacing: '-0.02em', lineHeight: 1.0 }}>
+                {displayValue}%
               </div>
               <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 500, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.65)', marginTop: 16 }}>
                 {currentName}
               </div>
               <div style={{ marginTop: 24, width: 300, height: 1, background: 'rgba(255,255,255,0.20)', position: 'relative' }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, height: 1, background: '#FFFFFF', width: `${progress}%`, transition: 'width 0.5s' }} />
+                <motion.div
+                  animate={{ width: `${progress}%` }}
+                  transition={
+                    reducedMotion
+                      ? { duration: 0.1 }
+                      : { type: 'spring', bounce: 0, duration: 0.6 }
+                  }
+                  style={{ position: 'absolute', top: 0, left: 0, height: 1, background: '#FFFFFF' }}
+                />
               </div>
               <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.40)', marginTop: 12 }}>
                 {completeCount} OF 7 AGENTS COMPLETE
@@ -588,14 +654,16 @@ function ProgressPage({ repoUrl, jobId, onComplete, onHome }: { repoUrl: string;
               <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 80, fontWeight: 400, color: '#FFFFFF', textTransform: 'uppercase', lineHeight: 1.0 }}>
                 COMPLETE
               </div>
-              <button
+              <motion.button
                 onMouseEnter={() => setHoverBtn(true)}
                 onMouseLeave={() => setHoverBtn(false)}
                 onClick={onComplete}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
                 style={{ marginTop: 32, width: 280, height: 56, background: hoverBtn ? 'transparent' : '#FFFFFF', border: hoverBtn ? '1px solid #FFFFFF' : 'none', color: hoverBtn ? '#FFFFFF' : '#1400FF', fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 500, letterSpacing: '0.14em', cursor: 'pointer', transition: 'all 0.15s' }}
               >
                 ANALYSIS COMPLETE — VIEW RESULTS
-              </button>
+              </motion.button>
             </>
           )}
           {jobStatus === 'failed' && (
@@ -635,15 +703,38 @@ function DownloadBtn({ label, onLight = false, onClick }: { label: string; onLig
     transition: 'all 0.12s',
   }
   if (onLight) {
-    return <button onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onClick={onClick} style={{ ...base, border: '1px solid #1400FF', background: hovered ? '#1400FF' : 'transparent', color: hovered ? '#FFFFFF' : '#1400FF' }}>{label}</button>
+    return (
+      <motion.button
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={onClick}
+        whileTap={{ scale: 0.97 }}
+        transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
+        style={{ ...base, border: '1px solid #1400FF', background: hovered ? '#1400FF' : 'transparent', color: hovered ? '#FFFFFF' : '#1400FF' }}
+      >
+        {label}
+      </motion.button>
+    )
   }
-  return <button onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onClick={onClick} style={{ ...base, border: '1px solid rgba(255,255,255,0.45)', background: hovered ? '#FFFFFF' : 'transparent', color: hovered ? '#1400FF' : '#FFFFFF' }}>{label}</button>
+  return (
+    <motion.button
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onClick={onClick}
+      whileTap={{ scale: 0.97 }}
+      transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
+      style={{ ...base, border: '1px solid rgba(255,255,255,0.45)', background: hovered ? '#FFFFFF' : 'transparent', color: hovered ? '#1400FF' : '#FFFFFF' }}
+    >
+      {label}
+    </motion.button>
+  )
 }
 
 function CollapsibleSection({ title, count, content, defaultOpen = false }: { title: string; count: string; content: string; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen)
   const [copied, setCopied] = useState(false)
   const [hoverCopy, setHoverCopy] = useState(false)
+  const reducedMotion = useReducedMotion()
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation()
     navigator.clipboard.writeText(content).catch(() => { })
@@ -658,17 +749,49 @@ function CollapsibleSection({ title, count, content, defaultOpen = false }: { ti
           <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, color: 'rgba(10,10,26,0.40)' }}>{count}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={handleCopy} onMouseEnter={() => setHoverCopy(true)} onMouseLeave={() => setHoverCopy(false)} style={{ height: 28, padding: '0 10px', border: '1px solid rgba(20,0,255,0.30)', background: hoverCopy ? '#1400FF' : 'transparent', color: hoverCopy ? '#FFFFFF' : '#1400FF', fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, fontWeight: 500, letterSpacing: '0.12em', cursor: 'pointer', transition: 'all 0.12s' }}>
+          <motion.button
+            onClick={handleCopy}
+            onMouseEnter={() => setHoverCopy(true)}
+            onMouseLeave={() => setHoverCopy(false)}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
+            style={{ height: 28, padding: '0 10px', border: '1px solid rgba(20,0,255,0.30)', background: hoverCopy ? '#1400FF' : 'transparent', color: hoverCopy ? '#FFFFFF' : '#1400FF', fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, fontWeight: 500, letterSpacing: '0.12em', cursor: 'pointer', transition: 'all 0.12s' }}
+          >
             {copied ? 'COPIED ✓' : 'COPY'}
-          </button>
-          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'rgba(10,10,26,0.40)' }}>{open ? '▴' : '▾'}</span>
+          </motion.button>
+          <motion.span
+            animate={{ rotate: open ? 180 : 0 }}
+            transition={
+              reducedMotion
+                ? { duration: 0.1 }
+                : { type: 'spring', bounce: 0, duration: 0.3 }
+            }
+            style={{ display: 'inline-block', fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'rgba(10,10,26,0.40)', transformOrigin: 'center' }}
+          >
+            ▾
+          </motion.span>
         </div>
       </div>
-      {open && (
-        <div className="auto-scroll" style={{ border: '1px solid rgba(20,0,255,0.15)', borderTop: 'none', padding: 20, maxHeight: 320, overflowY: 'auto', background: 'rgba(20,0,255,0.03)' }}>
-          <pre style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: '#0A0A1A', whiteSpace: 'pre-wrap', lineHeight: 1.6, margin: 0 }}>{content}</pre>
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="content"
+            initial={reducedMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
+            animate={reducedMotion ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
+            exit={reducedMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
+            transition={
+              reducedMotion
+                ? { duration: 0.15 }
+                : { type: 'spring', bounce: 0, duration: 0.35 }
+            }
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="auto-scroll" style={{ border: '1px solid rgba(20,0,255,0.15)', borderTop: 'none', padding: 20, maxHeight: 320, overflowY: 'auto', background: 'rgba(20,0,255,0.03)' }}>
+              <pre style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: '#0A0A1A', whiteSpace: 'pre-wrap', lineHeight: 1.6, margin: 0 }}>{content}</pre>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -678,6 +801,7 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [fileFilter, setFileFilter] = useState('')
+  const reducedMotion = useReducedMotion()
 
   useEffect(() => {
     if (!jobId) { setLoading(false); return }
@@ -778,21 +902,54 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
       </div>
 
       {/* Tab bar */}
-      <div style={{ height: 52, background: '#0F00CC', borderBottom: '1px solid rgba(255,255,255,0.15)', padding: '0 96px', display: 'flex', alignItems: 'stretch', flexShrink: 0 }}>
+      <div style={{ height: 52, background: '#0F00CC', borderBottom: '1px solid rgba(255,255,255,0.15)', padding: '0 96px', display: 'flex', alignItems: 'stretch', flexShrink: 0, position: 'relative' }}>
         {TABS.map((tab, idx) => {
           const isActive = tab.id === activeTab
           const nextActive = idx < TABS.length - 1 && TABS[idx + 1].id === activeTab
           const showSep = idx < TABS.length - 1 && !isActive && !nextActive
           return (
             <div key={tab.id} style={{ display: 'flex', alignItems: 'stretch' }}>
-              <button
+              <motion.button
                 onClick={() => setActiveTab(tab.id)}
-                style={{ padding: '0 32px', height: '100%', background: 'transparent', border: 'none', borderBottom: isActive ? '2px solid #FFFFFF' : '2px solid transparent', color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.45)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: '0.14em', cursor: 'pointer', textTransform: 'uppercase', transition: 'color 0.12s' }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
+                style={{
+                  padding: '0 32px',
+                  height: '100%',
+                  background: 'transparent',
+                  border: 'none',
+                  color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.45)',
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: 11,
+                  fontWeight: 500,
+                  letterSpacing: '0.14em',
+                  cursor: 'pointer',
+                  textTransform: 'uppercase',
+                  position: 'relative',
+                }}
                 onMouseEnter={e => { if (!isActive) (e.target as HTMLElement).style.color = '#FFFFFF' }}
-                onMouseLeave={e => { if (!isActive) (e.target as HTMLElement).style.color = 'rgba(255,255,255,0.45)' }}
+                onMouseLeave={e => { !isActive && ((e.target as HTMLElement).style.color = 'rgba(255,255,255,0.45)') }}
               >
                 {tab.label}
-              </button>
+                {isActive && (
+                  <motion.div
+                    layoutId="tab-indicator"
+                    style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      height: 2,
+                      background: '#FFFFFF',
+                    }}
+                    transition={
+                      reducedMotion
+                        ? { duration: 0.1 }
+                        : { type: 'spring', bounce: 0, duration: 0.35 }
+                    }
+                  />
+                )}
+              </motion.button>
               {showSep && <div style={{ width: 1, background: 'rgba(255,255,255,0.15)', alignSelf: 'stretch', margin: '12px 0' }} />}
             </div>
           )
@@ -972,6 +1129,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('landing')
   const [repoUrl, setRepoUrl] = useState('')
   const [jobId, setJobId] = useState('')
+  const reducedMotion = useReducedMotion()
 
   const handleSubmit = (url: string, id: string) => {
     setRepoUrl(url)
@@ -979,11 +1137,41 @@ export default function App() {
     setScreen('progress')
   }
 
+  const goHome = useCallback(() => setScreen('landing'), [])
+
+  // Determine enter direction: landing = from left, others = from right
+  const isLanding = screen === 'landing'
+  const xInitial = reducedMotion ? 0 : (isLanding ? -40 : 40)
+  const xAnimate = 0
+  const xExit = reducedMotion ? 0 : (isLanding ? 40 : -40)
+
   return (
-    <>
-      {screen === 'landing' && <LandingPage onSubmit={handleSubmit} />}
-      {screen === 'progress' && <ProgressPage repoUrl={repoUrl} jobId={jobId} onComplete={() => setScreen('results')} onHome={() => setScreen('landing')} />}
-      {screen === 'results' && <ResultsPage repoUrl={repoUrl} jobId={jobId} onHome={() => setScreen('landing')} />}
-    </>
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={screen}
+        initial={{ opacity: 0, x: xInitial }}
+        animate={{ opacity: 1, x: xAnimate }}
+        exit={{ opacity: 0, x: xExit }}
+        transition={
+          reducedMotion
+            ? { duration: 0.15 }
+            : { type: 'spring', bounce: 0, duration: 0.4 }
+        }
+        style={{ height: '100vh' }}
+      >
+        {screen === 'landing' && <LandingPage onSubmit={handleSubmit} />}
+        {screen === 'progress' && (
+          <ProgressPage
+            repoUrl={repoUrl}
+            jobId={jobId}
+            onComplete={() => setScreen('results')}
+            onHome={goHome}
+          />
+        )}
+        {screen === 'results' && (
+          <ResultsPage repoUrl={repoUrl} jobId={jobId} onHome={goHome} />
+        )}
+      </motion.div>
+    </AnimatePresence>
   )
 }
