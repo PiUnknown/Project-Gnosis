@@ -2,6 +2,18 @@ import { useState, useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
+function useWindowWidth() {
+  const [width, setWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1440
+  )
+  useEffect(() => {
+    const fn = () => setWidth(window.innerWidth)
+    window.addEventListener('resize', fn)
+    return () => window.removeEventListener('resize', fn)
+  }, [])
+  return width
+}
+
 type Screen = 'landing' | 'progress' | 'results'
 type AgentStatus = 'queued' | 'running' | 'complete' | 'failed'
 type ResultsTab = 'onboarding' | 'dependency' | 'complexity' | 'raw'
@@ -57,6 +69,7 @@ interface AnalysisResult {
   explanations: Record<string, string>
   complexity_report_json: string
   circular_deps: string[][]
+  skip_llm?: boolean
 }
 
 type RiskLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'
@@ -72,6 +85,9 @@ const AGENT_DESCS = [
 ]
 
 // ─── GnosisLogo ───────────────────────────────────────────────────────────────
+// Gnosis (Greek: γνῶσις) means knowledge through direct seeing.
+// The eye: a diamond outline + diamond pupil — knowledge that perceives.
+// All straight lines, no curves, consistent with 0px radius system.
 function GnosisLogo() {
   return (
     <svg
@@ -82,31 +98,25 @@ function GnosisLogo() {
       xmlns="http://www.w3.org/2000/svg"
       style={{ display: 'block', flexShrink: 0 }}
     >
-      <line x1="1" y1="4" x2="17" y2="4" stroke="white" strokeWidth="1.2" />
-      <line x1="1" y1="9" x2="17" y2="9" stroke="white" strokeWidth="1.2" />
-      <line x1="1" y1="14" x2="17" y2="14" stroke="white" strokeWidth="1.2" />
-      <line x1="9" y1="1" x2="9" y2="17" stroke="white" strokeWidth="1.2" />
-      <rect x="1" y="1" width="2.5" height="2.5" fill="white" />
-      <rect x="14.5" y="1" width="2.5" height="2.5" fill="white" />
-      <rect x="1" y="14.5" width="2.5" height="2.5" fill="white" />
-      <rect x="14.5" y="14.5" width="2.5" height="2.5" fill="white" />
-      <rect x="7.5" y="7.5" width="3" height="3" fill="white" />
+      <path d="M1,9 L9,2 L17,9 L9,16 Z" stroke="white" strokeWidth="1.2" />
+      <rect x="7.5" y="7.5" width="3" height="3" transform="rotate(45 9 9)" fill="white" />
     </svg>
   )
 }
 
 // ─── NavBar ───────────────────────────────────────────────────────────────────
 function NavBar({ onLogoClick }: { onLogoClick: () => void }) {
+  const isMobile = useWindowWidth() < 768
   return (
     <nav
       style={{
-        height: 72,
+        height: isMobile ? 56 : 72,
         background: '#1400FF',
         borderBottom: '1px solid rgba(255,255,255,0.15)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 96px',
+        padding: isMobile ? '0 20px' : '0 96px',
         flexShrink: 0,
       }}
     >
@@ -130,17 +140,19 @@ function NavBar({ onLogoClick }: { onLogoClick: () => void }) {
         <GnosisLogo />
         GNOSIS
       </button>
-      <span
-        style={{
-          fontFamily: "'IBM Plex Mono', monospace",
-          fontSize: 11,
-          fontWeight: 400,
-          letterSpacing: '0.14em',
-          color: 'rgba(255,255,255,0.50)',
-        }}
-      >
-        CODE ARCHAEOLOGY AGENT
-      </span>
+      {!isMobile && (
+        <span
+          style={{
+            fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: 11,
+            fontWeight: 400,
+            letterSpacing: '0.14em',
+            color: 'rgba(255,255,255,0.50)',
+          }}
+        >
+          CODE ARCHAEOLOGY AGENT
+        </span>
+      )}
     </nav>
   )
 }
@@ -148,31 +160,22 @@ function NavBar({ onLogoClick }: { onLogoClick: () => void }) {
 // ─── Athena Figure ────────────────────────────────────────────────────────────
 function AthenaFigure({ brightness = 0.88 }: { brightness?: number }) {
   return (
-    <div
-      style={{
-        position: 'absolute',
-        right: -60,
-        top: 0,
-        bottom: 0,
-        width: 700,
-        pointerEvents: 'none',
-        overflow: 'hidden',
-      }}
-    >
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
       <img
-        src="https://images.unsplash.com/photo-1670813885725-e3c5391dcd31?w=900&h=1200&fit=crop&auto=format"
-        alt="Classical goddess figure"
+        src="https://images.unsplash.com/photo-1670813885725-e3c5391dcd31?w=900&h=1400&fit=crop&auto=format"
+        alt="Athena — goddess of wisdom"
         style={{
           position: 'absolute',
-          right: -40,
           top: 0,
+          left: '50%',
+          transform: 'translateX(-40%)',
           height: '100%',
           width: 'auto',
-          objectFit: 'cover',
-          objectPosition: 'center top',
-          filter: `grayscale(1) contrast(1.35) brightness(${brightness})`,
+          filter: `grayscale(1) contrast(1.55) brightness(${brightness})`,
           mixBlendMode: 'screen',
-          opacity: 0.82,
+          opacity: 0.9,
+          WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 18%, black 80%, transparent 100%)',
+          maskImage: 'linear-gradient(to right, transparent 0%, black 18%, black 80%, transparent 100%)',
         }}
       />
     </div>
@@ -408,11 +411,11 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
           </div>
 
           <div style={{ position: 'fixed', bottom: 32, right: 96, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)' }}>
-            v0.1.0 · PiUnknown · Project Gnosis
+            v0.1.5 · PiUnknown · Project Gnosis
           </div>
         </div>
 
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ flex: 1, position: 'relative', overflow: 'hidden', minWidth: 0 }}>
           <AthenaFigure brightness={0.88} />
         </div>
       </div>
