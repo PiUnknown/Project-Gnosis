@@ -15,7 +15,7 @@ function useWindowWidth() {
   return width
 }
 
-type Screen = 'landing' | 'progress' | 'results'
+type Screen = 'landing' | 'progress' | 'results' | 'error'
 type AgentStatus = 'queued' | 'running' | 'complete' | 'failed'
 type ResultsTab = 'onboarding' | 'dependency' | 'complexity' | 'raw'
 
@@ -1148,6 +1148,79 @@ function EmptyState({ label }: { label: string }) {
   )
 }
 
+// ─── Screen 4: Error ──────────────────────────────────────────────────────────
+function ErrorPage({ onHome }: { onHome: () => void }) {
+  const [hoverBtn, setHoverBtn] = useState(false)
+  const reducedMotion = useReducedMotion()
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#1400FF' }}>
+      <NavBar onLogoClick={onHome} />
+      <div style={{ display: 'flex', flex: 1, position: 'relative', overflow: 'hidden' }}>
+        {/* Left column */}
+        <div
+          style={{
+            width: 600,
+            flexShrink: 0,
+            padding: '0 0 0 96px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+          }}
+        >
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 58, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+              SOMETHING
+            </div>
+            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 58, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+              WENT WRONG
+            </div>
+          </div>
+
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 120, fontWeight: 400, color: 'rgba(255,255,255,0.15)', lineHeight: 1.0, letterSpacing: '-0.02em', marginBottom: 16 }}>
+            404
+          </div>
+
+          <p style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 16, fontWeight: 400, color: 'rgba(255,255,255,0.65)', maxWidth: 420, lineHeight: 1.6, margin: '0 0 40px 0' }}>
+            The page you're looking for doesn't exist or the server encountered an unexpected error. Please try again later.
+          </p>
+
+          <motion.button
+            onClick={onHome}
+            onMouseEnter={() => setHoverBtn(true)}
+            onMouseLeave={() => setHoverBtn(false)}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
+            style={{
+              width: 280,
+              height: 56,
+              background: hoverBtn ? 'transparent' : '#FFFFFF',
+              border: hoverBtn ? '1px solid #FFFFFF' : 'none',
+              color: hoverBtn ? '#FFFFFF' : '#1400FF',
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: 13,
+              fontWeight: 500,
+              letterSpacing: '0.14em',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}
+          >
+            RETURN HOME →
+          </motion.button>
+        </div>
+
+        <div style={{ flex: 1, position: 'relative', overflow: 'hidden', minWidth: 0 }}>
+          <AthenaFigure brightness={0.55} />
+        </div>
+      </div>
+
+      <div style={{ position: 'fixed', bottom: 32, right: 96, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)' }}>
+        v0.1.5 · PiUnknown · Project Gnosis
+      </div>
+    </div>
+  )
+}
+
 // ─── Root App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [screen, setScreen] = useState<Screen>('landing')
@@ -1195,6 +1268,7 @@ export default function App() {
         {screen === 'results' && (
           <ResultsPage repoUrl={repoUrl} jobId={jobId} onHome={goHome} />
         )}
+        {screen === 'error' && <ErrorPage onHome={goHome} />}
       </motion.div>
     </AnimatePresence>
   )
