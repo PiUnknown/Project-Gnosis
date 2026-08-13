@@ -288,11 +288,27 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
           skip_llm: skipLlm,
         }),
       })
-      if (!res.ok) throw new Error(`Server error: ${res.status}`)
+      if (!res.ok) {
+        let msg = `Server error: ${res.status}`
+        try {
+          const data = await res.json()
+          if (data && data.detail) {
+            msg = data.detail
+          }
+        } catch {
+          // ignore parsing error
+        }
+        throw new Error(msg)
+      }
       const { job_id } = await res.json()
       onSubmit(url, job_id)
     } catch (err) {
-      setError(`CONNECTION FAILED — IS THE SERVER RUNNING? (${err instanceof Error ? err.message : 'unknown error'})`)
+      const rawMsg = err instanceof Error ? err.message : 'unknown error'
+      if (rawMsg.includes('Failed to fetch') || rawMsg.includes('NetworkError') || rawMsg.includes('Network request failed')) {
+        setError(`CONNECTION FAILED — IS THE SERVER RUNNING? (${rawMsg})`)
+      } else {
+        setError(rawMsg.toUpperCase())
+      }
       setLoading(false)
     }
   }
