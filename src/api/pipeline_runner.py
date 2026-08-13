@@ -237,6 +237,7 @@ def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False)
         "repo": f"{state.owner}/{state.repo_name}",
         "branch": state.default_branch or "main",
         "onboarding_doc": state.final_doc or "",
+        "agent_context": state.agent_context_md or "",
         "analysis_mode": state.analysis_mode,
         "files_discovered": state.files_discovered,
         "files_analyzed": state.files_analyzed,

@@ -49,17 +49,18 @@ class ArchaeonState:
     graph_stats: dict = field(default_factory=dict)          # path -> per-file metrics dict
     topological_order: list = field(default_factory=list)    # suggested reading order
 
-    # --- Agent 4: Complexity Scorer (Phase 4) ---
+    # --- Agent 4: Complexity Scorer ---
     complexity_scores: dict = field(default_factory=dict)
 
-    # --- Agent 5: Code RAG (Phase 5) ---
+    # --- Agent 5: Code RAG ---
     chroma_collection_name: str = None
 
-    # --- Agent 6: Explainability (Phase 6) ---
+    # --- Agent 6: Explainability ---
     explanations: dict = field(default_factory=dict)
 
-    # --- Agent 7: Doc Generator (Phase 7) ---
+    # --- Agent 7: Doc Generator ---
     final_doc: str = None
+    agent_context_md: str = None            # agent_context.md (AI coding agent-oriented)
     complexity_report_json: str = None
 
     # --- Repository Analysis Tiers ---

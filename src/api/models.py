@@ -137,6 +137,7 @@ class AnalysisResult(BaseModel):
     repo: str
     branch: str
     onboarding_doc: str
+    agent_context: str
     summary: dict
     complexity_report: dict
     explanations: dict

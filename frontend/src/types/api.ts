@@ -1,10 +1,7 @@
 /**
  * TypeScript interfaces for the Project Gnosis API.
- *
  * Mirrors src/api/models.py — keep in sync when adding fields.
  */
-
-// ── Request ───────────────────────────────────────────────────────────────
 
 export interface AnalyzeRequest {
     repo_url: string;
@@ -19,13 +16,7 @@ export interface AnalyzeResponse {
     message?: string;
 }
 
-// ── Job lifecycle ─────────────────────────────────────────────────────────
-
-export type JobStatus =
-    | "queued"
-    | "running"
-    | "complete"
-    | "failed";
+export type JobStatus = "queued" | "running" | "complete" | "failed";
 
 export interface JobPollResponse {
     job_id: string;
@@ -46,8 +37,6 @@ export interface JobSummary {
     analysis_mode?: string;
     created_at?: string;
 }
-
-// ── Result ────────────────────────────────────────────────────────────────
 
 export interface GraphData {
     nodes: string[];
@@ -79,7 +68,6 @@ export interface JobResult {
     status: JobStatus;
     repo_url: string;
 
-    // ── Primary artefacts ──────────────────────────────────────────────
     /** onboarding.md — human-readable architectural documentation */
     final_doc?: string;
     /** agent_context.md — concise context optimised for AI coding agents */
@@ -87,7 +75,6 @@ export interface JobResult {
     /** Raw JSON string for complexity_report.json */
     complexity_report_json?: string;
 
-    // ── Supporting data ────────────────────────────────────────────────
     explanations?: Record<string, string>;
     graph_data?: GraphData;
     symbol_tables?: Record<string, {
@@ -96,13 +83,10 @@ export interface JobResult {
         imports: string[];
     }>;
 
-    // ── Metadata ───────────────────────────────────────────────────────
     analysis_mode?: string;
     files_discovered?: number;
     files_analyzed?: number;
     error?: string;
 }
-
-// ── Risk badge helper ─────────────────────────────────────────────────────
 
 export type RiskLevel = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN";
