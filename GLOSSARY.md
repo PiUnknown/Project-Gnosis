@@ -193,6 +193,18 @@ Python library for data validation using type annotations. Used to validate the 
 **Pipeline**  
 In this project: a fixed sequence of agents that runs start-to-finish on a given input. Contrasted with a DAG (directed acyclic graph) where branching is possible. v1 is a linear pipeline. v2 may introduce a DAG for parallel processing (e.g., run AST parsing and LLM calls concurrently).
 
+**Concurrent Ingestion**  
+A feature in the Ingestion Agent that utilizes a `ThreadPoolExecutor` (capped at 15 threads) to concurrently download raw file contents from `raw.githubusercontent.com`. This cuts down the time required to ingest a medium-sized codebase from minutes to seconds.
+
+**Dynamic Repository Analysis Tiers**  
+A safety mechanism that reads the file count of a repository and places it into one of four analysis tiers (*Full*, *Full with Warning*, *Sampled*, or *Rejected*) to prevent resource exhaustion and LLM rate-limiting. Under *Sampled* mode, only a select subset of critical files (ranked by centrality/functions/classes) are run through the entire parsing and explainability pipeline.
+
+**Microsoft Azure**  
+The cloud platform hosting the FastAPI backend via Azure App Service (eastasia region). Azure runs the containerized python pipeline, handles persistent disk caching, and integrates with GitHub Actions for CI/CD deployments.
+
+**Vercel**  
+The serverless hosting platform for the React SPA frontend (accessible at `gnosis.piunknown.dev`). Automatically deploys frontend builds from the GitHub repository on push to master and handles routing/SSL for the static UI chrome.
+
 ---
 
 ## LLM Infrastructure

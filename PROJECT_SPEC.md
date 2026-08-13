@@ -2,7 +2,7 @@
 
 **Codename:** Archaeon / Project Gnosis
 **Version:** 0.1.0
-**Status:** In Development — Agents 1–4 production-stable, Agent 5 embedding investigation
+**Status:** In Development (Agents 1–7 production-stable; Improving the file urgency ranking)
 **Author:** Om Kumar Jha
 **GitHub:** github.com/PiUnknown
 **Production URL:** gnosis.piunknown.dev
@@ -163,6 +163,12 @@ class ArchaeonState:
     # Agent 7 output
     final_doc: str = None
     complexity_report_json: str = None
+
+    # --- Repository Analysis Tiers ---
+    analysis_mode: str = "Full"
+    files_discovered: int = 0
+    files_analyzed: int = 0
+    analyzed_paths: Optional[set] = None
 ```
 
 ---
@@ -176,11 +182,16 @@ class ArchaeonState:
 
 **Responsibilities:**
 - Clone using GitPython or raw GitHub API (API preferred for speed)
+- **Concurrent Content Ingestion:** Fetch raw file contents concurrently using a `ThreadPoolExecutor` (max 15 threads) from `raw.githubusercontent.com` to speed up ingestion.
 - Walk the file tree, collect path, extension, size, line count
 - Detect language per file using extension mapping + tree-sitter fallback
 - Filter out: node_modules, .git, __pycache__, dist, build, .lock files, binary files
 
-**Size limit:** Skip files above 100KB. Warn user about repos above 10,000 files.
+**Repository Analysis Tiers (Dynamic Mode):**
+- **Full Mode:** $\le 300$ files. Full analysis pipeline.
+- **Full (Warning) Mode:** $301 - 1000$ files. Runs full analysis but triggers a UI warning for high token usage.
+- **Sampled Mode:** $1001 - 3000$ files. Ingests all files but limits parsing, complexity scoring, and LLM explanation to a selected subset of the most critical files (ranked by centrality, functions, and classes) to stay within token budgets.
+- **Rejection Mode:** $> 3000$ files. Request is rejected with a `400 Bad Request` to protect resource usage.
 
 ---
 
@@ -195,7 +206,7 @@ class ArchaeonState:
 - Walk the AST and extract functions, classes, imports, docstrings
 - Flag files that fail to parse (syntax error signal)
 
-**Supported languages in v1:** Python, JavaScript, TypeScript, Go
+**Supported languages in v1:** Python, JavaScript, TypeScript, Go, Rust, Java, C, C++
 
 ---
 

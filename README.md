@@ -150,6 +150,12 @@ class ArchaeonState:
     explanations: dict = field(default_factory=dict)
     final_doc: str = None
     complexity_report_json: str = None
+    
+    # --- Repository Analysis Tiers ---
+    analysis_mode: str = "Full"
+    files_discovered: int = 0
+    files_analyzed: int = 0
+    analyzed_paths: set = None
 ```
 
 This pattern makes each agent independently testable: mock the state, test the agent, verify state after.
@@ -161,7 +167,7 @@ This pattern makes each agent independently testable: mock the state, test the a
 ### Core Pipeline
 
 **tree-sitter**
-Language-agnostic AST parser. Parses Python, JavaScript, TypeScript, Go (and 50+ others) using the same Python API. Handles broken code gracefully: produces partial ASTs instead of throwing. Used in production by GitHub Copilot, Neovim, and VS Code. The only serious option for multi-language AST parsing in Python.
+Language-agnostic AST parser. Parses Python, JavaScript, TypeScript, Go, Rust, Java, C, and C++ using the same Python API. Handles broken code gracefully: produces partial ASTs instead of throwing. Used in production by GitHub Copilot, Neovim, and VS Code. The only serious option for multi-language AST parsing in Python.
 
 **NetworkX**
 Python graph library. Used to construct the directed dependency graph: nodes are file paths, edges are import relationships. Provides `simple_cycles()` for circular dependency detection and centrality algorithms for identifying core files.
@@ -186,8 +192,8 @@ Async Python web framework. Exposes a POST endpoint `/analyze` that accepts `{ "
 **GitPython**
 Used to clone repositories programmatically. For public repos, the GitHub REST API is preferred (no disk I/O, faster).
 
-**GitHub REST API**
-For public repositories: fetches the complete file tree and individual file contents via HTTP. No cloning required. Rate limit: 60 requests/hour unauthenticated, 5000/hour with a PAT.
+**GitHub REST API & Concurrent Ingestion**
+For public repositories: fetches the complete file tree and downloads file contents concurrently via a `ThreadPoolExecutor` (max 15 threads) pointing to `raw.githubusercontent.com`. This cuts down the time required to ingest a medium-sized codebase from minutes to seconds. Rate limit: 60 requests/hour unauthenticated, 5000/hour with a PAT.
 
 **pyvis**
 Renders the NetworkX dependency graph as an interactive HTML file using D3.js. Users can zoom, pan, and click nodes to see file details. Zero frontend code required.
@@ -581,10 +587,11 @@ All job state lives in a module-level dict with a threading lock. Jobs are lost 
 ## Limitations (v1)
 
 - Public GitHub repos only (private repo support requires GitHub PAT, in v2)
-- Repos above 10,000 files use a sampling strategy (top 200 by centrality)
-- Languages supported in v1: Python, JavaScript, TypeScript, Go
+- **Repository Size Limits (Dynamic Tiers):**
+  - Repositories are dynamically classified based on file count into four tiers: *Full* ($\le 300$ files), *Full (Warning)* ($301 - 1000$ files), *Sampled* ($1001 - 3000$ files), or *Rejected* ($> 3000$ files).
+  - Under *Sampled* mode, analysis is restricted to a selected subset of the most critical files to respect LLM contexts and rate ceilings.
+- **Languages supported:** Python, JavaScript, TypeScript, Go, Rust, Java, C, C++
 - Explanation quality degrades for deeply obfuscated or minified code
-- Agent 5 (embedding) is currently under investigation for stall on Azure
 - The generated document is a snapshot: it does not update when the repo changes
 - Job state is in-memory and lost on server restart
 
@@ -594,11 +601,14 @@ All job state lives in a module-level dict with a threading lock. Jobs are lost 
 
 **v1.0 — Core pipeline**
 All 7 agents working end-to-end. React frontend. Azure + Vercel deployment.
-*Current status: Agents 1–4 and 8–9 complete. Agent 5 embedding stall under investigation.*
+*Current status: Completed.*
 
-**v1.1 — Embedding fix + language expansion**
-Resolve Agent 5 embedding stall (batch size reduction or NVIDIA NIM embeddings).
-Add Rust, Java, C++ via tree-sitter grammars.
+**v1.5 — Embedding fix + language expansion**
+*Current status: Completed.*
+- Resolved Agent 5 embedding stalls on Azure by concurrency optimization and context size controls.
+- Added Rust, Java, C, and C++ via tree-sitter grammars.
+- Added dynamic repository sizing tiers (Full, Warning, Sampled, and Rejection modes).
+- Added multi-threaded concurrent ingestion.
 
 **v2.0 — Product features**
 Private repo support, GitHub Action integration (auto-generate docs on push),
@@ -614,4 +624,6 @@ Replace sequential pipeline with an agent loop: the explainability agent notices
 
 This is a portfolio project built to demonstrate production-level AI engineering skills: not just calling an LLM API, but designing a system where multiple specialized agents work together, each with clear interfaces, testable in isolation, grounded by retrieval, and producing output that is genuinely useful to a real user.
 
-The problem is real. The architecture reflects how a senior engineer would actually approach it. Every design decision has a documented rationale. Every component can be explained in an interview. The project is deployed, publicly accessible at [gnosis.piunknown.dev](https://gnosis.piunknown.dev), and actively under development.
+The problem is real. The architecture reflects how a senior engineer would actually approach it. Every design decision has a documented rationale. Every component can be explained in an interview. The project is deployed, publicly accessible at [gnosis.piunknown.dev](https://gnosis.piunknown.dev), with the backend hosted on **Microsoft Azure App Service** and the frontend hosted on **Vercel**.
+
+---
