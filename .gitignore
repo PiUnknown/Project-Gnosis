@@ -32,3 +32,6 @@ explanation_cache/
 # Frontend
 node_modules/
 dist/
+
+# Scratchpad
+SCRATCHPAD.md
