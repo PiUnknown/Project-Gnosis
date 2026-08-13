@@ -217,7 +217,7 @@ function MarkdownPane({ content }: { content: string }) {
                             </pre>
                         ),
                     table: ({ children }) => {
-                        // Extract headers to check if this is the Architecture Map table
+                        // Extract headers to check which table this is
                         const headers = React.Children.toArray(children).flatMap((child: any) => {
                             if (child.type === "thead") {
                                 return React.Children.toArray(child.props.children).flatMap((tr: any) => {
@@ -241,25 +241,27 @@ function MarkdownPane({ content }: { content: string }) {
                         });
 
                         const isArchMapTable = headers.includes("FILE") && headers.includes("IMPORTS") && headers.includes("RISK");
+                        const isCriticalRiskTable = headers.includes("FILE") && headers.includes("REASONS") && headers.length === 2;
+                        const isComplexFnsTable = headers.includes("COMPLEXITY") && headers.includes("FUNCTION") && headers.includes("FILE") && headers.length === 3;
+                        const isHighCouplingTable = headers.includes("FILE") && headers.includes("INTERNAL IMPORTS") && headers.includes("RISK") && headers.length === 3;
+
+                        const getCellText = (node: any): string => {
+                            if (!node) return "";
+                            if (typeof node === "string") return node;
+                            if (typeof node === "number") return String(node);
+                            if (Array.isArray(node)) return node.map(getCellText).join("");
+                            if (node.props) {
+                                if (node.props.children) {
+                                    return getCellText(node.props.children);
+                                }
+                            }
+                            return "";
+                        };
 
                         if (isArchMapTable) {
                             const tbody = React.Children.toArray(children).find((child: any) => child.type === "tbody");
                             if (tbody) {
                                 const trs = React.Children.toArray(tbody.props.children);
-                                
-                                const getCellText = (node: any): string => {
-                                    if (!node) return "";
-                                    if (typeof node === "string") return node;
-                                    if (typeof node === "number") return String(node);
-                                    if (Array.isArray(node)) return node.map(getCellText).join("");
-                                    if (node.props) {
-                                        if (node.props.children) {
-                                            return getCellText(node.props.children);
-                                        }
-                                    }
-                                    return "";
-                                };
-
                                 const rowsData = trs.map((tr: any, index) => {
                                     const tds = React.Children.toArray(tr.props.children);
                                     if (tds.length >= 3) {
@@ -340,6 +342,176 @@ function MarkdownPane({ content }: { content: string }) {
                                                         </tr>
                                                     );
                                                 })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                );
+                            }
+                        }
+
+                        if (isCriticalRiskTable) {
+                            const tbody = React.Children.toArray(children).find((child: any) => child.type === "tbody");
+                            if (tbody) {
+                                const trs = React.Children.toArray(tbody.props.children);
+                                const rowsData = trs.map((tr: any) => {
+                                    const tds = React.Children.toArray(tr.props.children);
+                                    if (tds.length >= 2) {
+                                        return {
+                                            file: getCellText(tds[0].props.children).trim(),
+                                            reasons: getCellText(tds[1].props.children).trim()
+                                        };
+                                    }
+                                    return null;
+                                }).filter(Boolean);
+
+                                return (
+                                    <div style={{ overflowX: "auto", margin: "24px 0" }}>
+                                        <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid rgba(20,0,255,0.15)", fontFamily: "'IBM Plex Mono', monospace", fontSize: "12px", background: "#FFFFFF" }}>
+                                            <thead>
+                                                <tr style={{ background: "rgba(20,0,255,0.04)", borderBottom: "1px solid rgba(20,0,255,0.12)", height: "40px" }}>
+                                                    {["FILE", "REASONS"].map((h) => (
+                                                        <th key={h} style={{
+                                                            padding: "10px 14px",
+                                                            textAlign: "left",
+                                                            color: "#1400FF",
+                                                            fontWeight: 600,
+                                                            letterSpacing: "0.08em",
+                                                            fontSize: "11px",
+                                                            textTransform: "uppercase",
+                                                            borderRight: h === "FILE" ? "1px solid rgba(20,0,255,0.08)" : "none"
+                                                        }}>
+                                                            {h}
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {rowsData.map((row: any) => (
+                                                    <tr key={row.file} style={{ borderBottom: "1px solid rgba(20,0,255,0.08)", height: "40px" }}>
+                                                        <td style={{ padding: "10px 14px", color: "#1400FF", fontWeight: 500, borderRight: "1px solid rgba(20,0,255,0.08)", whiteSpace: "nowrap", width: "220px" }}>
+                                                            {row.file}
+                                                        </td>
+                                                        <td style={{ padding: "10px 14px", color: "#0A0030", fontFamily: "'Inter', sans-serif" }}>
+                                                            {row.reasons}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                );
+                            }
+                        }
+
+                        if (isComplexFnsTable) {
+                            const tbody = React.Children.toArray(children).find((child: any) => child.type === "tbody");
+                            if (tbody) {
+                                const trs = React.Children.toArray(tbody.props.children);
+                                const rowsData = trs.map((tr: any) => {
+                                    const tds = React.Children.toArray(tr.props.children);
+                                    if (tds.length >= 3) {
+                                        return {
+                                            complexity: getCellText(tds[0].props.children).trim(),
+                                            function: getCellText(tds[1].props.children).trim(),
+                                            file: getCellText(tds[2].props.children).trim()
+                                        };
+                                    }
+                                    return null;
+                                }).filter(Boolean);
+
+                                return (
+                                    <div style={{ overflowX: "auto", margin: "24px 0" }}>
+                                        <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid rgba(20,0,255,0.15)", fontFamily: "'IBM Plex Mono', monospace", fontSize: "12px", background: "#FFFFFF" }}>
+                                            <thead>
+                                                <tr style={{ background: "rgba(20,0,255,0.04)", borderBottom: "1px solid rgba(20,0,255,0.12)", height: "40px" }}>
+                                                    {["COMPLEXITY", "FUNCTION", "FILE"].map((h) => (
+                                                        <th key={h} style={{
+                                                            padding: "10px 14px",
+                                                            textAlign: h === "COMPLEXITY" ? "center" : "left",
+                                                            color: "#1400FF",
+                                                            fontWeight: 600,
+                                                            letterSpacing: "0.08em",
+                                                            fontSize: "11px",
+                                                            textTransform: "uppercase",
+                                                            borderRight: h !== "FILE" ? "1px solid rgba(20,0,255,0.08)" : "none"
+                                                        }}>
+                                                            {h}
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {rowsData.map((row: any, idx) => (
+                                                    <tr key={idx} style={{ borderBottom: "1px solid rgba(20,0,255,0.08)", height: "40px" }}>
+                                                        <td style={{ padding: "10px 14px", textAlign: "center", color: "#FF2D2D", fontWeight: 600, borderRight: "1px solid rgba(20,0,255,0.08)", width: "120px" }}>
+                                                            {row.complexity}
+                                                        </td>
+                                                        <td style={{ padding: "10px 14px", color: "#0F00CC", fontWeight: 500, borderRight: "1px solid rgba(20,0,255,0.08)" }}>
+                                                            <code style={{ background: "rgba(20,0,255,0.06)", padding: "2px 6px", border: "1px solid rgba(20,0,255,0.1)", borderRadius: "0px" }}>{row.function}</code>
+                                                        </td>
+                                                        <td style={{ padding: "10px 14px", color: "#1400FF" }}>
+                                                            {row.file}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                );
+                            }
+                        }
+
+                        if (isHighCouplingTable) {
+                            const tbody = React.Children.toArray(children).find((child: any) => child.type === "tbody");
+                            if (tbody) {
+                                const trs = React.Children.toArray(tbody.props.children);
+                                const rowsData = trs.map((tr: any) => {
+                                    const tds = React.Children.toArray(tr.props.children);
+                                    if (tds.length >= 3) {
+                                        return {
+                                            file: getCellText(tds[0].props.children).trim(),
+                                            imports: getCellText(tds[1].props.children).trim(),
+                                            risk: getCellText(tds[2].props.children).trim().toUpperCase() as RiskLevel
+                                        };
+                                    }
+                                    return null;
+                                }).filter(Boolean);
+
+                                return (
+                                    <div style={{ overflowX: "auto", margin: "24px 0" }}>
+                                        <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid rgba(20,0,255,0.15)", fontFamily: "'IBM Plex Mono', monospace", fontSize: "12px", background: "#FFFFFF" }}>
+                                            <thead>
+                                                <tr style={{ background: "rgba(20,0,255,0.04)", borderBottom: "1px solid rgba(20,0,255,0.12)", height: "40px" }}>
+                                                    {["FILE", "INTERNAL IMPORTS", "RISK"].map((h) => (
+                                                        <th key={h} style={{
+                                                            padding: "10px 14px",
+                                                            textAlign: h === "FILE" ? "left" : "center",
+                                                            color: "#1400FF",
+                                                            fontWeight: 600,
+                                                            letterSpacing: "0.08em",
+                                                            fontSize: "11px",
+                                                            textTransform: "uppercase",
+                                                            borderRight: h !== "RISK" ? "1px solid rgba(20,0,255,0.08)" : "none"
+                                                        }}>
+                                                            {h}
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {rowsData.map((row: any) => (
+                                                    <tr key={row.file} style={{ borderBottom: "1px solid rgba(20,0,255,0.08)", height: "40px" }}>
+                                                        <td style={{ padding: "10px 14px", color: "#1400FF", fontWeight: 500, borderRight: "1px solid rgba(20,0,255,0.08)" }}>
+                                                            {row.file}
+                                                        </td>
+                                                        <td style={{ padding: "10px 14px", textAlign: "center", color: "rgba(10,10,26,0.7)", borderRight: "1px solid rgba(20,0,255,0.08)", width: "180px" }}>
+                                                            {row.imports}
+                                                        </td>
+                                                        <td style={{ padding: "10px 14px", textAlign: "center", width: "140px" }}>
+                                                            <RiskBadge level={row.risk} />
+                                                        </td>
+                                                    </tr>
+                                                ))}
                                             </tbody>
                                         </table>
                                     </div>
