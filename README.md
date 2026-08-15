@@ -1,4 +1,4 @@
-# Code Archaeology Agent
+# Project Gnosis
 
 > Give it a GitHub URL. Get back a complete architectural map of the codebase.
 
@@ -415,7 +415,7 @@ Generated onboarding document
 ### Environment Setup (Local Development)
 
 ```bash
-git clone https://github.com/PiUnknown/code-archaeology-agent
+git clone https://github.com/PiUnknown/Project-Gnosis
 cd code-archaeology-agent
 python -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
