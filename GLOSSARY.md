@@ -79,7 +79,7 @@ When an LLM generates plausible-sounding but incorrect information. Without RAG,
 ## Context Engineering
 
 **Context Window**  
-The maximum amount of text an LLM can process in one call. meta/llama-3.3-70b-instruct has 128,000 tokens. A large codebase can have millions of tokens. You cannot fit everything in context. RAG solves this by selecting only what is relevant.
+The maximum amount of text an LLM can process in one call. meta/llama-3.1-8b-instruct has 128,000 tokens. A large codebase can have millions of tokens. You cannot fit everything in context. RAG solves this by selecting only what is relevant.
 
 **Context Budget**  
 The amount of context window space you allocate per component. In Agent 6: system prompt uses ~500 tokens, retrieved code chunks use ~2000 tokens, dependency information uses ~500 tokens, leaving room for a 300-word explanation.
@@ -212,8 +212,8 @@ The serverless hosting platform for the React SPA frontend (accessible at `gnosi
 **NVIDIA NIM (Serverless Inference)**  
 The LLM inference provider for this project. NVIDIA NIM exposes hosted foundation models via an OpenAI-compatible REST API, so the standard `openai` Python SDK works with a custom `base_url`. Chosen for: generous free tier, no daily token cap, OpenAI-compatible interface requiring no proprietary SDK, and access to the same llama-3.3-70b model family used previously.
 
-**meta/llama-3.3-70b-instruct**  
-A 70-billion parameter open-source language model hosted on NVIDIA NIM. The "instruct" variant is fine-tuned to follow explicit instructions, making it well-suited for structured documentation generation. Accessed via NVIDIA's serverless endpoint at `https://integrate.api.nvidia.com/v1`.
+**meta/llama-3.1-8b-instruct**  
+The default 8-billion parameter open-source language model hosted on NVIDIA NIM. The "instruct" variant is fine-tuned to follow explicit instructions, making it well-suited for structured documentation generation. Selected for its rapid 5-15s response times on the serverless free tier (though larger models like `meta/llama-3.3-70b-instruct` are supported via runtime configuration). Accessed via NVIDIA's serverless endpoint at `https://integrate.api.nvidia.com/v1`.
 
 **OpenAI-Compatible API**  
 A REST API that accepts the same request and response format as OpenAI's `/v1/chat/completions` endpoint. Many inference providers (NVIDIA NIM, Together AI, Fireworks, Anyscale) expose this interface so that switching providers requires only changing `base_url` and `api_key` — no code changes to prompt construction or response parsing.

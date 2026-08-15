@@ -2,7 +2,7 @@
 
 > Give it a GitHub URL. Get back a complete architectural map of the codebase.
 
-**Status:** In Development (Agents 1–7 production-stable; Improving the file urgency ranking)
+**Status:** In Development (Agents 1–7 production-stable; all pipeline stages operational)
 **Codename:** Project Gnosis
 **Author:** Om Kumar Jha
 **GitHub:** [github.com/PiUnknown](https://github.com/PiUnknown)
@@ -124,12 +124,13 @@ Input: GitHub Repository URL
   |  Agent 7: Doc Gen     |
   |  Synthesize all output|
   |  Write onboarding.md  |
+  |  Write agent_context.md|
   |  Complexity JSON      |
   |  Graph HTML           |
   +-----------------------+
             |
             v
-Output: onboarding.md + complexity_report.json + dependency_graph.html
+Output: onboarding.md + agent_context.md + complexity_report.json + dependency_graph.html
 ```
 
 ### Shared State
@@ -181,8 +182,8 @@ Embedded vector database. Stores code chunks as embeddings with metadata (file p
 **sentence-transformers (all-MiniLM-L6-v2)**
 Embedding model that runs locally. Generates 384-dimensional vectors for code chunks. Free, no API required, fast on CPU. Upgrade path: `nomic-embed-code` for code-specialized embeddings in v2.
 
-**NVIDIA NIM (meta/llama-3.3-70b-instruct)**
-LLM inference via NVIDIA's serverless NIM API. Accessed through an OpenAI-compatible client pointed at the NVIDIA endpoint. Replaced Groq in August 2026. Model: `meta/llama-3.3-70b-instruct`. Temperature set to 0.1 for consistent, accurate explanations.
+**NVIDIA NIM (meta/llama-3.1-8b-instruct)**
+LLM inference via NVIDIA's serverless NIM API. Accessed through an OpenAI-compatible client pointed at the NVIDIA endpoint. Replaced Groq in August 2026. Default Model: `meta/llama-3.1-8b-instruct` (responds in 5-15s on the free tier; `meta/llama-3.3-70b-instruct` is supported via runtime environment override). Temperature set to 0.1 for consistent, accurate explanations.
 
 ### Infrastructure
 
@@ -324,7 +325,7 @@ code-archaeology-agent/
 │   ├── utils/
 │   │   ├── github_api.py        # GitHub REST API client
 │   │   ├── tree_sitter_utils.py # Language parser initialization
-│   │   ├── groq_client.py       # LLM API wrapper (now points to NVIDIA NIM)
+│   │   ├── nvidia_client.py     # NVIDIA NIM API client wrapper with retry logic
 │   │   ├── chunker.py           # AST-based code chunker
 │   │   ├── embedder.py          # sentence-transformers wrapper
 │   │   ├── retriever.py         # ChromaDB retrieval interface
@@ -383,9 +384,9 @@ Each phase has a concrete deliverable. Current production status is shown.
 | 2 | AST Parser Agent — symbol tables via tree-sitter | ✅ Production |
 | 3 | Dependency Graph Agent — NetworkX DiGraph, cycle detection | ✅ Production |
 | 4 | Complexity Scorer Agent — radon, risk levels | ✅ Production |
-| 5 | Code RAG Agent — ChromaDB + sentence-transformers | 🔧 Investigating (embedding stall) |
-| 6 | Explainability Agent — NVIDIA NIM LLM inference | ⏳ Pending Agent 5 |
-| 7 | Doc Generator Agent — synthesizes all output | ⏳ Pending Agent 5 |
+| 5 | Code RAG Agent — ChromaDB + sentence-transformers | ✅ Production |
+| 6 | Explainability Agent — NVIDIA NIM LLM inference | ✅ Production |
+| 7 | Doc Generator Agent — synthesizes all output | ✅ Production |
 | 8 | FastAPI Backend — async job queue, status polling | ✅ Production (Azure) |
 | 9 | React Frontend — three-screen SPA (Figma Make design) | ✅ Production (Vercel) |
 
@@ -486,26 +487,16 @@ For production on Azure, these are set via Azure App Service Application Setting
 
 ---
 
-## Current Investigation: Agent 5 Embedding Stall
+## Resolved Investigations: Agent 5 Embedding Stall
 
-**Observed behavior:** The pipeline progresses through Agents 1–4 cleanly. Agent 5 begins, chunks all files successfully (700 chunks from 41 files for a mid-sized repo), then stalls during the embedding phase with no further output.
+**Observed behavior:** The pipeline previously progressed cleanly through Agents 1–4, but Agent 5 stalled during the embedding phase on Azure App Service with no further output (e.g., when embedding ~700 chunks from 41 files).
 
-**Azure logs show:**
-```
-Chunking files...
-Files chunked: 41
-Total chunks: 700
-Embedding chunks...
-[no further output]
-```
+**Root Cause:** sentence-transformers' CPU-based embedding of all chunks in a single large batch ran into memory limits and request timeouts on constrained App Service plans due to large numpy allocations.
 
-**Working hypothesis:** sentence-transformers' CPU-based embedding of 700 chunks in a single batch may be running into Azure App Service memory limits or the default request timeout. The embedding model (`all-MiniLM-L6-v2`) runs locally with no API calls. At 700 chunks × 384 dimensions, the numpy allocations are substantial on a constrained App Service plan.
-
-**Planned fixes:**
-- Reduce batch size in `embedder.py` from 64 to 16 or 8
-- Add per-batch logging to confirm progress continues
-- Consider upgrading the Azure App Service plan (B2 or B3) for more RAM
-- Alternatively: investigate NVIDIA NIM or OpenAI embedding API as a replacement for local sentence-transformers
+**Resolution:**
+- Configured chunk processing in streaming batches (`STREAM_BATCH_SIZE = 128` in `code_rag.py`) to reduce peak memory pressure.
+- Added explicit garbage collection (`gc.collect()`) after loading and embedding each batch of chunks to release memory immediately.
+- Added per-batch logging in `embedder.py` to trace progress and ensure consistent throughput.
 
 ---
 
@@ -571,7 +562,7 @@ v1 runs agents sequentially. Agents 3, 4, and 5 could run in parallel (all depen
 ChromaDB: persistent, metadata filtering, easier API. FAISS: faster at scale, no metadata filtering. For repos under 50k chunks, ChromaDB is fine. FAISS becomes relevant at 500k+ chunks (very large monorepos).
 
 **NVIDIA NIM over Groq**
-Groq was the original inference provider (free tier, llama-3.3-70b-versatile). Migrated to NVIDIA NIM in August 2026. NVIDIA NIM provides the same OpenAI-compatible API surface, the same model family (llama-3.3-70b-instruct), and integrates cleanly with the existing OpenAI client pointed at the NVIDIA endpoint. The migration required only an endpoint URL change and an API key swap.
+Groq was the original inference provider (free tier, llama-3.3-70b-versatile). Migrated to NVIDIA NIM in August 2026. NVIDIA NIM provides the same OpenAI-compatible API surface, the same model family, and integrates cleanly with the existing OpenAI client pointed at the NVIDIA endpoint. To optimize performance and avoid cold-start delays on the free tier, the default model is configured as `meta/llama-3.1-8b-instruct` (5-15s response), with the option to use `meta/llama-3.3-70b-instruct` via runtime environment variables.
 
 **Azure App Service over Render**
 Render was the original deployment target. Migrated to Azure App Service in August 2026. Azure provides GitHub Actions integration, better uptime SLAs, and is the correct choice for a project targeting enterprise engineering teams. The main operational complexity introduced was the SQLite version issue (fixed with pysqlite3-binary).
@@ -605,7 +596,7 @@ All 7 agents working end-to-end. React frontend. Azure + Vercel deployment.
 
 **v1.5 — Embedding fix + language expansion**
 *Current status: Completed.*
-- Resolved Agent 5 embedding stalls on Azure by concurrency optimization and context size controls.
+- Resolved Agent 5 embedding stalls on Azure by introducing streaming batch processing (batch size 128) and explicit memory management.
 - Added Rust, Java, C, and C++ via tree-sitter grammars.
 - Added dynamic repository sizing tiers (Full, Warning, Sampled, and Rejection modes).
 - Added multi-threaded concurrent ingestion.

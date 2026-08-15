@@ -2,7 +2,7 @@
 
 **Codename:** Archaeon / Project Gnosis
 **Version:** 0.1.0
-**Status:** In Development (Agents 1–7 production-stable; Improving the file urgency ranking)
+**Status:** In Development (Agents 1–7 production-stable; all pipeline stages operational)
 **Author:** Om Kumar Jha
 **GitHub:** github.com/PiUnknown
 **Production URL:** gnosis.piunknown.dev
@@ -58,7 +58,7 @@ Generated onboarding document
 | Frontend | Vercel | gnosis.piunknown.dev |
 | Backend | Azure App Service (eastasia) | project-gnosis-api-xxxxxxxx.eastasia-01.azurewebsites.net |
 | CI/CD | GitHub Actions | Deploys to Azure on push to master |
-| LLM Inference | NVIDIA NIM Serverless | meta/llama-3.3-70b-instruct |
+| LLM Inference | NVIDIA NIM Serverless | meta/llama-3.1-8b-instruct |
 
 ### Deprecated Services
 - **Render** — previously hosted the backend. No longer used. Fully migrated to Azure App Service.
@@ -109,13 +109,13 @@ GitHub URL
 [Agent 6: Explainability Agent]
     - For each major component: retrieve context from ChromaDB
     - Build explanation prompt with dependency context
-    - Call NVIDIA NIM LLM (meta/llama-3.3-70b-instruct)
+    - Call NVIDIA NIM LLM (meta/llama-3.1-8b-instruct)
     - Generate natural language explanation per component
     |
     v
 [Agent 7: Doc Generator Agent]
     - Synthesize all outputs into structured Markdown
-    - Output: onboarding doc, complexity report, dependency map
+    - Output: onboarding doc (onboarding.md), agent context doc (agent_context.md), complexity report, dependency map
     |
     v
 Final Output: onboarding.md
@@ -287,11 +287,9 @@ sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
 ```
 And add `pysqlite3-binary` to `requirements.txt`.
 
-**Current issue (August 2026):**
-Agent 5 successfully chunks files but stalls during the embedding phase on Azure.
-Azure logs confirm: 700 chunks produced from 41 files, then no further output.
-Investigation ongoing: likely memory pressure or timeout during local model inference.
-Planned fix: reduce batch size from 64 to 8–16, add per-batch logging.
+**Resolved (August 2026):**
+Agent 5 previously stalled during the embedding phase on Azure due to memory limits/timeouts.
+This was resolved by processing chunks in streaming batches (`STREAM_BATCH_SIZE = 128`) and running garbage collection (`gc.collect()`) after loading and embedding each batch to reduce peak memory pressure.
 
 ---
 
@@ -301,7 +299,7 @@ Planned fix: reduce batch size from 64 to 8–16, add per-batch logging.
 **Output:** explanations dict written to state
 
 **LLM Provider:** NVIDIA NIM Serverless (migrated from Groq, August 2026)
-**Model:** `meta/llama-3.3-70b-instruct`
+**Model:** `meta/llama-3.1-8b-instruct` (default)
 **Client:** OpenAI-compatible client pointed at NVIDIA NIM endpoint
 **Temperature:** 0.1
 
@@ -326,7 +324,7 @@ Cap: 20 files per run (configurable via `max_explanations` parameter).
 ### Agent 7: Doc Generator Agent
 
 **Input:** full state object
-**Output:** final_doc (Markdown string)
+**Output:** final_doc (onboarding.md), agent_context_md (agent_context.md)
 
 **Generated document sections:**
 1. Header — repo name, generation date, GitHub URL, branch
@@ -444,7 +442,7 @@ Sticky download bar: three outlined-white buttons (onboarding.md, complexity_rep
 | Complexity analysis | radon (Python), custom AST walker (JS/TS) | radon is the standard for Python metrics |
 | Vector store | ChromaDB + pysqlite3-binary | Lightweight, local; pysqlite3-binary required on Azure |
 | Embeddings | sentence-transformers (all-MiniLM-L6-v2) | Free, runs locally, no API cost |
-| LLM inference | NVIDIA NIM (meta/llama-3.3-70b-instruct) | OpenAI-compatible API, same model family as previous Groq setup |
+| LLM inference | NVIDIA NIM (meta/llama-3.1-8b-instruct) | OpenAI-compatible API, responds faster on free tier than 70b |
 | Backend | FastAPI + Azure App Service | Async, clean; Azure for production reliability |
 | CI/CD | GitHub Actions | Auto-deploys to Azure on push to master |
 | Frontend | React 18 + Tailwind + shadcn/ui | Production SPA; Figma Make designed |
@@ -462,9 +460,9 @@ Sticky download bar: three outlined-white buttons (onboarding.md, complexity_rep
 | 2 | AST Parser Agent | Symbol tables for Python + JS/TS | ✅ Complete |
 | 3 | Dependency Graph Agent | NetworkX DiGraph + cycle detection | ✅ Complete |
 | 4 | Complexity Scorer Agent | Risk-scored complexity report | ✅ Complete |
-| 5 | Code RAG Agent | ChromaDB collection + retrieval interface | 🔧 Embedding stall (investigating) |
-| 6 | Explainability Agent | Per-file prose via NVIDIA NIM | ⏳ Pending Agent 5 |
-| 7 | Doc Generator Agent | Full onboarding.md synthesis | ⏳ Pending Agent 5 |
+| 5 | Code RAG Agent | ChromaDB collection + retrieval interface | ✅ Complete |
+| 6 | Explainability Agent | Per-file prose via NVIDIA NIM | ✅ Complete |
+| 7 | Doc Generator Agent | Full onboarding.md synthesis | ✅ Complete |
 | 8 | FastAPI Backend | Async job queue, polling, results API | ✅ Complete (Azure) |
 | 9 | React Frontend | Three-screen SPA, Figma Make design | ✅ Complete (Vercel) |
 
@@ -499,7 +497,7 @@ Sticky download bar: three outlined-white buttons (onboarding.md, complexity_rep
 | Private repos | Not supported in v1 | GitHub PAT support in v2 |
 | Generated code (minified JS) | Filtered | Skip by file size and extension |
 | Azure SQLite too old for ChromaDB | **Fixed** | pysqlite3-binary + sys.modules swap in main.py |
-| Agent 5 embedding stall on Azure | **Active investigation** | Reduce batch size; add per-batch logging; possible NVIDIA NIM embeddings |
+| Agent 5 embedding stall on Azure | **Fixed** | Switch to streaming batches of 128 and garbage collection to reduce memory pressure |
 | In-memory job store lost on restart | Known limitation | Redis upgrade in v2 |
 
 ---
@@ -511,7 +509,7 @@ Sticky download bar: three outlined-white buttons (onboarding.md, complexity_rep
 | Original | Groq | llama-3.3-70b-versatile | Free tier, OpenAI-compatible |
 | August 2026 | NVIDIA NIM | meta/llama-3.3-70b-instruct | Same OpenAI-compatible client, new endpoint + key |
 
-**Migration approach:** The `groq_client.py` wrapper was updated to point the OpenAI client at the NVIDIA NIM endpoint. The model name changed from `llama-3.3-70b-versatile` to `meta/llama-3.3-70b-instruct`. No other code changes were required. The agent prompt, temperature setting, max_tokens, and retry logic all carried over unchanged.
+**Migration approach:** The utility client was updated to point the OpenAI client at the NVIDIA NIM endpoint, implemented as `nvidia_client.py`. The default model was set to `meta/llama-3.1-8b-instruct` to avoid cold-start delays. No other changes to the agent prompts, temperature, or retry logic were required.
 
 ---
 
