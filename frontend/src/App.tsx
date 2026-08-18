@@ -1291,7 +1291,7 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
         <div style={{ display: 'flex', gap: 12, marginLeft: 24 }}>
           <DownloadBtn label="↓ ONBOARDING.MD" onClick={() => handleDownload(result?.onboarding_doc || '', 'onboarding.md')} />
           {result?.file_explanations_md && (
-            <DownloadBtn label="↓ FILE_EXPLANATIONS.MD" onClick={() => handleDownload(result.file_explanations_md, 'file_explanations.md')} />
+            <DownloadBtn label="↓ FILE_EXPLANATIONS.MD" onClick={() => handleDownload(result?.file_explanations_md || '', 'file_explanations.md')} />
           )}
           <DownloadBtn label="↓ COMPLEXITY_REPORT.JSON" onClick={() => handleDownload(result?.complexity_report_json || '{}', 'complexity_report.json', 'application/json')} />
           <DownloadBtn label="↓ DEPENDENCY_GRAPH.JSON" onClick={() => handleDownload(JSON.stringify(result?.dependency_rows || [], null, 2), 'dependency_graph.json', 'application/json')} />
