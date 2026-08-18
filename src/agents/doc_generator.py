@@ -210,22 +210,21 @@ def _build_architecture_map(state: ArchaeonState) -> str:
         return "## Architecture Map\n\n*No dependency data.*\n\n"
 
     top = sorted(in_deg.items(), key=lambda x: x[1], reverse=True)[:15]
-    max_deg = max(d for _, d in top) or 1
 
     lines = [
         "## Architecture Map",
         "",
         "Top files by dependency in-degree (how many other files import each one):",
         "",
-        "```",
+        "| File Path | In-Degree (Imports) | Risk Level |",
+        "| :--- | :---: | :---: |",
     ]
     for path, deg in top:
-        bar = "█" * int(deg / max_deg * 30)
         short = _short_path(path)
         cs = state.complexity_scores.get(path)
-        risk_tag = f" [{getattr(cs, 'risk_level', '?')}]" if cs else ""
-        lines.append(f"  {short:<45} {bar} {deg}{risk_tag}")
-    lines += ["```", ""]
+        risk = getattr(cs, "risk_level", "LOW")
+        lines.append(f"| `{short}` | {deg} | **{risk}** |")
+    lines.append("")
     return "\n".join(lines) + "\n"
 
 
@@ -271,8 +270,11 @@ def _build_tech_debt_report(state: ArchaeonState) -> str:
     # Circular dependencies
     if state.circular_deps:
         lines += ["### Circular Dependencies", ""]
-        for cycle in state.circular_deps[:10]:
-            lines.append("- " + " → ".join(f"`{_short_path(f)}`" for f in cycle))
+        lines.append("| Cycle # | Dependencies Cycle | Length |")
+        lines.append("| :---: | :--- | :---: |")
+        for i, cycle in enumerate(state.circular_deps[:10], 1):
+            cycle_str = " → ".join(f"`{_short_path(f)}`" for f in cycle) + f" → `{_short_path(cycle[0])}`"
+            lines.append(f"| {i} | {cycle_str} | {len(cycle)} |")
         lines.append("")
     else:
         lines += ["### Circular Dependencies", "", "No circular dependencies detected.", ""]
@@ -313,8 +315,10 @@ def _build_tech_debt_report(state: ArchaeonState) -> str:
     ]
     if parse_errors:
         lines += ["### Parse Errors", ""]
-        for fp in parse_errors[:10]:
-            lines.append(f"- `{_short_path(fp)}`")
+        lines.append("| ID | File Path | Status |")
+        lines.append("| :---: | :--- | :---: |")
+        for i, fp in enumerate(parse_errors[:10], 1):
+            lines.append(f"| {i} | `{_short_path(fp)}` | ⚠️ PARSE ERROR |")
         lines.append("")
 
     # High complexity functions — uses score.function_scores dict (actual field)
@@ -351,11 +355,13 @@ def _build_reading_order(state: ArchaeonState) -> str:
 
     order = state.topological_order or []
     if order:
+        lines.append("| Order | File Path | Risk Level |")
+        lines.append("| :---: | :--- | :---: |")
         for i, fp in enumerate(order[:25], 1):
             short = _short_path(fp)
             cs = state.complexity_scores.get(fp)
-            risk_tag = f" [{getattr(cs, 'risk_level', '?')}]" if cs else ""
-            lines.append(f"{i}. `{short}`{risk_tag}")
+            risk = getattr(cs, "risk_level", "LOW")
+            lines.append(f"| {i} | `{short}` | **{risk}** |")
         if len(order) > 25:
             lines.append(f"\n*...and {len(order) - 25} more files.*")
     else:
