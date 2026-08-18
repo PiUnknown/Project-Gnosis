@@ -70,6 +70,9 @@ export interface JobResult {
 
     /** onboarding.md — human-readable architectural documentation */
     final_doc?: string;
+    onboarding_doc?: string;
+    /** file_explanations.md — detailed technical explanations of files */
+    file_explanations_md?: string;
     /** agent_context.md — concise context optimised for AI coding agents */
     agent_context_md?: string;
     /** Raw JSON string for complexity_report.json */

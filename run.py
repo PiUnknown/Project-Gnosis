@@ -29,7 +29,9 @@ from src.orchestrator import (
     save_complexity_report,
     save_rag_info,
     save_explanations,
-    save_onboarding_doc
+    save_onboarding_doc,
+    save_file_explanations_doc,
+    save_file_explanations_json
 )
 
 load_dotenv()
@@ -140,6 +142,8 @@ Examples:
     save_complexity_report(state, args.output)
     save_rag_info(state, args.output)
     save_explanations(state, args.output)
+    save_file_explanations_doc(state, args.output)
+    save_file_explanations_json(state, args.output)
     doc_path = save_onboarding_doc(state, args.output)
 
     if not args.no_html:

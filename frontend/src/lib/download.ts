@@ -35,3 +35,8 @@ export function downloadDependencyGraph(graphData: object, repoName?: string): v
     const content = JSON.stringify(graphData, null, 2);
     triggerDownload(content, filename, "application/json;charset=utf-8");
 }
+
+export function downloadFileExplanations(content: string, repoName?: string): void {
+    const filename = repoName ? `${repoName}-file_explanations.md` : "file_explanations.md";
+    triggerDownload(content, filename, "text/markdown;charset=utf-8");
+}

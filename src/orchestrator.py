@@ -321,3 +321,33 @@ def save_onboarding_doc(state: ArchaeonState, output_dir: str = "./outputs") -> 
         fh.write(state.final_doc)
     print(f"[Orchestrator] onboarding.md            → {path}")
     return path
+
+
+def save_file_explanations_doc(state: ArchaeonState, output_dir: str = "./outputs") -> str:
+    """
+    Write state.file_explanations_doc to file_explanations.md.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    if not state.file_explanations_doc:
+        print("[Orchestrator] No file explanations document to save")
+        return ""
+    path = os.path.join(output_dir, "file_explanations.md")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(state.file_explanations_doc)
+    print(f"[Orchestrator] file_explanations.md     → {path}")
+    return path
+
+
+def save_file_explanations_json(state: ArchaeonState, output_dir: str = "./outputs") -> str:
+    """
+    Write state.file_explanations_json to file_explanations.json.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    if not state.file_explanations_json:
+        print("[Orchestrator] No file explanations JSON to save")
+        return ""
+    path = os.path.join(output_dir, "file_explanations.json")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(state.file_explanations_json)
+    print(f"[Orchestrator] file_explanations.json   → {path}")
+    return path

@@ -228,6 +228,23 @@ def _build_architecture_map(state: ArchaeonState) -> str:
     return "\n".join(lines) + "\n"
 
 
+import re
+
+def _first_sentence(text: str) -> str:
+    if not text:
+        return ""
+    # Split by standard sentence delimiters followed by space or end of string
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    return sentences[0] if sentences else ""
+
+
+def _first_two_sentences(text: str) -> str:
+    if not text:
+        return ""
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    return " ".join(sentences[:2]) if sentences else ""
+
+
 def _build_core_components(state: ArchaeonState) -> str:
     # Select files: prioritize explained files (which are high complexity/critical risk), then top-imported files
     in_deg = dict(state.dependency_graph.in_degree()) if state.dependency_graph else {}
@@ -261,19 +278,125 @@ def _build_core_components(state: ArchaeonState) -> str:
 
         lines.append(f"### `{short}`")
         lines.append(f"**Risk:** {risk} · **In-degree:** {deg} · **Avg CC:** {avg_cc:.1f}")
+
+        dep_lines = []
         if succs:
-            lines.append(f"**Depends on:** {', '.join(_short_path(s) for s in succs[:6])}")
+            dep_lines.append(f"**Depends on:** {', '.join(_short_path(s) for s in succs[:6])}")
         if preds:
-            lines.append(f"**Depended on by:** {', '.join(_short_path(p) for p in preds[:6])}")
+            dep_lines.append(f"**Depended on by:** {', '.join(_short_path(p) for p in preds[:6])}")
+        if dep_lines:
+            lines.append("> " + "  \n> ".join(dep_lines))
 
         explanation = state.explanations.get(fp)
         if explanation:
+            teaser = _first_two_sentences(explanation)
             lines.append("")
-            lines.append(explanation.strip())
+            lines.append(f"{teaser} *(full explanation in File Explanations document)*")
 
         lines.append("")
 
     return "\n".join(lines) + "\n"
+
+
+def _build_explanations_doc(state: ArchaeonState) -> str:
+    if not state.explanations:
+        return (
+            "## File Explanations\n\n"
+            "*No LLM explanations were generated for this run. "
+            "Submit with Skip LLM = OFF and a valid NVIDIA_API_KEY to generate this document.*\n"
+        )
+
+    # Sort by in-degree descending
+    in_deg = dict(state.dependency_graph.in_degree()) if state.dependency_graph else {}
+    explained_paths = list(state.explanations.keys())
+    explained_paths.sort(key=lambda fp: in_deg.get(fp, 0), reverse=True)
+
+    lines = ["## File Explanations", ""]
+
+    # 1. First sentence index at the top of file_explanations.md
+    lines.append("| File | One-line summary | Risk |")
+    lines.append("| :--- | :--- | :---: |")
+    for fp in explained_paths:
+        short = _short_path(fp)
+        cs = state.complexity_scores.get(fp)
+        risk = getattr(cs, "risk_level", "LOW")
+        explanation = state.explanations.get(fp, "")
+        one_liner = _first_sentence(explanation)
+        anchor = "exp-" + short.lower().replace("/", "-").replace(".", "-").replace("_", "-")
+        lines.append(f"| [`{short}`](#{anchor}) | {one_liner} | **{risk}** |")
+
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # 2. Detailed explanations
+    for fp in explained_paths:
+        short = _short_path(fp)
+        cs = state.complexity_scores.get(fp)
+        risk = getattr(cs, "risk_level", "LOW")
+        avg_cc = getattr(cs, "avg_complexity", 0.0) if cs else 0.0
+        deg = in_deg.get(fp, 0)
+        anchor = "exp-" + short.lower().replace("/", "-").replace(".", "-").replace("_", "-")
+        explanation = state.explanations.get(fp, "")
+
+        lines.append(f"### `{short}` <a id=\"{anchor}\"></a>")
+        lines.append(f"**Risk:** {risk} · **In-degree:** {deg} · **Avg CC:** {avg_cc:.1f}")
+
+        # Tiered detail: CRITICAL and HIGH risk files get full treatment (explanation + dependency context + specific risk reasons)
+        if risk in ("CRITICAL", "HIGH"):
+            reasons = getattr(cs, "risk_reasons", [])
+            if cs and reasons:
+                lines.append(f"**Risk Reasons:** {' · '.join(reasons)}")
+
+            preds = list(state.dependency_graph.predecessors(fp)) if state.dependency_graph else []
+            succs = list(state.dependency_graph.successors(fp)) if state.dependency_graph else []
+            dep_lines = []
+            if succs:
+                dep_lines.append(f"**Depends on:** {', '.join(_short_path(s) for s in succs[:6])}")
+            if preds:
+                dep_lines.append(f"**Depended on by:** {', '.join(_short_path(p) for p in preds[:6])}")
+            if dep_lines:
+                lines.append("> " + "  \n> ".join(dep_lines))
+
+            if explanation:
+                lines.append("")
+                lines.append(explanation.strip())
+        else:
+            # MEDIUM and LOW files get a compact card (2 sentences + risk badge only)
+            if explanation:
+                teaser = _first_two_sentences(explanation)
+                lines.append("")
+                lines.append(teaser.strip())
+
+        lines.append("")
+
+    return "\n".join(lines) + "\n"
+
+
+def generate_file_explanations_json(state: ArchaeonState) -> str:
+    """
+    Serialise state.explanations as a structured machine-readable JSON object.
+    Keyed by short (repo root relative) file path.
+    """
+    in_deg = dict(state.dependency_graph.in_degree()) if state.dependency_graph else {}
+    
+    report = {}
+    for fp, explanation in state.explanations.items():
+        cs = state.complexity_scores.get(fp)
+        risk = getattr(cs, "risk_level", "LOW")
+        deg = in_deg.get(fp, 0)
+        
+        # Get dependencies (successors)
+        succs = list(state.dependency_graph.successors(fp)) if state.dependency_graph else []
+        dependencies = [_short_path(s) for s in succs]
+        
+        report[_short_path(fp)] = {
+            "explanation": explanation,
+            "risk": risk,
+            "in_degree": deg,
+            "dependencies": dependencies
+        }
+    return json.dumps(report, indent=2, ensure_ascii=False)
 
 
 def _build_tech_debt_report(state: ArchaeonState) -> str:
@@ -870,5 +993,21 @@ def run(state: ArchaeonState) -> ArchaeonState:
     except Exception as exc:
         logger.error("Doc Generator: complexity report failed: %s", exc)
         state.complexity_report_json = "{}"
+
+    # ── file_explanations_doc ─────────────────────────────────────────────
+    try:
+        state.file_explanations_doc = _build_explanations_doc(state)
+        logger.info("Doc Generator: file_explanations.md complete (%d chars)", len(state.file_explanations_doc))
+    except Exception as exc:
+        logger.error("Doc Generator: file_explanations.md failed: %s", exc)
+        state.file_explanations_doc = "# File Explanations\n\n*Generation failed.*\n"
+
+    # ── file_explanations_json ────────────────────────────────────────────
+    try:
+        state.file_explanations_json = generate_file_explanations_json(state)
+        logger.info("Doc Generator: file_explanations.json complete")
+    except Exception as exc:
+        logger.error("Doc Generator: file_explanations.json failed: %s", exc)
+        state.file_explanations_json = "{}"
 
     return state

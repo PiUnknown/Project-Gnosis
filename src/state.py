@@ -60,6 +60,8 @@ class ArchaeonState:
 
     # --- Agent 7: Doc Generator ---
     final_doc: str = None
+    file_explanations_doc: Optional[str] = None
+    file_explanations_json: Optional[str] = None
     agent_context_md: str = None            # agent_context.md (AI coding agent-oriented)
     complexity_report_json: str = None
 

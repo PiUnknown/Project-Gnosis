@@ -16,10 +16,12 @@ import {
     downloadAgentContext,
     downloadComplexityReport,
     downloadDependencyGraph,
+    downloadFileExplanations,
 } from "../lib/download";
 
 type Tab =
     | "ONBOARDING DOC"
+    | "FILE EXPLANATIONS"
     | "AGENT CONTEXT"
     | "DEPENDENCY GRAPH"
     | "COMPLEXITY REPORT"
@@ -27,6 +29,7 @@ type Tab =
 
 const TABS: Tab[] = [
     "ONBOARDING DOC",
+    "FILE EXPLANATIONS",
     "AGENT CONTEXT",
     "DEPENDENCY GRAPH",
     "COMPLEXITY REPORT",
@@ -611,7 +614,14 @@ export default function ResultsPage() {
         if (!jobId) return;
         fetch(`${apiBase}/jobs/${jobId}/result`)
             .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-            .then(data => { setResult(data.result || data); setLoading(false); })
+            .then(data => {
+                const res = data.result || data;
+                if (res.onboarding_doc && !res.final_doc) {
+                    res.final_doc = res.onboarding_doc;
+                }
+                setResult(res);
+                setLoading(false);
+            })
             .catch(err => { setError(err.message); setLoading(false); });
     }, [jobId]);
 
@@ -729,6 +739,11 @@ export default function ResultsPage() {
                         ? <MarkdownPane content={result.final_doc} />
                         : <div style={{ padding: "40px", fontFamily: "'IBM Plex Mono', monospace", color: "rgba(10,10,26,0.40)", fontSize: "13px" }}>onboarding.md not available.</div>
                 )}
+                {activeTab === "FILE EXPLANATIONS" && (
+                    result.file_explanations_md
+                        ? <MarkdownPane content={result.file_explanations_md} />
+                        : <div style={{ padding: "40px", fontFamily: "'IBM Plex Mono', monospace", color: "rgba(10,10,26,0.40)", fontSize: "13px" }}>file_explanations.md not available.</div>
+                )}
                 {activeTab === "AGENT CONTEXT" && (
                     <AgentContextPane content={result.agent_context_md} />
                 )}
@@ -743,6 +758,9 @@ export default function ResultsPage() {
                 <div style={{ display: 'flex', gap: 12, marginLeft: 24 }}>
                     {result.final_doc && (
                         <button onClick={() => downloadOnboarding(result.final_doc!, repoName)} style={downloadBtnStyle}>↓ ONBOARDING.MD</button>
+                    )}
+                    {result.file_explanations_md && (
+                        <button onClick={() => downloadFileExplanations(result.file_explanations_md!, repoName)} style={downloadBtnStyle}>↓ FILE_EXPLANATIONS.MD</button>
                     )}
                     {result.agent_context_md && (
                         <button onClick={() => downloadAgentContext(result.agent_context_md!, repoName)} style={downloadBtnStyle}>↓ AGENT_CONTEXT.MD</button>
