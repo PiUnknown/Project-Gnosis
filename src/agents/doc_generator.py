@@ -229,23 +229,35 @@ def _build_architecture_map(state: ArchaeonState) -> str:
 
 
 def _build_core_components(state: ArchaeonState) -> str:
-    if state.dependency_graph is None:
-        return "## Core Components\n\n*Dependency graph not available.*\n\n"
+    # Select files: prioritize explained files (which are high complexity/critical risk), then top-imported files
+    in_deg = dict(state.dependency_graph.in_degree()) if state.dependency_graph else {}
+    top_imported = sorted(in_deg.items(), key=lambda x: x[1], reverse=True)
+    top_imported_paths = [fp for fp, d in top_imported if d > 0][:15]
 
-    in_deg = dict(state.dependency_graph.in_degree())
-    top = sorted(in_deg.items(), key=lambda x: x[1], reverse=True)
-    top = [(fp, d) for fp, d in top if d > 0][:20]
+    explained_paths = list(state.explanations.keys())
+
+    # Union of both lists, keeping order
+    combined_paths = []
+    seen = set()
+    for fp in explained_paths + top_imported_paths:
+        if fp not in seen:
+            seen.add(fp)
+            combined_paths.append(fp)
+
+    if not combined_paths:
+        return "## Core Components\n\n*No core components identified.*\n\n"
 
     lines = ["## Core Components", ""]
 
-    for fp, deg in top:
+    for fp in combined_paths:
         short = _short_path(fp)
         cs = state.complexity_scores.get(fp)
         risk = getattr(cs, "risk_level", "?") if cs else "?"
         avg_cc = getattr(cs, "avg_complexity", 0.0) if cs else 0.0
+        deg = in_deg.get(fp, 0)
 
-        preds = list(state.dependency_graph.predecessors(fp))
-        succs = list(state.dependency_graph.successors(fp))
+        preds = list(state.dependency_graph.predecessors(fp)) if state.dependency_graph else []
+        succs = list(state.dependency_graph.successors(fp)) if state.dependency_graph else []
 
         lines.append(f"### `{short}`")
         lines.append(f"**Risk:** {risk} · **In-degree:** {deg} · **Avg CC:** {avg_cc:.1f}")
