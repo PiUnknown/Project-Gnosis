@@ -618,3 +618,13 @@ This is a portfolio project built to demonstrate production-level AI engineering
 The problem is real. The architecture reflects how a senior engineer would actually approach it. Every design decision has a documented rationale. Every component can be explained in an interview. The project is deployed, publicly accessible at [gnosis.piunknown.dev](https://gnosis.piunknown.dev), with the backend hosted on **Microsoft Azure App Service** and the frontend hosted on **Vercel**.
 
 ---
+
+## License
+
+This project is **Dual-Licensed**:
+
+1. **Open Source (AGPL-3.0)**: For open-source developers, researchers, and hobbyists, the project is licensed under the [GNU Affero General Public License v3.0](LICENSE). Anyone is free to use, modify, and distribute this software, provided that any network service built on it also publishes its full source code.
+2. **Commercial License**: For companies and commercial entities who want to integrate Project Gnosis into closed-source commercial applications or run it without copyleft restrictions, commercial licenses are available. 
+
+To inquire about commercial licensing, please contact the author.
+
