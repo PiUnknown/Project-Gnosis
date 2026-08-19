@@ -13,7 +13,7 @@ const options = {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <PostHogProvider 
-      apiKey={import.meta.env.VITE_POSTHOG_PROJECT_TOKEN || "phc_vEgQtXumCU6NkhgdDiGm5J8MndG4wEXTMuUjXRNYorDP"}
+      apiKey={import.meta.env.VITE_POSTHOG_PROJECT_TOKEN || "phc_vEgQtXumCU6NkhgdDiGm5J8MndG4wEXTMuUjXR/YorDP"}
       options={options}
     >
       <App />
