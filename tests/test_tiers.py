@@ -163,11 +163,14 @@ class TestRepositoryTiers:
         state.analysis_mode = "Sampled"
         state.files_discovered = 1500
         state.files_analyzed = 300
+        state.file_manifest = []
 
         header = doc_generator._build_header(state)
-        assert "Sampled Analysis Mode" in header
-        assert "1500" in header
-        assert "300" in header
+        assert "Sampled" in header
+
+        summary = doc_generator._build_project_summary(state)
+        assert "1500" in summary
+        assert "300" in summary
 
     @patch("src.api.main.fetch_file_tree")
     @patch("src.api.main.fetch_repo_metadata")

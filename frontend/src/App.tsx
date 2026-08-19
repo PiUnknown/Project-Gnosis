@@ -241,12 +241,10 @@ function RiskDistributionBar({ riskDist }: { riskDist: Record<string, number> })
           <div style={{ width: `${pct(critical)}%`, background: '#1400FF' }} title={`CRITICAL: ${critical} files (${pct(critical).toFixed(1)}%)`} />
         )}
         {high > 0 && (
-          <div style={{ width: `${pct(high)}%`, background: 'transparent', borderRight: '1px solid #1400FF', position: 'relative' }} title={`HIGH: ${high} files (${pct(high).toFixed(1)}%)`}>
-            <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(45deg, #1400FF, #1400FF 2px, transparent 2px, transparent 8px)' }} />
-          </div>
+          <div style={{ width: `${pct(high)}%`, background: 'transparent', border: '1px solid #1400FF', boxSizing: 'border-box' }} title={`HIGH: ${high} files (${pct(high).toFixed(1)}%)`} />
         )}
         {medium > 0 && (
-          <div style={{ width: `${pct(medium)}%`, background: 'rgba(20,0,255,0.15)', borderRight: '1px solid rgba(20,0,255,0.20)' }} title={`MEDIUM: ${medium} files (${pct(medium).toFixed(1)}%)`} />
+          <div style={{ width: `${pct(medium)}%`, background: 'rgba(20,0,255,0.08)', border: '1px solid rgba(20,0,255,0.20)', boxSizing: 'border-box' }} title={`MEDIUM: ${medium} files (${pct(medium).toFixed(1)}%)`} />
         )}
         {low > 0 && (
           <div style={{ width: `${pct(low)}%`, background: 'transparent' }} title={`LOW: ${low} files (${pct(low).toFixed(1)}%)`} />
@@ -254,18 +252,19 @@ function RiskDistributionBar({ riskDist }: { riskDist: Record<string, number> })
       </div>
       <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
         {[
-          { label: 'CRITICAL', count: critical, color: '#1400FF', fill: true },
-          { label: 'HIGH', count: high, color: '#1400FF', border: true },
-          { label: 'MEDIUM', count: medium, color: 'rgba(20,0,255,0.15)' },
-          { label: 'LOW', count: low, color: 'rgba(10,10,26,0.35)' },
+          { label: 'CRITICAL', count: critical, background: '#1400FF', border: 'none' },
+          { label: 'HIGH', count: high, background: 'transparent', border: '1px solid #1400FF' },
+          { label: 'MEDIUM', count: medium, background: 'rgba(20,0,255,0.08)', border: '1px solid rgba(20,0,255,0.20)' },
+          { label: 'LOW', count: low, background: 'transparent', border: '1px solid rgba(20,0,255,0.15)' },
         ].map(item => (
           <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{
               width: 8,
               height: 8,
               display: 'inline-block',
-              background: item.fill ? item.color : item.border ? 'transparent' : item.color,
-              border: item.border ? `1px solid ${item.color}` : 'none'
+              background: item.background,
+              border: item.border,
+              boxSizing: 'border-box'
             }} />
             <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, color: 'rgba(10,10,26,0.65)' }}>{item.label}: {item.count}</span>
           </div>

@@ -74,6 +74,8 @@ FAKE_RESULT = {
     "repo": "testowner/testrepo",
     "branch": "main",
     "onboarding_doc": "# testrepo — Architecture Overview\n\nThis is the onboarding document.",
+    "file_explanations_md": "# File Explanations\n\nThis is the explanations document.",
+    "agent_context": "This is the agent context document.",
     "summary": {
         "total_files": 42,
         "language_breakdown": {"Python": 35, "JavaScript": 7},
