@@ -473,6 +473,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
             </div>
 
             <motion.button
+              data-umami-event="Analyze Repository Button Clicked"
               onClick={handleSubmit}
               disabled={loading}
               onMouseEnter={() => !loading && setHoverSubmit(true)}
