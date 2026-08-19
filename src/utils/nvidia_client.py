@@ -34,9 +34,9 @@ from typing import Optional
 
 NVIDIA_BASE_URL_DEFAULT = "https://integrate.api.nvidia.com/v1"
 
-# Option C: 8B model — 5-15s responses vs 60-270s for 70B on free tier.
+# Option C: 70B model — active and fast.
 # Override at runtime with NVIDIA_MODEL env var.
-NVIDIA_MODEL_DEFAULT = "meta/llama-3.1-8b-instruct"
+NVIDIA_MODEL_DEFAULT = "meta/llama-3.1-70b-instruct"
 
 MAX_RETRIES        = 2     # fail fast: 2 attempts max
 BASE_DELAY_SECONDS = 1.0
@@ -78,7 +78,8 @@ def get_client():
 
         _client = OpenAI(
             base_url=base_url,
-            api_key=api_key
+            api_key=api_key,
+            max_retries=0
         )
         print(f"  [NVIDIA] Client initialised → {base_url}")
         print(f"  [NVIDIA] Model  : {os.getenv('NVIDIA_MODEL', NVIDIA_MODEL_DEFAULT)}")
