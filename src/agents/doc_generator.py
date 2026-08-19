@@ -339,7 +339,7 @@ def _build_explanations_doc(state: ArchaeonState) -> str:
         anchor = "exp-" + short.lower().replace("/", "-").replace(".", "-").replace("_", "-")
         explanation = state.explanations.get(fp, "")
 
-        lines.append(f"### `{short}` <a id=\"{anchor}\"></a>")
+        lines.append(f"### `{short}`")
         lines.append(f"**Risk:** {risk} · **In-degree:** {deg} · **Avg CC:** {avg_cc:.1f}")
 
         # Tiered detail: CRITICAL and HIGH risk files get full treatment (explanation + dependency context + specific risk reasons)

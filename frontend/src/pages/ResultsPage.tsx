@@ -202,15 +202,42 @@ function MarkdownPane({ content }: { content: string }) {
                             marginBottom: "14px",
                         }}>{children}</h2>
                     ),
-                    h3: ({ children }) => (
-                        <h3 style={{
-                            fontFamily: "'IBM Plex Mono', monospace",
-                            fontSize: "12px",
-                            fontWeight: 600,
-                            color: "#0F00CC",
-                            marginTop: "24px",
-                            marginBottom: "8px",
-                        }}>{children}</h3>
+                    h3: ({ children }) => {
+                        // Extract text content recursively to build the id matching doc_generator.py format
+                        const extractText = (node: any): string => {
+                            if (!node) return "";
+                            if (typeof node === "string") return node;
+                            if (Array.isArray(node)) return node.map(extractText).join("");
+                            if (node.props && node.props.children) return extractText(node.props.children);
+                            return "";
+                        };
+                        const text = extractText(children);
+                        const cleanText = text.toLowerCase()
+                            .replace(/[^a-z0-9]+/g, "-")
+                            .replace(/(^-|-$)/g, "");
+                        const id = cleanText ? `exp-${cleanText}` : undefined;
+                        return (
+                            <h3 id={id} style={{
+                                fontFamily: "'IBM Plex Mono', monospace",
+                                fontSize: "12px",
+                                fontWeight: 600,
+                                color: "#0F00CC",
+                                marginTop: "24px",
+                                marginBottom: "8px",
+                            }}>{children}</h3>
+                        );
+                    },
+                    a: ({ href, children }) => (
+                        <a 
+                            href={href} 
+                            style={{ 
+                                color: "#1400FF", 
+                                textDecoration: "underline", 
+                                fontWeight: 500 
+                            }}
+                        >
+                            {children}
+                        </a>
                     ),
                     code: ({ inline, children, ...props }: any) =>
                         inline ? (
