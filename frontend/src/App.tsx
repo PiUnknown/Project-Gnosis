@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, useReducedMotion } from 'motion/react'
 const API_BASE = import.meta.env.VITE_API_URL || "";
+const APP_VERSION = "0.1.6";
 
 function useWindowWidth() {
   const [width, setWidth] = useState(
@@ -498,7 +499,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
           </div>
 
           <div style={{ position: 'fixed', bottom: 32, right: 96, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)' }}>
-            v0.1.5 · PiUnknown · Project Gnosis
+            v{APP_VERSION} · PiUnknown · Project Gnosis
           </div>
         </div>
 
@@ -1377,7 +1378,7 @@ function ErrorPage({ onHome }: { onHome: () => void }) {
       </div>
 
       <div style={{ position: 'fixed', bottom: 32, right: 96, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)' }}>
-        v0.1.5 · PiUnknown · Project Gnosis
+        v{APP_VERSION} · PiUnknown · Project Gnosis
       </div>
     </div>
   )
