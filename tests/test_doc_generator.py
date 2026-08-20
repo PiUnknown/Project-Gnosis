@@ -221,31 +221,10 @@ class TestHeader:
         result = _build_header(state)
         assert "testrepo" in result
 
-    def test_contains_github_url(self):
-        state = make_full_state()
-        result = _build_header(state)
-        assert "https://github.com/testowner/testrepo" in result
-
-    def test_contains_branch_name(self):
-        state = make_full_state()
-        result = _build_header(state)
-        assert "main" in result
-
-    def test_contains_year(self):
-        state = make_full_state()
-        result = _build_header(state)
-        assert str(datetime.now().year) in result
-
     def test_is_h1_markdown(self):
         state = make_full_state()
         result = _build_header(state)
         assert result.startswith("# ")
-
-    def test_none_branch_defaults_to_main(self):
-        state = make_full_state()
-        state.default_branch = None
-        result = _build_header(state)
-        assert "main" in result
 
 
 class TestProjectSummary:
@@ -516,7 +495,28 @@ class TestFooter:
     def test_contains_analysis_mode(self):
         state = make_full_state()
         result = _build_footer(state)
-        assert "mode" in result
+        assert "Mode" in result
+
+    def test_contains_github_url(self):
+        state = make_full_state()
+        result = _build_footer(state)
+        assert "https://github.com/testowner/testrepo" in result
+
+    def test_contains_branch_name(self):
+        state = make_full_state()
+        result = _build_footer(state)
+        assert "main" in result
+
+    def test_contains_year(self):
+        state = make_full_state()
+        result = _build_footer(state)
+        assert str(datetime.now().year) in result
+
+    def test_none_branch_defaults_to_main(self):
+        state = make_full_state()
+        state.default_branch = None
+        result = _build_footer(state)
+        assert "main" in result
 
 
 # -----------------------------------------------------------------------

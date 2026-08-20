@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, useReducedMotion } from 'motion/react'
 const API_BASE = import.meta.env.VITE_API_URL || "";
-const APP_VERSION = "0.0.6";
+const APP_VERSION = "0.0.8";
 
 function useWindowWidth() {
   const [width, setWidth] = useState(
@@ -346,14 +346,23 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
         }),
       })
       if (!res.ok) {
-        let msg = `Server error: ${res.status}`
+        let data: any = null
         try {
-          const data = await res.json()
-          if (data && data.detail) {
-            msg = data.detail
-          }
+          data = await res.json()
         } catch {
           // ignore parsing error
+        }
+
+        if (res.status === 409 && data && data.job_id) {
+          onSubmit(url, data.job_id)
+          return
+        }
+
+        let msg = `Server error: ${res.status}`
+        if (data && data.detail) {
+          msg = data.detail
+        } else if (data && data.message) {
+          msg = data.message
         }
         throw new Error(msg)
       }

@@ -165,8 +165,8 @@ class TestRepositoryTiers:
         state.files_analyzed = 300
         state.file_manifest = []
 
-        header = doc_generator._build_header(state)
-        assert "Sampled" in header
+        footer = doc_generator._build_footer(state)
+        assert "Sampled" in footer
 
         summary = doc_generator._build_project_summary(state)
         assert "1500" in summary
