@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, useReducedMotion } from 'motion/react'
 const API_BASE = import.meta.env.VITE_API_URL || "";
-const APP_VERSION = "0.0.8";
+const APP_VERSION = "0.1.0";
 
 function useWindowWidth() {
   const [width, setWidth] = useState(
@@ -19,7 +19,7 @@ function useWindowWidth() {
 
 type Screen = 'landing' | 'progress' | 'results' | 'error'
 type AgentStatus = 'queued' | 'running' | 'complete' | 'failed'
-type ResultsTab = 'onboarding' | 'explanations' | 'dependency' | 'complexity' | 'raw'
+type ResultsTab = 'onboarding' | 'agent_context' | 'explanations' | 'dependency' | 'complexity' | 'raw'
 
 interface AgentState {
   id: string
@@ -66,6 +66,7 @@ interface ComplexityRow {
 interface AnalysisResult {
   summary: ResultSummary
   onboarding_doc: string
+  agent_context?: string
   file_explanations_md?: string
   dependency_rows: DepRow[]
   reading_order: string[]
@@ -896,6 +897,7 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
 
   const TABS: { id: ResultsTab; label: string }[] = [
     { id: 'onboarding', label: 'ONBOARDING DOC' },
+    { id: 'agent_context', label: 'AGENT CONTEXT' },
     { id: 'explanations', label: 'FILE EXPLANATIONS' },
     { id: 'dependency', label: 'DEPENDENCY GRAPH' },
     { id: 'complexity', label: 'COMPLEXITY REPORT' },
@@ -1080,6 +1082,21 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
               {result?.onboarding_doc
                 ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.onboarding_doc}</ReactMarkdown>
                 : <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'rgba(10,10,26,0.40)', letterSpacing: '0.10em' }}>NO DOCUMENT GENERATED YET</p>
+              }
+            </div>
+          </div>
+        )}
+
+        {!loading && activeTab === 'agent_context' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: 'rgba(10,10,26,0.50)' }}>AGENT CONTEXT DOCUMENT</span>
+              <DownloadBtn label="↓ DOWNLOAD .MD" onLight onClick={() => handleDownload(result?.agent_context || '', 'agent_context.md')} />
+            </div>
+            <div className="gnosis-markdown" style={{ maxWidth: 760, margin: '0 auto' }}>
+              {result?.agent_context
+                ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.agent_context}</ReactMarkdown>
+                : <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'rgba(10,10,26,0.40)', letterSpacing: '0.10em' }}>NO AGENT CONTEXT GENERATED</p>
               }
             </div>
           </div>
@@ -1299,6 +1316,9 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.45)' }}>DOWNLOAD OUTPUTS</span>
         <div style={{ display: 'flex', gap: 12, marginLeft: 24 }}>
           <DownloadBtn label="↓ ONBOARDING.MD" onClick={() => handleDownload(result?.onboarding_doc || '', 'onboarding.md')} />
+          {result?.agent_context && (
+            <DownloadBtn label="↓ AGENT_CONTEXT.MD" onClick={() => handleDownload(result.agent_context || '', 'agent_context.md')} />
+          )}
           {result?.file_explanations_md && (
             <DownloadBtn label="↓ FILE_EXPLANATIONS.MD" onClick={() => handleDownload(result?.file_explanations_md || '', 'file_explanations.md')} />
           )}

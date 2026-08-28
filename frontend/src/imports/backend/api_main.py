@@ -216,6 +216,7 @@ def _serialize_state(state: ArchaeonState) -> dict:
             "risk_distribution": risk_dist,
         },
         "onboarding_doc": state.final_doc or "",
+        "agent_context": getattr(state, "agent_context", getattr(state, "agent_context_md", "")) or "",
         "dependency_rows": dep_rows[:10],
         "reading_order": reading_order,
         "complexity_rows": complexity_rows,
