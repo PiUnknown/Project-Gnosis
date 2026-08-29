@@ -160,6 +160,9 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     active_jobs: int
+    redis_connected: Optional[bool] = None
+    queue_mode: Optional[str] = None
+    queue_depth: Optional[int] = None
 
 
 class ErrorResponse(BaseModel):

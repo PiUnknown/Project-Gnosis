@@ -27,6 +27,7 @@ from pydantic import BaseModel, field_validator
 
 from src.api import pipeline_runner
 from src.api.job_store import store
+from src.api.queue import enqueue_analysis_job, get_queue_stats, _local_executor
 from src.utils.github_api import parse_github_url, fetch_repo_metadata, fetch_file_tree
 from src.utils.filters import should_include_file
 from src.api.models import (
@@ -51,8 +52,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Thread pool executor defined exactly where tests expect to mock it.
-_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+# Local fallback executor instance (referenced in test fixtures)
+_executor = _local_executor
 
 AGENT_PHASE_MAP = [
     ("01", "INGESTION", "ingestion"),
@@ -195,7 +196,7 @@ def analyze(req: UnifiedAnalyzeRequest):
         "github_token": github_token
     }
     job_id = store.create(req.repo_url, options)
-    _executor.submit(pipeline_runner.run, job_id, req.repo_url, options)
+    enqueue_analysis_job(job_id, req.repo_url, options, executor=_executor)
 
     return SubmitResponse(
         job_id=job_id,
@@ -295,10 +296,14 @@ def list_jobs():
 @app.get("/health", response_model=HealthResponse, tags=["Info"])
 @app.get("/api/health")
 def health():
+    stats = get_queue_stats()
     return HealthResponse(
         status="ok",
         version=VERSION,
-        active_jobs=store.active_count()
+        active_jobs=store.active_count(),
+        redis_connected=stats.get("redis_connected"),
+        queue_mode=stats.get("mode"),
+        queue_depth=stats.get("queue_depth")
     )
 
 @app.get("/")

@@ -42,13 +42,18 @@ Vercel
 React Frontend (gnosis.piunknown.dev)
   ↓
 Azure App Service (eastasia region)
-FastAPI Backend
-  ↓
+FastAPI Web API (project-gnosis-api)
+  ↓ (Enqueues job & writes initial state)
+Upstash Redis / Cloud Redis Instance (Persistent Job Store & RQ Queue)
+  ↓ (Pulls & executes async analysis pipeline)
+Background Worker Process (Render / Container Service)
 Pipeline Agents 1–7
   ↓
 GitHub API → tree-sitter → NetworkX → radon → ChromaDB → sentence-transformers → NVIDIA NIM
-  ↓
-Generated onboarding document
+  ↓ (Writes progress & final results)
+Upstash Redis
+  ↓ (Polled by FastAPI Web API)
+Frontend Visualization & Onboarding Reports
 ```
 
 ### Services
@@ -56,12 +61,11 @@ Generated onboarding document
 | Component | Service | URL / Identifier |
 |---|---|---|
 | Frontend | Vercel | gnosis.piunknown.dev |
-| Backend | Azure App Service (eastasia) | project-gnosis-api-xxxxxxxx.eastasia-01.azurewebsites.net |
-| CI/CD | GitHub Actions | Deploys to Azure on push to master |
+| Web Backend | Azure App Service (eastasia) | project-gnosis-api-chfxhsa2b4ajfvag.eastasia-01.azurewebsites.net |
+| Queue & Store | Upstash Redis | Cloud-managed serverless Redis (TLS) |
+| Worker | Render / Container Service | Dedicated RQ Background Worker (`python -m src.api.worker`) |
+| CI/CD | GitHub Actions | Builds & deploys to Azure on push to master |
 | LLM Inference | NVIDIA NIM Serverless | meta/llama-3.1-8b-instruct |
-
-### Deprecated Services
-- **Render** — previously hosted the backend. No longer used. Fully migrated to Azure App Service.
 
 ### CORS Configuration
 Production CORS allows `https://gnosis.piunknown.dev`.

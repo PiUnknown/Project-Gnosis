@@ -333,9 +333,11 @@ code-archaeology-agent/
 │   │   └── filters.py           # File exclusion logic
 │   │
 │   └── api/
-│       ├── main.py              # FastAPI application
+│       ├── main.py              # FastAPI web application
 │       ├── models.py            # Pydantic request/response models
-│       ├── job_store.py         # In-memory thread-safe job store
+│       ├── job_store.py         # Dual-backend job store (Redis + memory fallback)
+│       ├── queue.py             # RQ task queue manager & executor fallback
+│       ├── worker.py            # Standalone distributed background worker
 │       └── pipeline_runner.py   # API-specific pipeline runner
 │
 ├── frontend/                    # React 18 + TypeScript + Tailwind

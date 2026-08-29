@@ -232,3 +232,28 @@ A feature where the LLM is constrained to output JSON matching a specific schema
 
 **Explanation Cache**  
 A disk-based cache in `./explanation_cache/` that stores LLM-generated explanations keyed by `owner::repo::file_path::file_sha`. On re-runs of the same repo, cached explanations are loaded directly — zero API tokens spent. Cache entries are automatically invalidated when the file's Git SHA changes (i.e., when its content changes).
+
+---
+
+## Distributed Task Queue & Backend Infrastructure
+
+**Redis (Remote Dictionary Server)**  
+An open-source, in-memory key-value data structure store used as a database, cache, and message broker. In Project Gnosis, Redis serves as the central distributed state backbone: holding serialized job progress, phase metadata, and analysis results across all server and worker processes.
+
+**RQ (Redis Queue)**  
+A lightweight Python library that uses Redis to back job queues. It decouples long-running computational tasks from the HTTP request-response cycle: the FastAPI web server pushes an analysis job into the RQ queue (`gnosis_jobs`), and an independent worker process pulls and executes it asynchronously.
+
+**Distributed Task Worker**  
+A standalone OS process (`src/api/worker.py`) that continuously polls the Redis task queue for new repository analysis jobs. Running the CPU/RAM-heavy multi-agent pipeline (AST parsing, vector embeddings, graph creation) in worker processes protects the FastAPI web server from CPU starvation and Out-of-Memory (OOM) crashes.
+
+**Job Store (Dual-Backend: Persistent vs In-Memory)**  
+The abstraction responsible for tracking the lifecycle of all analysis jobs. In Project Gnosis, `JobStore` dynamically connects to Redis via `REDIS_URL` for persistent multi-node sharing in production, but seamlessly falls back to a thread-safe in-memory Python dictionary when running local offline tests without Redis.
+
+**Horizontal Scaling & Shared State**  
+The ability to run multiple web server instances behind a load balancer to handle increased user traffic. Because job states and queues live centrally in Redis rather than in single-server RAM, any load-balanced web instance can check job progress or retrieve results without 404 errors.
+
+**Upstash Redis**  
+A serverless, managed Redis provider offering zero-configuration cloud instances with automated TLS encryption. Used as the cloud message queue and job store connecting Azure App Service (FastAPI) with background worker instances.
+
+**Job Deduplication**  
+A mechanism where the backend checks if an analysis job for a given repository URL is already `queued` or `running` before enqueueing a duplicate, returning HTTP 409 Conflict with the active `job_id` to prevent redundant compute.
