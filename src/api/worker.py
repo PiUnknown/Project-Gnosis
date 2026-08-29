@@ -39,7 +39,41 @@ logger = logging.getLogger("gnosis_worker")
 DEFAULT_QUEUE_NAME = "gnosis_jobs"
 
 
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class WorkerHealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"status": "worker_active", "service": "gnosis-worker"}')
+
+    def log_message(self, format, *args):
+        # Silence HTTP access logs to keep worker output clean
+        pass
+
+
+def _start_health_server(port: int):
+    try:
+        server = HTTPServer(("0.0.0.0", port), WorkerHealthHandler)
+        logger.info(f"[Worker Health] Listening on port {port} for platform health checks.")
+        server.serve_forever()
+    except Exception as exc:
+        logger.warning(f"[Worker Health] Could not start health server on port {port}: {exc}")
+
+
 def start_worker():
+    # If a PORT is specified (e.g. Render Web Service), bind a lightweight health server
+    port_env = os.getenv("PORT")
+    if port_env:
+        try:
+            port = int(port_env)
+            health_thread = threading.Thread(target=_start_health_server, args=(port,), daemon=True)
+            health_thread.start()
+        except ValueError:
+            pass
+
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     queue_name = os.getenv("RQ_QUEUE_NAME", DEFAULT_QUEUE_NAME)
 
@@ -62,3 +96,4 @@ def start_worker():
 
 if __name__ == "__main__":
     start_worker()
+
