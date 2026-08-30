@@ -187,8 +187,8 @@ LLM inference via NVIDIA's serverless NIM API. Accessed through an OpenAI-compat
 
 ### Infrastructure
 
-**FastAPI**
-Async Python web framework. Exposes a POST endpoint `/analyze` that accepts `{ "repo_url": str, "options": {} }` and returns the generated document. Runs the agent pipeline as a background task via a thread pool executor.
+**FastAPI & Distributed Task Queue (Redis + RQ)**
+Async Python web framework. Exposes a POST endpoint `/analyze` that accepts `{ "repo_url": str, "options": {} }`, enqueues the job to Redis Queue (RQ), and returns a `job_id` for asynchronous status polling (`GET /jobs/{id}`). Heavy multi-agent pipeline workloads (AST parsing, vector embeddings, LLM calls) are executed out-of-process by dedicated background workers.
 
 **GitPython**
 Used to clone repositories programmatically. For public repos, the GitHub REST API is preferred (no disk I/O, faster).
@@ -211,10 +211,12 @@ Three screens: Landing → Job Progress (live polling) → Results (four-tab out
 
 | Layer | Service | Details |
 |---|---|---|
-| Frontend | Vercel | Auto-deploys from GitHub on push to main |
-| Backend | Azure App Service | eastasia region, auto-deploys via GitHub Actions |
-| Domain | gnosis.piunknown.dev | Points to Vercel; API calls proxied to Azure |
-| CI/CD | GitHub Actions | Build, test, and deploy on push to master |
+| Frontend | Vercel | Production SPA auto-deployed from GitHub on push to master |
+| Web API | Azure App Service | FastAPI backend (eastasia region), auto-deployed via GitHub Actions |
+| Queue & Store | Upstash Redis | Serverless persistent job store & RQ message broker (TLS) |
+| Background Worker | Render | Dedicated worker service (`python -m src.api.worker`) pulling and executing analysis jobs |
+| Domain | gnosis.piunknown.dev | Points to Vercel; API calls routed to Azure App Service |
+| CI/CD | GitHub Actions | Automated build, test suite (407 tests), and deployment on push to master |
 
 ### Domain Coverage
 
@@ -228,9 +230,9 @@ This project spans the following AI and engineering domains:
 | Graph Engineering | Dependency graph construction, cycle detection, centrality analysis, topological sort |
 | Static Code Analysis | tree-sitter AST parsing, cyclomatic complexity, coupling metrics, multi-language support |
 | LLM Orchestration | NVIDIA NIM API, prompt design, temperature control, batching, rate limit handling with exponential backoff |
-| Backend Engineering | FastAPI async pipeline, stateful multi-step request processing, background tasks, job store |
+| Backend Engineering | FastAPI async pipeline, distributed task queue with Redis & RQ, dual-backend job store, persistent state management |
 | Systems Design | Pipeline decomposition, shared state pattern, interface design between agents |
-| DevOps | Azure App Service deployment, GitHub Actions CI/CD, Vercel hosting, custom domain, CORS configuration |
+| DevOps | Azure App Service, Upstash Redis, Render worker, GitHub Actions CI/CD, Vercel hosting, custom domain, CORS |
 
 ---
 
