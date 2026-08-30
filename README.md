@@ -592,30 +592,30 @@ All job state lives in a module-level dict with a threading lock. Jobs are lost 
 - **Languages supported:** Python, JavaScript, TypeScript, Go, Rust, Java, C, C++
 - Explanation quality degrades for deeply obfuscated or minified code
 - The generated document is a snapshot: it does not update when the repo changes
-- Job state is in-memory and lost on server restart
 
 ---
 
 ## Roadmap
 
-**v1.0 — Core pipeline**
-All 7 agents working end-to-end. React frontend. Azure + Vercel deployment.
-*Current status: Completed.*
+**v1.0 — Distributed Production Release**
+*Current status: Completed & Live.*
+- All 7 archaeology agents working end-to-end.
+- Multi-language AST parsing support: Python, JavaScript, TypeScript, Go, Rust, Java, C, and C++ via Tree-Sitter grammars.
+- Dynamic repository sizing tiers (Full, Warning, Sampled, and Rejection modes).
+- Multi-threaded concurrent file ingestion (15 concurrent threads).
+- Streaming batch embeddings (SentenceTransformers + ChromaDB) with active memory cleanup.
+- Distributed Task Queue with Redis (Upstash) and dedicated background worker processes (Render).
+- Full-stack production deployment: React SPA on Vercel, FastAPI Web API on Azure App Service.
 
-**v1.5 — Embedding fix + language expansion**
-*Current status: Completed.*
-- Resolved Agent 5 embedding stalls on Azure by introducing streaming batch processing (batch size 128) and explicit memory management.
-- Added Rust, Java, C, and C++ via tree-sitter grammars.
-- Added dynamic repository sizing tiers (Full, Warning, Sampled, and Rejection modes).
-- Added multi-threaded concurrent ingestion.
+**v2.0 — Product & Integration Features**
+- Private repository support via GitHub App / OAuth authentication.
+- GitHub Action integration (auto-generate or update onboarding docs on PR or push).
+- Changelog-aware incremental analysis (analyzing only diffs since the last run).
+- Interactive Codebase Chat (asking follow-up questions to the RAG vector store).
+- Team collaboration (annotating and exporting generated documentation).
 
-**v2.0 — Product features**
-Private repo support, GitHub Action integration (auto-generate docs on push),
-changelog-aware analysis (what changed since last run), team collaboration (annotate the generated doc).
-Redis job store for multi-server deployment.
-
-**v3.0 — Agent loop**
-Replace sequential pipeline with an agent loop: the explainability agent notices gaps in its understanding, re-queries ChromaDB, and iterates until it has sufficient context. True agentic behavior.
+**v3.0 — Autonomous Agent Loop**
+- Replace the linear pipeline with an autonomous agent loop: the explainability agent detects gaps in its understanding, re-queries ChromaDB, and iterates until high confidence is achieved.
 
 ---
 
