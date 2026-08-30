@@ -391,7 +391,7 @@ Each phase has a concrete deliverable. Current production status is shown.
 | 5 | Code RAG Agent — ChromaDB + sentence-transformers | ✅ Production |
 | 6 | Explainability Agent — NVIDIA NIM LLM inference | ✅ Production |
 | 7 | Doc Generator Agent — synthesizes all output | ✅ Production |
-| 8 | FastAPI Backend — async job queue, status polling | ✅ Production (Azure) |
+| 8 | Distributed Backend & Queue — FastAPI (Azure) + Redis Queue (Upstash) + Worker (Render) | ✅ Production |
 | 9 | React Frontend — three-screen SPA (Figma Make design) | ✅ Production (Vercel) |
 
 ---
@@ -405,15 +405,19 @@ User
   ↓
 Vercel (gnosis.piunknown.dev)
 React Frontend
-  ↓
+  ↓ (POST /analyze)
 Azure App Service (eastasia)
-FastAPI Backend
-  ↓
-Pipeline Agents 1–7
-  ↓
-GitHub API → tree-sitter → NetworkX → radon → ChromaDB → sentence-transformers → NVIDIA NIM
-  ↓
-Generated onboarding document
+FastAPI Web API
+  ↓ (Enqueues job & writes initial state)
+Upstash Redis (Serverless TLS)
+Persistent Job Store & RQ Queue
+  ↓ (Pulls & processes job out-of-process)
+Render Background Worker
+Pipeline Agents 1–7 (GitHub API → AST → Graph → Radon → ChromaDB → NVIDIA NIM)
+  ↓ (Writes progress & final results)
+Upstash Redis
+  ↓ (Polled by FastAPI via GET /jobs/:id)
+Vercel Frontend Visualization
 ```
 
 ### Environment Setup (Local Development)
