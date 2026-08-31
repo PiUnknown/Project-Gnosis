@@ -143,7 +143,8 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
         # ---- Context assembly ------------------------------------------
         print(f"  [Agent 6] Assembling code context from ChromaDB...")
         t0           = time.time()
-        code_context = _assemble_code_context(file_path, retriever)
+        raw_code     = state.raw_contents.get(file_path, "")
+        code_context = _assemble_code_context(file_path, retriever, raw_content=raw_code)
         print(f"  [Agent 6] Context assembled in {time.time()-t0:.2f}s "
               f"({len(code_context)} chars)")
 
@@ -258,9 +259,13 @@ def _select_files_to_explain(state: ArchaeonState, max_count: int) -> list:
 # Context assembly
 # -----------------------------------------------------------------------
 
-def _assemble_code_context(file_path: str, retriever: CodeRetriever) -> str:
+def _assemble_code_context(file_path: str, retriever: CodeRetriever, raw_content: str = "") -> str:
     chunks = retriever.get_file_chunks(file_path)
     if not chunks:
+        if raw_content:
+            if len(raw_content) > MAX_CODE_CHARS:
+                return raw_content[:MAX_CODE_CHARS] + "\n... [truncated]"
+            return raw_content
         return ""
 
     module_chunks = [c for c in chunks if c['symbol_type'] == 'module']

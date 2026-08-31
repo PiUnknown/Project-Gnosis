@@ -21,7 +21,21 @@ from src.utils.chunker import make_chunks
 from src.utils.embedder import embed_texts
 from src.utils.retriever import make_collection_name, DEFAULT_CHROMA_DB_PATH
 
-CHUNKABLE_LANGUAGES = frozenset({'Python', 'JavaScript', 'TypeScript'})
+CHUNKABLE_LANGUAGES = frozenset({
+    'Python',
+    'JavaScript',
+    'TypeScript',
+    'Rust',
+    'C',
+    'C++',
+    'C/C++ Header',
+    'Go',
+    'Java',
+    'Kotlin',
+    'Ruby',
+    'PHP',
+    'Swift'
+})
 CHROMA_BATCH_SIZE = 500   # chunks per ChromaDB add() call
 
 _chroma_lock = threading.Lock()
