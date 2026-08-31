@@ -34,9 +34,9 @@ from typing import Optional
 
 NVIDIA_BASE_URL_DEFAULT = "https://integrate.api.nvidia.com/v1"
 
-# Option C: 70B model — active and fast.
-# Override at runtime with NVIDIA_MODEL env var.
-NVIDIA_MODEL_DEFAULT = "meta/llama-3.1-70b-instruct"
+# Active, fast model for code architecture onboarding.
+# Override at runtime with NVIDIA_MODEL env var if needed.
+NVIDIA_MODEL_DEFAULT = "meta/llama-3.2-11b-vision-instruct"
 
 MAX_RETRIES        = 2     # fail fast: 2 attempts max
 BASE_DELAY_SECONDS = 1.0
@@ -81,7 +81,7 @@ def get_client():
             api_key=api_key,
             max_retries=0
         )
-        print(f"  [NVIDIA] Client initialised → {base_url}")
+        print(f"  [NVIDIA] Client initialised -> {base_url}")
         print(f"  [NVIDIA] Model  : {os.getenv('NVIDIA_MODEL', NVIDIA_MODEL_DEFAULT)}")
         print(f"  [NVIDIA] Timeout: {PER_CALL_TIMEOUT_SECONDS}s per call")
 
@@ -121,7 +121,7 @@ def call_llm(
     for attempt in range(MAX_RETRIES):
         t_start = time.time()
         print(
-            f"  [NVIDIA] → attempt {attempt + 1}/{MAX_RETRIES}  "
+            f"  [NVIDIA] -> attempt {attempt + 1}/{MAX_RETRIES}  "
             f"model={resolved_model}  "
             f"prompt={prompt_chars}chars  "
             f"timeout={PER_CALL_TIMEOUT_SECONDS}s"
@@ -141,7 +141,7 @@ def call_llm(
                 getattr(response, 'usage', None), 'total_tokens', '?'
             )
             print(
-                f"  [NVIDIA] ✓ {elapsed:.1f}s  "
+                f"  [NVIDIA] [OK] {elapsed:.1f}s  "
                 f"tokens={tokens_used}  "
                 f"response={len(content or '')}chars"
             )
@@ -184,7 +184,7 @@ def call_llm(
 
             if is_retriable and attempt < MAX_RETRIES - 1:
                 print(
-                    f"  [NVIDIA] ✗ {label} on attempt {attempt + 1} "
+                    f"  [NVIDIA] [FAIL] {label} on attempt {attempt + 1} "
                     f"(after {elapsed:.1f}s). "
                     f"Retrying in {delay:.0f}s... | {exc_type}: {exc}"
                 )
@@ -193,7 +193,7 @@ def call_llm(
                 continue
 
             print(
-                f"  [NVIDIA] ✗ {label} — giving up after "
+                f"  [NVIDIA] [FAIL] {label} - giving up after "
                 f"{attempt + 1} attempt(s) ({elapsed:.1f}s). "
                 f"{exc_type}: {exc}"
             )

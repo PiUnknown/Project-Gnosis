@@ -294,8 +294,7 @@ def _build_explanations_doc(state: ArchaeonState) -> str:
         return (
             "## File Explanations\n\n"
             "**SKIPPED AI EXPLANATIONS**  \n"
-            "AI EXPLANATIONS WERE SKIPPED FOR THIS RUN. RE-RUN ANALYSIS WITH SKIP LLM DISABLED TO GENERATE FILE WALKTHROUGHS.\n\n"
-            + _build_footer(state)
+            "AI EXPLANATIONS WERE SKIPPED FOR THIS RUN. RE-RUN ANALYSIS WITH SKIP LLM DISABLED TO GENERATE FILE WALKTHROUGHS.\n"
         )
 
     # Sort by in-degree descending
@@ -362,7 +361,7 @@ def _build_explanations_doc(state: ArchaeonState) -> str:
 
         lines.append("")
 
-    return "\n".join(lines) + "\n" + _build_footer(state)
+    return "\n".join(lines) + "\n"
 
 
 def generate_file_explanations_json(state: ArchaeonState) -> str:

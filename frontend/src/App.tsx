@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, useReducedMotion } from 'motion/react'
 const API_BASE = import.meta.env.VITE_API_URL || "";
-const APP_VERSION = "1.0.4";
+const APP_VERSION = "1.0.5";
 
 function useWindowWidth() {
   const [width, setWidth] = useState(
@@ -320,7 +320,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
 function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => void }) {
   const [url, setUrl] = useState('')
   const [maxExplanations, setMaxExplanations] = useState(20)
-  const [skipLlm, setSkipLlm] = useState(true)
+  const [skipLlm, setSkipLlm] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [focused, setFocused] = useState(false)
