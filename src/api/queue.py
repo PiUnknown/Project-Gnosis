@@ -22,8 +22,8 @@ def get_redis_connection():
     """
     Returns a Redis connection instance if REDIS_URL is configured and reachable.
     """
-    redis_url = os.getenv("REDIS_URL")
-    if not redis_url:
+    redis_url = (os.getenv("REDIS_URL") or "").strip()
+    if not redis_url or not any(redis_url.startswith(scheme) for scheme in ("redis://", "rediss://", "unix://")):
         return None
     try:
         import redis

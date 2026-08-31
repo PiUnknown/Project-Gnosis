@@ -1,10 +1,33 @@
+import logging
 import requests
 import time
 from typing import Optional
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
+
+logger = logging.getLogger(__name__)
 
 GITHUB_API_BASE = "https://api.github.com"
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com"
+
+
+def _create_raw_session() -> requests.Session:
+    """Create a persistent HTTP session with connection pooling and exponential retries."""
+    session = requests.Session()
+    retries = Retry(
+        total=5,
+        backoff_factor=0.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+        raise_on_status=False
+    )
+    adapter = HTTPAdapter(max_retries=retries, pool_connections=25, pool_maxsize=25)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
+_RAW_SESSION = _create_raw_session()
 
 
 def parse_github_url(url: str) -> tuple[str, str]:
@@ -46,7 +69,10 @@ def fetch_repo_metadata(owner: str, repo: str, token: Optional[str] = None) -> d
     This is 1 API call. Uses the authenticated token if provided.
     """
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}"
-    response = requests.get(url, headers=_get_headers(token))
+    try:
+        response = _RAW_SESSION.get(url, headers=_get_headers(token), timeout=15.0)
+    except Exception as exc:
+        raise ConnectionError(f"Failed to connect to GitHub API: {exc}")
 
     if response.status_code == 404:
         raise ValueError(f"Repository not found: {owner}/{repo}. Check the URL and make sure the repo is public.")
@@ -76,7 +102,10 @@ def fetch_file_tree(
     [{"path": str, "type": "blob"|"tree", "size": int, "sha": str}, ...]
     """
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
-    response = requests.get(url, headers=_get_headers(token))
+    try:
+        response = _RAW_SESSION.get(url, headers=_get_headers(token), timeout=25.0)
+    except Exception as exc:
+        raise ConnectionError(f"Failed to fetch file tree from GitHub: {exc}")
 
     if response.status_code == 409:
         raise ValueError(f"Repository {owner}/{repo} is empty.")
@@ -98,7 +127,9 @@ def fetch_file_content_raw(
     owner: str,
     repo: str,
     branch: str,
-    path: str
+    path: str,
+    session: Optional[requests.Session] = None,
+    timeout: float = 15.0
 ) -> Optional[str]:
     """
     Fetch a single file's content via raw.githubusercontent.com.
@@ -109,29 +140,20 @@ def fetch_file_content_raw(
     generous limit and requires no authentication for public repos.
     This means we can fetch 300 files without needing a token.
 
-    Returns decoded string content, or None if the file is binary or not found.
+    Returns decoded string content, or None if the file is binary, not found, or fails.
     """
     url = f"{GITHUB_RAW_BASE}/{owner}/{repo}/{branch}/{path}"
-    response = requests.get(url)
-
-    if response.status_code == 404:
-        response.close()
-        del response
-        return None
-    if response.status_code != 200:
-        response.close()
-        del response
-        return None
-
-    # If the response is binary (images, compiled files), decoding will fail
+    sess = session or _RAW_SESSION
     try:
+        response = sess.get(url, timeout=timeout)
+        if response.status_code != 200:
+            response.close()
+            return None
         text = response.text
         response.close()
-        del response
         return text
-    except Exception:
-        response.close()
-        del response
+    except Exception as exc:
+        logger.warning("Transient failure fetching raw file '%s': %s", path, exc)
         return None
 
 
@@ -144,10 +166,10 @@ def fetch_file_contents_batch(
 ) -> dict[str, str]:
     """
     Fetch content for multiple files concurrently using a ThreadPoolExecutor.
-    Uses raw.githubusercontent.com for all fetches (no API rate limit impact).
+    Uses raw.githubusercontent.com for all fetches with pooled retries.
 
     Returns dict: { path -> content_string }
-    Binary files and 404s are excluded from the result.
+    Binary files, 404s, and failed downloads are excluded from the result.
     """
     import concurrent.futures
 
@@ -156,19 +178,26 @@ def fetch_file_contents_batch(
     if total == 0:
         return results
 
-    max_workers = min(15, total)
+    max_workers = min(12, total)
 
     def fetch_one(p):
-        return p, fetch_file_content_raw(owner, repo, branch, p)
+        try:
+            return p, fetch_file_content_raw(owner, repo, branch, p, session=_RAW_SESSION)
+        except Exception as exc:
+            logger.warning("Error fetching %s in worker thread: %s", p, exc)
+            return p, None
 
     print(f"  Fetching {total} file contents concurrently (max {max_workers} threads)...")
     completed = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(fetch_one, path): path for path in paths}
         for future in concurrent.futures.as_completed(futures):
-            path, content = future.result()
-            if content is not None:
-                results[path] = content
+            try:
+                path, content = future.result()
+                if content is not None:
+                    results[path] = content
+            except Exception as exc:
+                logger.warning("Worker future result failed: %s", exc)
             completed += 1
             if completed % 10 == 0 or completed == total:
                 print(f"\r  Fetched {completed}/{total} files...", end="", flush=True)
