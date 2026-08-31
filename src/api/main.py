@@ -40,7 +40,7 @@ from src.api.models import (
     SubmitResponse
 )
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 app = FastAPI()
 

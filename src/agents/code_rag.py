@@ -81,6 +81,7 @@ def run(state: ArchaeonState) -> ArchaeonState:
     lang_dist = {}
 
     STREAM_BATCH_SIZE = 128  # Keep memory low by processing 128 chunks at a time
+    seen_collection_ids = set()
 
     for idx, (file_path, symbol_table) in enumerate(state.symbol_tables.items()):
         print(f"\r  Processing files: {idx + 1}/{total_files}", end="", flush=True)
@@ -127,7 +128,7 @@ def run(state: ArchaeonState) -> ArchaeonState:
 
             texts = [chunk.content for chunk in batch_to_process]
             embeddings = embed_texts(texts)
-            ids = [c.chunk_id for c in batch_to_process]
+            ids = _disambiguate_ids(batch_to_process, seen_collection_ids)
             documents = [c.content for c in batch_to_process]
             metadatas = [_to_metadata(c) for c in batch_to_process]
 
@@ -154,7 +155,7 @@ def run(state: ArchaeonState) -> ArchaeonState:
     if current_batch:
         texts = [chunk.content for chunk in current_batch]
         embeddings = embed_texts(texts)
-        ids = [c.chunk_id for c in current_batch]
+        ids = _disambiguate_ids(current_batch, seen_collection_ids)
         documents = [c.content for c in current_batch]
         metadatas = [_to_metadata(c) for c in current_batch]
 
@@ -197,6 +198,23 @@ def run(state: ArchaeonState) -> ArchaeonState:
 
     _print_summary(type_dist, lang_dist, total_stored)
     return state
+
+
+def _disambiguate_ids(batch_chunks: list, seen_collection_ids: set) -> list:
+    """
+    Ensure every chunk ID inserted into ChromaDB is globally unique across batches.
+    If an ID collides, appends an incremental counter until unique.
+    """
+    unique_ids = []
+    for c in batch_chunks:
+        candidate_id = c.chunk_id
+        suffix = 1
+        while candidate_id in seen_collection_ids:
+            candidate_id = f"{c.chunk_id}_{suffix}"
+            suffix += 1
+        seen_collection_ids.add(candidate_id)
+        unique_ids.append(candidate_id)
+    return unique_ids
 
 
 def _to_metadata(chunk) -> dict:

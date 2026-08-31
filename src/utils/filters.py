@@ -36,6 +36,16 @@ EXCLUDED_FILENAMES = {
     "poetry.lock", "Pipfile.lock", "Cargo.lock",
     "go.sum", "go.mod",
     ".DS_Store", "Thumbs.db",
+    "bundle.js", "chunk.js",
+}
+
+# -----------------------------------------------------------------------
+# Minified & bundle file patterns to always skip
+# -----------------------------------------------------------------------
+EXCLUDED_SUFFIXES = {
+    ".min.js", ".min.mjs", ".min.cjs",
+    ".min.css", ".bundle.js", ".bundle.min.js",
+    ".chunk.js",
 }
 
 # -----------------------------------------------------------------------
@@ -51,8 +61,9 @@ def should_include_file(path: str, size_bytes: int) -> bool:
     Exclusion priority:
     1. Directory exclusion (fastest, checked first)
     2. Filename exclusion
-    3. Extension check
-    4. File size check
+    3. Minified / bundle suffix exclusion
+    4. Extension check
+    5. File size check
     """
     p = Path(path)
 
@@ -69,11 +80,17 @@ def should_include_file(path: str, size_bytes: int) -> bool:
     if p.name in EXCLUDED_FILENAMES:
         return False
 
-    # 3. Check extension
+    # 3. Check minified / bundle suffix
+    name_lower = p.name.lower()
+    for suffix in EXCLUDED_SUFFIXES:
+        if name_lower.endswith(suffix):
+            return False
+
+    # 4. Check extension
     if p.suffix.lower() not in SUPPORTED_EXTENSIONS:
         return False
 
-    # 4. Check size
+    # 5. Check size
     if size_bytes > MAX_FILE_SIZE_BYTES:
         return False
 

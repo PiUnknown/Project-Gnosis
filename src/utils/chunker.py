@@ -67,7 +67,19 @@ def make_chunks(
         if chunk:
             chunks.append(chunk)
 
-    return chunks
+    # Disambiguate any duplicate chunk IDs (e.g. identical symbol names on the same line)
+    seen_ids = {}
+    unique_chunks = []
+    for chunk in chunks:
+        base_id = chunk.chunk_id
+        if base_id in seen_ids:
+            seen_ids[base_id] += 1
+            chunk.chunk_id = f"{base_id}_{seen_ids[base_id]}"
+        else:
+            seen_ids[base_id] = 0
+        unique_chunks.append(chunk)
+
+    return unique_chunks
 
 
 # -----------------------------------------------------------------------

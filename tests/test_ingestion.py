@@ -57,6 +57,13 @@ class TestShouldIncludeFile:
     def test_includes_yaml(self):
         assert should_include_file(".github/workflows/ci.yml", 800) is True
 
+    def test_excludes_minified_and_bundle_files(self):
+        assert should_include_file("static/js/app.min.js", 5000) is False
+        assert should_include_file("dist/bundle.js", 8000) is False
+        assert should_include_file("vendor/lib.bundle.min.js", 4000) is False
+        assert should_include_file("resources/static/chunk.js", 2000) is False
+        assert should_include_file("assets/styles.min.css", 1500) is False
+
 
 class TestDetectLanguage:
 

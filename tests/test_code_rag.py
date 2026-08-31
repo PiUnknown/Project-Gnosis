@@ -278,6 +278,26 @@ class TestChunker:
         assert "validate_user" in fn_chunk.content
         assert "src/auth.py" in fn_chunk.content
 
+    def test_duplicate_symbol_names_on_same_line_disambiguated(self):
+        # Simulated minified or single-line declarations sharing same name and line_start
+        st = make_symbol_table(
+            "src/bundle.js",
+            language="JavaScript",
+            functions=[
+                make_function("render", line_start=1, line_end=1),
+                make_function("render", line_start=1, line_end=1),
+                make_function("render", line_start=1, line_end=1),
+            ]
+        )
+        chunks = make_chunks("src/bundle.js", "JavaScript", "function render(){} function render(){} function render(){}", st)
+        ids = [c.chunk_id for c in chunks if c.symbol_type == "function"]
+        assert len(ids) == 3
+        # All IDs must be unique
+        assert len(set(ids)) == 3
+        assert ids[0].endswith("::render::1::function")
+        assert ids[1].endswith("::render::1::function_1")
+        assert ids[2].endswith("::render::1::function_2")
+
     def test_function_line_numbers_on_chunk(self):
         func = make_function("validate_user", line_start=5, line_end=8)
         st = make_symbol_table("src/a.py", functions=[func])
@@ -676,3 +696,31 @@ class TestCodeRAGAgent:
 
         # Should complete without error
         assert result.chroma_collection_name is not None
+
+    def test_duplicate_ids_across_files_handled_in_code_rag(self, mock_embed, ephemeral_chroma):
+        # Simulate two files producing overlapping chunk IDs or multiple functions on same line
+        st1 = make_symbol_table("src/file1.js", "JavaScript", functions=[
+            make_function("handler", 1, 1),
+            make_function("handler", 1, 1),
+            make_function("handler", 1, 1),
+        ])
+        st2 = make_symbol_table("src/file2.js", "JavaScript", functions=[
+            make_function("handler", 1, 1),
+            make_function("handler", 1, 1),
+        ])
+        state = self._make_state({"src/file1.js": st1, "src/file2.js": st2})
+        state.raw_contents["src/file1.js"] = "function handler(){}"
+        state.raw_contents["src/file2.js"] = "function handler(){}"
+
+        from src.agents import code_rag
+        import chromadb
+        with patch.object(chromadb, "PersistentClient", return_value=ephemeral_chroma):
+            result = code_rag.run(state)
+
+        # Must successfully insert into ChromaDB without raising DuplicateIDError
+        assert result.chroma_collection_name is not None
+        retriever = CodeRetriever(result.chroma_collection_name, _client=ephemeral_chroma)
+        chunks1 = retriever.get_file_chunks("src/file1.js")
+        chunks2 = retriever.get_file_chunks("src/file2.js")
+        assert len(chunks1) == 3
+        assert len(chunks2) == 2
