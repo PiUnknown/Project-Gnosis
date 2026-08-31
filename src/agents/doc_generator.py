@@ -293,8 +293,8 @@ def _build_explanations_doc(state: ArchaeonState) -> str:
     if not state.explanations:
         return (
             "## File Explanations\n\n"
-            "**Skipped AI Explanations**  \n"
-            "Want file walkthroughs? Just turn on AI explanations and run the analysis again.\n\n"
+            "**SKIPPED AI EXPLANATIONS**  \n"
+            "AI EXPLANATIONS WERE SKIPPED FOR THIS RUN. RE-RUN ANALYSIS WITH SKIP LLM DISABLED TO GENERATE FILE WALKTHROUGHS.\n\n"
             + _build_footer(state)
         )
 
@@ -836,8 +836,8 @@ def _ac_ai_explanations(state: ArchaeonState) -> str:
 
     if not state.explanations:
         lines.append(
-            "**Skipped AI Explanations**  \n"
-            "Want file walkthroughs? Just turn on AI explanations and run the analysis again."
+            "**SKIPPED AI EXPLANATIONS**  \n"
+            "AI EXPLANATIONS WERE SKIPPED FOR THIS RUN. RE-RUN ANALYSIS WITH SKIP LLM DISABLED TO GENERATE FILE WALKTHROUGHS."
         )
         lines.append("")
         return "\n".join(lines) + "\n"

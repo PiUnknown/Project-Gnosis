@@ -40,7 +40,7 @@ from src.api.models import (
     SubmitResponse
 )
 
-VERSION = "1.0.3"
+VERSION = "1.0.4"
 
 app = FastAPI()
 
@@ -243,8 +243,14 @@ def get_job_result(job_id: str):
 @app.get("/api/jobs/{job_id}/result")
 def get_api_job_result(job_id: str):
     job = store.get(job_id)
-    if not job or job.status != "complete":
-        return {"error": "not ready"}
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status == "failed":
+        raise HTTPException(status_code=500, detail=f"Job failed: {job.error}")
+    if job.status in ("queued", "running"):
+        return JSONResponse(status_code=202, content={"status": job.status, "error": "not ready"})
+    if job.result is None:
+        return JSONResponse(status_code=202, content={"status": "processing", "error": "not ready"})
     return job.result
 
 @app.delete("/jobs/{job_id}", tags=["Jobs"])

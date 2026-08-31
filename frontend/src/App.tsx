@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, useReducedMotion } from 'motion/react'
 const API_BASE = import.meta.env.VITE_API_URL || "";
-const APP_VERSION = "1.0.3";
+const APP_VERSION = "1.0.4";
 
 function useWindowWidth() {
   const [width, setWidth] = useState(
@@ -883,16 +883,70 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
   const [activeTab, setActiveTab] = useState<ResultsTab>('onboarding')
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState('')
   const [fileFilter, setFileFilter] = useState('')
   const [sortBy, setSortBy] = useState<'risk' | 'avg_cc' | 'max_cc'>('risk')
   const reducedMotion = useReducedMotion()
 
   useEffect(() => {
     if (!jobId) { setLoading(false); return }
-    fetch(`${API_BASE}/api/jobs/${jobId}/result`)
-      .then(r => r.json())
-      .then(data => { setResult(data); setLoading(false) })
-      .catch(() => setLoading(false))
+    let isMounted = true
+    let timer: any = null
+
+    const fetchResult = async (attempt = 0) => {
+      try {
+        const res = await fetch(`${API_BASE}/api/jobs/${jobId}/result`)
+        if (res.status === 202) {
+          if (attempt < 8 && isMounted) {
+            timer = setTimeout(() => fetchResult(attempt + 1), 1500)
+            return
+          }
+        }
+        if (!res.ok) {
+          let errText = `FAILED TO LOAD RESULTS (${res.status})`
+          try {
+            const errJson = await res.json()
+            if (errJson.detail) errText = String(errJson.detail).toUpperCase()
+          } catch {}
+          if (isMounted) {
+            setFetchError(errText)
+            setLoading(false)
+          }
+          return
+        }
+        const data = await res.json()
+        if (data && data.error === 'not ready' && attempt < 8 && isMounted) {
+          timer = setTimeout(() => fetchResult(attempt + 1), 1500)
+          return
+        }
+        if (data && !data.error && data.summary) {
+          if (isMounted) {
+            setResult(data)
+            setLoading(false)
+          }
+        } else if (isMounted) {
+          if (attempt < 5) {
+            timer = setTimeout(() => fetchResult(attempt + 1), 1500)
+          } else {
+            setFetchError(data?.error ? String(data.error).toUpperCase() : 'INVALID OR EMPTY RESULT PAYLOAD')
+            setLoading(false)
+          }
+        }
+      } catch {
+        if (attempt < 5 && isMounted) {
+          timer = setTimeout(() => fetchResult(attempt + 1), 1500)
+        } else if (isMounted) {
+          setFetchError('NETWORK ERROR FETCHING RESULTS')
+          setLoading(false)
+        }
+      }
+    }
+
+    fetchResult()
+    return () => {
+      isMounted = false
+      if (timer) clearTimeout(timer)
+    }
   }, [jobId])
 
   const TABS: { id: ResultsTab; label: string }[] = [
@@ -972,7 +1026,9 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
         {/* Row 1: Repo + Branch */}
         <div style={{ display: 'flex', alignItems: 'baseline' }}>
           <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 18, fontWeight: 500, letterSpacing: '0.10em', color: '#FFFFFF' }}>{displayRepo}</span>
-          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.50)', marginLeft: 16 }}>ON MAIN</span>
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.50)', marginLeft: 16 }}>
+            ON {result?.branch ? result.branch.toUpperCase() : 'MAIN'}
+          </span>
         </div>
         {/* Row 2: Stats */}
         <div style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
@@ -1071,8 +1127,39 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
           </div>
         )}
 
+        {/* Error state */}
+        {!loading && fetchError && (
+          <div style={{ background: '#FFFFFF', border: '1px solid rgba(255,59,59,0.30)', padding: '32px 40px', maxWidth: 760, margin: '40px auto', textAlign: 'center' }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 500, letterSpacing: '0.14em', color: '#FF3B3B', marginBottom: 12 }}>
+              ⚠ {fetchError}
+            </div>
+            <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'rgba(10,10,26,0.50)', letterSpacing: '0.10em', lineHeight: 1.6, textTransform: 'uppercase', marginBottom: 24 }}>
+              THE ANALYSIS RESULTS COULD NOT BE RETRIEVED. PLEASE RETURN HOME AND RUN THE ANALYSIS AGAIN.
+            </p>
+            <motion.button
+              onClick={onHome}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
+              style={{
+                height: 40,
+                padding: '0 24px',
+                background: '#1400FF',
+                border: 'none',
+                color: '#FFFFFF',
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: 11,
+                fontWeight: 500,
+                letterSpacing: '0.14em',
+                cursor: 'pointer'
+              }}
+            >
+              ← RETURN HOME
+            </motion.button>
+          </div>
+        )}
+
         {/* ── Tab 1: Onboarding Doc ── */}
-        {!loading && activeTab === 'onboarding' && (
+        {!loading && !fetchError && activeTab === 'onboarding' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: 'rgba(10,10,26,0.50)' }}>ONBOARDING DOCUMENT</span>
@@ -1087,7 +1174,7 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
           </div>
         )}
 
-        {!loading && activeTab === 'agent_context' && (
+        {!loading && !fetchError && activeTab === 'agent_context' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: 'rgba(10,10,26,0.50)' }}>AGENT CONTEXT DOCUMENT</span>
@@ -1103,7 +1190,7 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
         )}
 
         {/* ── Tab: File Explanations ── */}
-        {!loading && activeTab === 'explanations' && (
+        {!loading && !fetchError && activeTab === 'explanations' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: 'rgba(10,10,26,0.50)' }}>FILE EXPLANATIONS</span>
@@ -1114,11 +1201,11 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
                 ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.file_explanations_md}</ReactMarkdown>
                 : (
                   <div style={{ padding: '24px 0' }}>
-                    <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 500, color: '#1400FF', letterSpacing: '0.08em', marginBottom: 6 }}>
+                    <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 500, color: '#1400FF', letterSpacing: '0.12em', marginBottom: 8, textTransform: 'uppercase' }}>
                       SKIPPED AI EXPLANATIONS
                     </p>
-                    <p style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 13, color: 'rgba(10,10,26,0.60)' }}>
-                      Want file walkthroughs? Just turn on AI explanations and run the analysis again.
+                    <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 400, color: 'rgba(10,10,26,0.50)', letterSpacing: '0.10em', lineHeight: 1.6, textTransform: 'uppercase' }}>
+                      AI EXPLANATIONS WERE SKIPPED FOR THIS RUN. RE-RUN ANALYSIS WITH SKIP LLM DISABLED TO GENERATE FILE WALKTHROUGHS.
                     </p>
                   </div>
                 )

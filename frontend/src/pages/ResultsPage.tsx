@@ -770,11 +770,11 @@ export default function ResultsPage() {
                         ? <MarkdownPane content={result.file_explanations_md} />
                         : (
                             <div style={{ padding: "40px" }}>
-                                <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "12px", fontWeight: 500, color: "#1400FF", letterSpacing: "0.08em", marginBottom: "6px" }}>
+                                <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "12px", fontWeight: 500, color: "#1400FF", letterSpacing: "0.12em", marginBottom: "8px", textTransform: "uppercase" }}>
                                     SKIPPED AI EXPLANATIONS
                                 </p>
-                                <p style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: "13px", color: "rgba(10,10,26,0.60)" }}>
-                                    Want file walkthroughs? Just turn on AI explanations and run the analysis again.
+                                <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", fontWeight: 400, color: "rgba(10,10,26,0.50)", letterSpacing: "0.10em", lineHeight: 1.6, textTransform: "uppercase" }}>
+                                    AI EXPLANATIONS WERE SKIPPED FOR THIS RUN. RE-RUN ANALYSIS WITH SKIP LLM DISABLED TO GENERATE FILE WALKTHROUGHS.
                                 </p>
                             </div>
                         )
