@@ -768,7 +768,16 @@ export default function ResultsPage() {
                 {activeTab === "FILE EXPLANATIONS" && (
                     result.file_explanations_md
                         ? <MarkdownPane content={result.file_explanations_md} />
-                        : <div style={{ padding: "40px", fontFamily: "'IBM Plex Mono', monospace", color: "rgba(10,10,26,0.40)", fontSize: "13px" }}>file_explanations.md not available.</div>
+                        : (
+                            <div style={{ padding: "40px" }}>
+                                <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "12px", fontWeight: 500, color: "#1400FF", letterSpacing: "0.08em", marginBottom: "6px" }}>
+                                    SKIPPED AI EXPLANATIONS
+                                </p>
+                                <p style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: "13px", color: "rgba(10,10,26,0.60)" }}>
+                                    Want file walkthroughs? Just turn on AI explanations and run the analysis again.
+                                </p>
+                            </div>
+                        )
                 )}
                 {activeTab === "AGENT CONTEXT" && (
                     <AgentContextPane content={result.agent_context_md} />

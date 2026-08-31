@@ -1,7 +1,7 @@
 # PROJECT SPEC: Code Archaeology Agent
 
 **Codename:** Archaeon / Project Gnosis
-**Version:** 1.0.1
+**Version:** 1.0.2
 **Status:** In Development (Agents 1–7 production-stable; all pipeline stages operational)
 **Author:** Om Kumar Jha
 **GitHub:** github.com/PiUnknown

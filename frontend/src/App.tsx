@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, useReducedMotion } from 'motion/react'
 const API_BASE = import.meta.env.VITE_API_URL || "";
-const APP_VERSION = "1.0.1";
+const APP_VERSION = "1.0.2";
 
 function useWindowWidth() {
   const [width, setWidth] = useState(
@@ -1112,7 +1112,16 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
             <div className="gnosis-markdown" style={{ maxWidth: 760, margin: '0 auto' }}>
               {result?.file_explanations_md
                 ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.file_explanations_md}</ReactMarkdown>
-                : <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'rgba(10,10,26,0.40)', letterSpacing: '0.10em' }}>NO EXPLANATIONS GENERATED YET</p>
+                : (
+                  <div style={{ padding: '24px 0' }}>
+                    <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 500, color: '#1400FF', letterSpacing: '0.08em', marginBottom: 6 }}>
+                      SKIPPED AI EXPLANATIONS
+                    </p>
+                    <p style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 13, color: 'rgba(10,10,26,0.60)' }}>
+                      Want file walkthroughs? Just turn on AI explanations and run the analysis again.
+                    </p>
+                  </div>
+                )
               }
             </div>
           </div>
