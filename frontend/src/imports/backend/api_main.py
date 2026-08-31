@@ -18,7 +18,7 @@ from src.state import ArchaeonState
 from src.orchestrator import run_pipeline   # or wherever your pipeline runner lives
 
 
-app = FastAPI(title="Project Gnosis API", version="1.0.5")
+app = FastAPI(title="Project Gnosis API", version="1.0.0")
 
 # ── CORS (dev only — Vite runs on 5173) ─────────────────────────────────────
 app.add_middleware(

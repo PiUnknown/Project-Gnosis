@@ -1,7 +1,7 @@
 # PROJECT SPEC: Code Archaeology Agent
 
 **Codename:** Archaeon  
-**Version:** 1.0.5 (spec)  
+**Version:** 1.0.0 (spec)  
 **Status:** Pre-build  
 **Author:** Om Kumar Jha  
 **GitHub:** github.com/PiUnknown  
