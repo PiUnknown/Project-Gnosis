@@ -35,6 +35,7 @@ interface JobState {
 
 interface ResultSummary {
   repo_url: string
+  branch?: string
   total_files: number
   total_functions: number
   total_classes: number
@@ -65,6 +66,8 @@ interface ComplexityRow {
 
 interface AnalysisResult {
   summary: ResultSummary
+  branch?: string
+  error?: string
   onboarding_doc: string
   agent_context?: string
   file_explanations_md?: string
@@ -666,9 +669,9 @@ function ProgressPage({ repoUrl, jobId, onComplete, onHome }: { repoUrl: string;
                     reducedMotion
                       ? undefined
                       : {
-                          hidden: { opacity: 0, x: -12 },
-                          show: { opacity: 1, x: 0 },
-                        }
+                        hidden: { opacity: 0, x: -12 },
+                        show: { opacity: 1, x: 0 },
+                      }
                   }
                   transition={
                     reducedMotion
@@ -907,7 +910,7 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
           try {
             const errJson = await res.json()
             if (errJson.detail) errText = String(errJson.detail).toUpperCase()
-          } catch {}
+          } catch { }
           if (isMounted) {
             setFetchError(errText)
             setLoading(false)
@@ -995,7 +998,7 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
   const explainedValue = (() => {
     if (!result) return '—'
     if (result.skip_llm === true) {
-      return 'Skipped'
+      return 'SKIPPED'
     }
     if (result.explanations) {
       return Object.keys(result.explanations).length
@@ -1224,47 +1227,47 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
             {depRows.length === 0
               ? <EmptyState label="NO DEPENDENCY DATA AVAILABLE" />
               : (() => {
-                  const maxImportedBy = Math.max(...depRows.map(r => r.imported_by || 1), 1)
-                  const maxImports = Math.max(...depRows.map(r => r.imports || 1), 1)
-                  return (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid rgba(20,0,255,0.15)', marginBottom: 48 }}>
-                      <thead>
-                        <tr style={{ background: 'rgba(20,0,255,0.06)', height: 40 }}>
-                          <th style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.40)', padding: '0 20px', textAlign: 'left', border: '1px solid rgba(20,0,255,0.12)' }}>FILE</th>
-                          <th style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.40)', padding: '0 20px', textAlign: 'center', border: '1px solid rgba(20,0,255,0.12)' }}>IMPORTED BY</th>
-                          <th style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.40)', padding: '0 20px', textAlign: 'center', border: '1px solid rgba(20,0,255,0.12)' }}>IMPORTS</th>
-                          <th style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.40)', padding: '0 20px', textAlign: 'center', border: '1px solid rgba(20,0,255,0.12)' }}>RISK</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {depRows.map(row => (
-                          <HoverRow key={row.path}>
-                            <td style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 400, color: '#1400FF', padding: '0 20px', height: 48 }} title={row.path}>
-                              {row.file}
-                            </td>
-                            <td style={{ padding: '0 20px' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-                                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, fontWeight: 500, color: '#1400FF' }}>{row.imported_by}</span>
-                                <div style={{ width: 60, height: 3, background: 'rgba(20,0,255,0.06)', border: '1px solid rgba(20,0,255,0.08)', position: 'relative' }}>
-                                  <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${(row.imported_by / maxImportedBy) * 100}%`, background: '#1400FF' }} />
-                                </div>
+                const maxImportedBy = Math.max(...depRows.map(r => r.imported_by || 1), 1)
+                const maxImports = Math.max(...depRows.map(r => r.imports || 1), 1)
+                return (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid rgba(20,0,255,0.15)', marginBottom: 48 }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(20,0,255,0.06)', height: 40 }}>
+                        <th style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.40)', padding: '0 20px', textAlign: 'left', border: '1px solid rgba(20,0,255,0.12)' }}>FILE</th>
+                        <th style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.40)', padding: '0 20px', textAlign: 'center', border: '1px solid rgba(20,0,255,0.12)' }}>IMPORTED BY</th>
+                        <th style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.40)', padding: '0 20px', textAlign: 'center', border: '1px solid rgba(20,0,255,0.12)' }}>IMPORTS</th>
+                        <th style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.40)', padding: '0 20px', textAlign: 'center', border: '1px solid rgba(20,0,255,0.12)' }}>RISK</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {depRows.map(row => (
+                        <HoverRow key={row.path}>
+                          <td style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 400, color: '#1400FF', padding: '0 20px', height: 48 }} title={row.path}>
+                            {row.file}
+                          </td>
+                          <td style={{ padding: '0 20px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
+                              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, fontWeight: 500, color: '#1400FF' }}>{row.imported_by}</span>
+                              <div style={{ width: 60, height: 3, background: 'rgba(20,0,255,0.06)', border: '1px solid rgba(20,0,255,0.08)', position: 'relative' }}>
+                                <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${(row.imported_by / maxImportedBy) * 100}%`, background: '#1400FF' }} />
                               </div>
-                            </td>
-                            <td style={{ padding: '0 20px' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-                                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, fontWeight: 400, color: 'rgba(10,10,26,0.65)' }}>{row.imports}</span>
-                                <div style={{ width: 60, height: 3, background: 'rgba(20,0,255,0.06)', border: '1px solid rgba(20,0,255,0.08)', position: 'relative' }}>
-                                  <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${(row.imports / maxImports) * 100}%`, background: 'rgba(20,0,255,0.40)' }} />
-                                </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '0 20px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
+                              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, fontWeight: 400, color: 'rgba(10,10,26,0.65)' }}>{row.imports}</span>
+                              <div style={{ width: 60, height: 3, background: 'rgba(20,0,255,0.06)', border: '1px solid rgba(20,0,255,0.08)', position: 'relative' }}>
+                                <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${(row.imports / maxImports) * 100}%`, background: 'rgba(20,0,255,0.40)' }} />
                               </div>
-                            </td>
-                            <td style={{ textAlign: 'center', padding: '0 20px' }}><RiskBadge level={row.risk} onLight /></td>
-                          </HoverRow>
-                        ))}
-                      </tbody>
-                    </table>
-                  )
-                })()
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'center', padding: '0 20px' }}><RiskBadge level={row.risk} onLight /></td>
+                        </HoverRow>
+                      ))}
+                    </tbody>
+                  </table>
+                )
+              })()
             }
 
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.16em', color: 'rgba(10,10,26,0.45)', marginBottom: 8 }}>SUGGESTED READING ORDER</div>
@@ -1318,63 +1321,63 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
             {complexityRows.length === 0
               ? <EmptyState label="NO COMPLEXITY DATA AVAILABLE" />
               : (() => {
-                  const maxAvgCC = Math.max(...complexityRows.map(r => r.avg_cc || 1), 1)
-                  const maxMaxCC = Math.max(...complexityRows.map(r => r.max_cc || 1), 1)
-                  const maxCoupling = Math.max(...complexityRows.map(r => r.coupling || 1), 1)
-                  return (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid rgba(20,0,255,0.15)', marginBottom: 24 }}>
-                      <thead>
-                        <tr style={{ background: 'rgba(20,0,255,0.06)', height: 44 }}>
-                          {['FILE', 'RISK', 'AVG CC', 'MAX CC', 'WORST FUNCTION', 'COUPLING', 'FLAGS'].map(h => (
-                            <th key={h} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.45)', padding: '0 16px', textAlign: (h === 'FILE' || h === 'WORST FUNCTION' || h === 'FLAGS') ? 'left' : 'center', borderBottom: '1px solid rgba(20,0,255,0.12)' }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {complexityRows.map(row => (
-                          <HoverRow key={row.path} height={52}>
-                            <td style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 400, color: '#1400FF', padding: '0 16px' }} title={row.path}>{row.file}</td>
-                            <td style={{ padding: '0 16px', textAlign: 'center' }}><RiskBadge level={row.risk} onLight /></td>
-                            <td style={{ padding: '0 16px' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-                                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, fontWeight: 500, color: '#0A0A1A' }}>
-                                  {typeof row.avg_cc === 'number' ? row.avg_cc.toFixed(1) : row.avg_cc}
-                                </span>
-                                <div style={{ width: 50, height: 3, background: 'rgba(20,0,255,0.06)', border: '1px solid rgba(20,0,255,0.08)', position: 'relative' }}>
-                                  <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${(row.avg_cc / maxAvgCC) * 100}%`, background: '#1400FF' }} />
-                                </div>
-                              </div>
-                            </td>
-                            <td style={{ padding: '0 16px' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-                                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, fontWeight: 500, color: row.max_cc >= 21 ? '#1400FF' : '#0A0A1A' }}>
-                                  {row.max_cc}
-                                </span>
-                                <div style={{ width: 50, height: 3, background: 'rgba(20,0,255,0.06)', border: '1px solid rgba(20,0,255,0.08)', position: 'relative' }}>
-                                  <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${(row.max_cc / maxMaxCC) * 100}%`, background: row.max_cc >= 21 ? '#1400FF' : 'rgba(20,0,255,0.50)' }} />
-                                </div>
-                              </div>
-                            </td>
-                            <td style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 400, color: '#1400FF', padding: '0 16px', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.worst_fn}>{row.worst_fn}</td>
-                            <td style={{ padding: '0 16px' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-                                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 400, color: 'rgba(10,10,26,0.65)' }}>{row.coupling}</span>
-                                <div style={{ width: 50, height: 3, background: 'rgba(20,0,255,0.06)', border: '1px solid rgba(20,0,255,0.08)', position: 'relative' }}>
-                                  <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${(row.coupling / maxCoupling) * 100}%`, background: 'rgba(20,0,255,0.40)' }} />
-                                </div>
-                              </div>
-                            </td>
-                            <td style={{ padding: '0 16px' }}>
-                              {(row.flags || []).map(f => (
-                                <span key={f} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: f.includes('PARSE') ? '#FF3B3B' : 'rgba(20,0,255,0.70)', marginRight: 6 }}>{f}</span>
-                              ))}
-                            </td>
-                          </HoverRow>
+                const maxAvgCC = Math.max(...complexityRows.map(r => r.avg_cc || 1), 1)
+                const maxMaxCC = Math.max(...complexityRows.map(r => r.max_cc || 1), 1)
+                const maxCoupling = Math.max(...complexityRows.map(r => r.coupling || 1), 1)
+                return (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid rgba(20,0,255,0.15)', marginBottom: 24 }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(20,0,255,0.06)', height: 44 }}>
+                        {['FILE', 'RISK', 'AVG CC', 'MAX CC', 'WORST FUNCTION', 'COUPLING', 'FLAGS'].map(h => (
+                          <th key={h} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.45)', padding: '0 16px', textAlign: (h === 'FILE' || h === 'WORST FUNCTION' || h === 'FLAGS') ? 'left' : 'center', borderBottom: '1px solid rgba(20,0,255,0.12)' }}>{h}</th>
                         ))}
-                      </tbody>
-                    </table>
-                  )
-                })()
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {complexityRows.map(row => (
+                        <HoverRow key={row.path} height={52}>
+                          <td style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 400, color: '#1400FF', padding: '0 16px' }} title={row.path}>{row.file}</td>
+                          <td style={{ padding: '0 16px', textAlign: 'center' }}><RiskBadge level={row.risk} onLight /></td>
+                          <td style={{ padding: '0 16px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
+                              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, fontWeight: 500, color: '#0A0A1A' }}>
+                                {typeof row.avg_cc === 'number' ? row.avg_cc.toFixed(1) : row.avg_cc}
+                              </span>
+                              <div style={{ width: 50, height: 3, background: 'rgba(20,0,255,0.06)', border: '1px solid rgba(20,0,255,0.08)', position: 'relative' }}>
+                                <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${(row.avg_cc / maxAvgCC) * 100}%`, background: '#1400FF' }} />
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '0 16px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
+                              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, fontWeight: 500, color: row.max_cc >= 21 ? '#1400FF' : '#0A0A1A' }}>
+                                {row.max_cc}
+                              </span>
+                              <div style={{ width: 50, height: 3, background: 'rgba(20,0,255,0.06)', border: '1px solid rgba(20,0,255,0.08)', position: 'relative' }}>
+                                <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${(row.max_cc / maxMaxCC) * 100}%`, background: row.max_cc >= 21 ? '#1400FF' : 'rgba(20,0,255,0.50)' }} />
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 400, color: '#1400FF', padding: '0 16px', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.worst_fn}>{row.worst_fn}</td>
+                          <td style={{ padding: '0 16px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
+                              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 400, color: 'rgba(10,10,26,0.65)' }}>{row.coupling}</span>
+                              <div style={{ width: 50, height: 3, background: 'rgba(20,0,255,0.06)', border: '1px solid rgba(20,0,255,0.08)', position: 'relative' }}>
+                                <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${(row.coupling / maxCoupling) * 100}%`, background: 'rgba(20,0,255,0.40)' }} />
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '0 16px' }}>
+                            {(row.flags || []).map(f => (
+                              <span key={f} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: f.includes('PARSE') ? '#FF3B3B' : 'rgba(20,0,255,0.70)', marginRight: 6 }}>{f}</span>
+                            ))}
+                          </td>
+                        </HoverRow>
+                      ))}
+                    </tbody>
+                  </table>
+                )
+              })()
             }
           </div>
         )}

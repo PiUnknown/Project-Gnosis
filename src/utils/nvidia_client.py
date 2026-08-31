@@ -34,9 +34,9 @@ from typing import Optional
 
 NVIDIA_BASE_URL_DEFAULT = "https://integrate.api.nvidia.com/v1"
 
-# Active, fast model for code architecture onboarding.
+# Default: NVIDIA Nemotron 3 Nano 30B (pure-text, low-latency, sharp code reasoning).
 # Override at runtime with NVIDIA_MODEL env var if needed.
-NVIDIA_MODEL_DEFAULT = "meta/llama-3.2-11b-vision-instruct"
+NVIDIA_MODEL_DEFAULT = "nvidia/nemotron-3-nano-30b-a3b"
 
 MAX_RETRIES        = 2     # fail fast: 2 attempts max
 BASE_DELAY_SECONDS = 1.0
