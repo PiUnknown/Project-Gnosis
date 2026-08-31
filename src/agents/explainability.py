@@ -37,7 +37,10 @@ codebase, write a precise technical explanation (200-300 words) that a new \
 engineer can read in under 2 minutes and immediately understand how this file \
 fits into the system.
 
-Rules:
+Strict Formatting Constraints:
+- Output ONLY the final 2-3 paragraph technical explanation.
+- DO NOT include any thinking process, reasoning steps, analysis preambles, or scratchpad commentary.
+- DO NOT wrap the output in <thought>, <think>, or markdown code fences.
 - Reference actual function names, class names, and method names from the code.
 - Do not speculate about behavior that is not visible in the provided code.
 - Do not use filler phrases like "this file plays a crucial role" or \

@@ -29,6 +29,7 @@ TIMEOUT:
 """
 
 import os
+import re
 import time
 from typing import Optional
 
@@ -50,6 +51,44 @@ PER_CALL_TIMEOUT_SECONDS = 120.0
 INTER_CALL_DELAY_SECONDS = 2.0
 
 _client = None
+
+
+def sanitize_llm_output(content: Optional[str]) -> Optional[str]:
+    """
+    Sanitize raw LLM response by stripping chain-of-thought, reasoning tags,
+    and conversational preambles.
+    """
+    if not content:
+        return content
+
+    text = content.strip()
+
+    # 1. Strip XML thinking/thought blocks (e.g. <thought>...</thought>, <think>...</think>, <reasoning>...</reasoning>)
+    text = re.sub(
+        r"<(?:thought|think|reasoning|scratchpad)[^>]*>.*?</(?:thought|think|reasoning|scratchpad)>",
+        "",
+        text,
+        flags=re.DOTALL | re.IGNORECASE
+    )
+
+    # 2. Strip standalone unclosed/orphaned tags
+    text = re.sub(r"</?(?:thought|think|reasoning|scratchpad)[^>]*>", "", text, flags=re.IGNORECASE)
+
+    # 3. Strip markdown reasoning headers (e.g. "**Thinking Process:** ...", "### Thought: ...")
+    text = re.sub(
+        r"(?im)^\s*(?:#+\s*)?(?:\*{1,2}|_{1,2})?(?:thinking process|thought|reasoning|internal analysis|step-by-step analysis)(?:\*{1,2}|_{1,2})?:?.*?(?=\n\n|\Z)",
+        "",
+        text
+    )
+
+    # 4. Strip conversational intro preambles on the first line
+    text = re.sub(
+        r"(?im)^\s*(?:here(?:'s| is) (?:the|a) (?:technical |code )?explanation(?: of| for|:)?|sure,? here(?:'s| is) (?:the|a) (?:technical |code )?explanation(?: of| for|:)?|below is (?:the|a) (?:technical |code )?explanation(?: of| for|:)?).*?\n+",
+        "",
+        text
+    )
+
+    return text.strip()
 
 
 def get_client():
@@ -140,12 +179,13 @@ def call_llm(
             tokens_used = getattr(
                 getattr(response, 'usage', None), 'total_tokens', '?'
             )
+            cleaned = sanitize_llm_output(content)
             print(
                 f"  [NVIDIA] [OK] {elapsed:.1f}s  "
                 f"tokens={tokens_used}  "
-                f"response={len(content or '')}chars"
+                f"response={len(cleaned or '')}chars"
             )
-            return content
+            return cleaned
 
         except Exception as exc:
             elapsed   = time.time() - t_start

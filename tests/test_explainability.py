@@ -588,3 +588,36 @@ class TestExplainabilityAgent:
 
         # Some explanations stored, some not — but no crash
         assert 0 < len(result.explanations) <= 4
+
+
+# -----------------------------------------------------------------------
+# Output Sanitization Tests
+# -----------------------------------------------------------------------
+
+class TestOutputSanitization:
+
+    def test_strip_thought_tags(self):
+        from src.utils.nvidia_client import sanitize_llm_output
+        raw = "<thought>Let's analyze this file step by step.\nFirst check imports.\n</thought>This file defines the RobotBus struct."
+        cleaned = sanitize_llm_output(raw)
+        assert cleaned == "This file defines the RobotBus struct."
+        assert "<thought>" not in cleaned
+
+    def test_strip_think_tags(self):
+        from src.utils.nvidia_client import sanitize_llm_output
+        raw = "<think>Model reasoning trace here.</think>The module implements network communication."
+        cleaned = sanitize_llm_output(raw)
+        assert cleaned == "The module implements network communication."
+        assert "<think>" not in cleaned
+
+    def test_strip_conversational_preamble(self):
+        from src.utils.nvidia_client import sanitize_llm_output
+        raw = "Here is the technical explanation for this file:\n\n`src/bus.rs` coordinates communication between motors."
+        cleaned = sanitize_llm_output(raw)
+        assert cleaned == "`src/bus.rs` coordinates communication between motors."
+        assert "Here is the technical explanation" not in cleaned
+
+    def test_clean_input_unchanged(self):
+        from src.utils.nvidia_client import sanitize_llm_output
+        clean = "This file provides pure utility functions for parsing CLI arguments."
+        assert sanitize_llm_output(clean) == clean
