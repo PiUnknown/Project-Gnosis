@@ -446,3 +446,53 @@ class TestPageRank:
         G.add_edge("c.py", "a.py")
         result = _compute_pagerank(G)
         assert result["a.py"] > result["b.py"]
+
+
+# -----------------------------------------------------------------------
+# Rust, C/C++, and Go Import Resolution
+# -----------------------------------------------------------------------
+
+class TestMultiLanguageResolution:
+
+    def test_rust_crate_resolution(self):
+        file_paths = {
+            "duck-control/src/bus.rs",
+            "duck-control/src/imu.rs",
+            "duck-control/src/io.rs",
+            "btd/src/bluez.rs",
+            "btd/src/gatt.rs"
+        }
+        imp = make_import("crate::imu", names=["ImuData"])
+        res = resolve_import_to_paths("duck-control/src/bus.rs", imp, "Rust", file_paths)
+        assert res == ["duck-control/src/imu.rs"]
+
+        imp_btd = make_import("crate::gatt", names=["RPC_UUID"])
+        res_btd = resolve_import_to_paths("btd/src/bluez.rs", imp_btd, "Rust", file_paths)
+        assert res_btd == ["btd/src/gatt.rs"]
+
+    def test_rust_super_relative_resolution(self):
+        file_paths = {
+            "src/models/user.rs",
+            "src/utils.rs"
+        }
+        imp = make_import("super::utils", names=["helper"])
+        res = resolve_import_to_paths("src/models/user.rs", imp, "Rust", file_paths)
+        assert res == ["src/utils.rs"]
+
+    def test_c_include_resolution(self):
+        file_paths = {
+            "deploy/audio/tlv320aic3x.c",
+            "deploy/audio/tlv320aic3x.h"
+        }
+        imp = make_import('"tlv320aic3x.h"', names=[])
+        res = resolve_import_to_paths("deploy/audio/tlv320aic3x.c", imp, "C", file_paths)
+        assert res == ["deploy/audio/tlv320aic3x.h"]
+
+    def test_go_package_resolution(self):
+        file_paths = {
+            "pkg/auth/auth.go",
+            "cmd/server/main.go"
+        }
+        imp = make_import("github.com/org/repo/pkg/auth", names=[])
+        res = resolve_import_to_paths("cmd/server/main.go", imp, "Go", file_paths)
+        assert res == ["pkg/auth/auth.go"]

@@ -15,11 +15,18 @@ Steps:
 5. Compute topological order (suggested reading order) if no cycles
 6. Store everything in state for downstream agents
 """
+import sys
 import networkx as nx
 from pathlib import PurePosixPath
 
 from src.state import ArchaeonState
 from src.utils.graph_utils import resolve_import_to_paths
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 
 def run(state: ArchaeonState) -> ArchaeonState:
@@ -108,15 +115,15 @@ def run(state: ArchaeonState) -> ArchaeonState:
     state.circular_nodes = circular_nodes
 
     if cycles:
-        print(f"  ⚠️  {len(cycles)} circular dependency cycle(s) found:")
+        print(f"  [WARN] {len(cycles)} circular dependency cycle(s) found:")
         for cycle in cycles[:5]:
             names = [PurePosixPath(p).name for p in cycle]
-            cycle_str = " → ".join(names) + f" → {names[0]}"
+            cycle_str = " -> ".join(names) + f" -> {names[0]}"
             print(f"    {cycle_str}")
         if len(cycles) > 5:
             print(f"    ...and {len(cycles) - 5} more cycles")
     else:
-        print(f"  ✓  No circular dependencies detected")
+        print(f"  [OK] No circular dependencies detected")
 
     # ----------------------------------------------------------------
     # Step 4: Compute PageRank
@@ -281,7 +288,7 @@ def _print_summary(state: ArchaeonState, graph_stats: dict, circular_nodes: set)
         if in_deg == 0:
             break
         name = PurePosixPath(path).name
-        bar = "█" * min(in_deg, 20)
+        bar = "#" * min(in_deg, 20)
         print(f"    {name:<40} {bar} {in_deg}")
         shown += 1
         if shown >= 8:

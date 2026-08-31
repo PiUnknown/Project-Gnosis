@@ -52,6 +52,12 @@ def resolve_import_to_paths(
         return _resolve_python(importer_path, import_info, file_paths)
     if language in ('JavaScript', 'TypeScript'):
         return _resolve_js(importer_path, import_info.module, file_paths)
+    if language == 'Rust':
+        return _resolve_rust(importer_path, import_info, file_paths)
+    if language in ('C', 'C/C++ Header', 'C++'):
+        return _resolve_c(importer_path, import_info, file_paths)
+    if language == 'Go':
+        return _resolve_go(importer_path, import_info, file_paths)
     return []
 
 
@@ -156,6 +162,87 @@ def _resolve_js(importer_path: str, module: str, file_paths: set) -> list:
         if candidate in file_paths:
             return [candidate]
     return []
+
+
+# -----------------------------------------------------------------------
+# Rust resolution
+# -----------------------------------------------------------------------
+
+def _resolve_rust(importer_path: str, import_info, file_paths: set) -> list:
+    module = import_info.module
+    names = import_info.names
+    importer = PurePosixPath(importer_path)
+
+    # Determine crate source root (e.g. "crate_name/src" or directory containing Cargo.toml)
+    parts = list(importer.parts)
+    if 'src' in parts:
+        src_idx = parts.index('src')
+        crate_src = PurePosixPath(*parts[:src_idx + 1])
+    else:
+        crate_src = importer.parent
+
+    # Parse Rust module path syntax (crate::, super::, self::, foo::bar)
+    mod_path = module.replace('crate::', '').replace('super::', '../').replace('self::', './').replace('::', '/')
+
+    candidates = []
+    if module.startswith('crate::'):
+        base = crate_src / mod_path
+    elif module.startswith('super::') or module.startswith('self::'):
+        base = importer.parent / mod_path
+    else:
+        base = crate_src / mod_path
+
+    raw = _normalize_posix_path(str(base).replace('\\', '/'))
+    candidates.extend([raw + '.rs', raw + '/mod.rs'])
+
+    # Also check if imported symbol names correspond to submodule files
+    for name in names:
+        if name and name not in ('self', '*', '{', '}'):
+            sub = raw + '/' + name
+            candidates.extend([sub + '.rs', sub + '/mod.rs'])
+
+    return [c for c in candidates if c in file_paths and c != importer_path]
+
+
+# -----------------------------------------------------------------------
+# C / C++ resolution
+# -----------------------------------------------------------------------
+
+def _resolve_c(importer_path: str, import_info, file_paths: set) -> list:
+    module = import_info.module.strip('"<>\' ')
+    importer_dir = PurePosixPath(importer_path).parent
+
+    candidates = [
+        _normalize_posix_path(str(importer_dir / module).replace('\\', '/')),
+        module.replace('\\', '/')
+    ]
+
+    # Search for header in manifest if not directly relative
+    if not any(c in file_paths for c in candidates):
+        header_name = PurePosixPath(module).name
+        for p in file_paths:
+            if p.endswith('/' + header_name) or p == header_name:
+                candidates.append(p)
+
+    return [c for c in candidates if c in file_paths and c != importer_path]
+
+
+# -----------------------------------------------------------------------
+# Go resolution
+# -----------------------------------------------------------------------
+
+def _resolve_go(importer_path: str, import_info, file_paths: set) -> list:
+    module = import_info.module.strip('"\' ')
+    importer_dir = PurePosixPath(importer_path).parent
+
+    # Relative imports
+    if module.startswith('./') or module.startswith('../'):
+        raw = _normalize_posix_path(str(importer_dir / module).replace('\\', '/'))
+        return [p for p in file_paths if p.startswith(raw + '/') and p.endswith('.go')]
+
+    # Internal package imports
+    pkg_suffix = module.split('/')[-1]
+    return [p for p in file_paths if f'/{pkg_suffix}/' in p and p.endswith('.go')]
 
 
 # -----------------------------------------------------------------------
