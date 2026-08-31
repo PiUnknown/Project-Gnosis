@@ -2,7 +2,8 @@
 
 > Give it a GitHub URL. Get back a complete architectural map of the codebase.
 
-**Status:** In Development (Agents 1–7 production-stable; all pipeline stages operational)
+**Version:** 1.0.0 (Public Release)
+**Status:** Live (Agents 1–7 production-stable; all pipeline stages operational)
 **Codename:** Project Gnosis
 **Author:** Om Kumar Jha
 **GitHub:** [github.com/PiUnknown](https://github.com/PiUnknown)
