@@ -243,6 +243,6 @@ def _print_summary(state: ArchaeonState, parsed: int, skipped: int, errors: int)
             detail = state.symbol_tables[path].parse_error_detail
             print(f"    {path}")
             if detail:
-                print(f"      → {detail}")
+                print(f"      -> {detail}")
         if len(error_files) > 5:
             print(f"    ...and {len(error_files) - 5} more")

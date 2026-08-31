@@ -732,9 +732,10 @@ def _ac_important_domain_objects(state: ArchaeonState) -> str:
     all_classes = []
 
     for fp, st in state.symbol_tables.items():
-        for cls in _get_classes(st):
-            cls_name = _get_class_name(cls)
-            method_count = len(_get_class_methods(cls))
+        for cls in getattr(st, "classes", []):
+            cls_name = getattr(cls, "name", "") or (cls.get("name", "") if isinstance(cls, dict) else str(cls))
+            methods = getattr(cls, "methods", []) or (cls.get("methods", []) if isinstance(cls, dict) else [])
+            method_count = len(methods)
             all_classes.append((in_deg.get(fp, 0), fp, cls_name, method_count))
 
     all_classes.sort(key=lambda x: x[0], reverse=True)

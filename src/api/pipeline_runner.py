@@ -13,8 +13,16 @@ sequence (7 lines) in exchange for the ability to interleave job
 store updates without touching the orchestrator.
 """
 import os
+import sys
 import traceback
 from pathlib import PurePosixPath
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 from src.api.job_store import store
 from src.api.models import PHASE_PROGRESS
