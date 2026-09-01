@@ -136,11 +136,11 @@ function figmaSiteConfiguration(config: FigmaSiteConfiguration): Plugin {
         if (favicon) {
           tags.push({ tag: 'link', attrs: { rel: 'icon', href: favicon }, injectTo: 'head' })
         }
-        if (title) {
-          tags.push({ tag: 'meta', attrs: { property: 'og:title', content: title }, injectTo: 'head' })
+        if (config.title) {
+          tags.push({ tag: 'meta', attrs: { property: 'og:title', content: config.title }, injectTo: 'head' })
         }
-        if (description) {
-          tags.push({ tag: 'meta', attrs: { property: 'og:description', content: description }, injectTo: 'head' })
+        if (config.description) {
+          tags.push({ tag: 'meta', attrs: { property: 'og:description', content: config.description }, injectTo: 'head' })
         }
         if (socialImage) {
           tags.push(
