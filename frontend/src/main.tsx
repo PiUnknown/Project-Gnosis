@@ -5,6 +5,7 @@ import './index.css'
 
 import { PostHogProvider } from '@posthog/react'
 import { Analytics } from '@vercel/analytics/react'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 
 const options = {
   api_host: import.meta.env.VITE_POSTHOG_HOST || "https://eu.i.posthog.com",
@@ -19,6 +20,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     >
       <App />
       <Analytics />
+      <SpeedInsights />
     </PostHogProvider>
   </React.StrictMode>,
 )
