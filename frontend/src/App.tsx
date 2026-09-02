@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, useReducedMotion } from 'motion/react'
+import posthog from 'posthog-js'
 const API_BASE = import.meta.env.VITE_API_URL || "";
 const APP_VERSION = "1.0.1";
 
@@ -335,10 +336,18 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
   const handleSubmit = async () => {
     if (!validate(url)) {
       setError('INVALID GITHUB URL — MUST MATCH github.com/owner/repo')
+      posthog.capture('repo_analysis_validation_failed', {
+        input_url: url,
+      })
       return
     }
     setError('')
     setLoading(true)
+    posthog.capture('repo_analysis_submitted', {
+      repo_url: url,
+      max_explanations: maxExplanations,
+      skip_llm: skipLlm,
+    })
     try {
       const res = await fetch(`${API_BASE}/api/analyze`, {
         method: 'POST',
@@ -358,6 +367,10 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
         }
 
         if (res.status === 409 && data && data.job_id) {
+          posthog.capture('repo_analysis_attached_existing_job', {
+            repo_url: url,
+            job_id: data.job_id,
+          })
           onSubmit(url, data.job_id)
           return
         }
@@ -374,6 +387,10 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
       onSubmit(url, job_id)
     } catch (err) {
       const rawMsg = err instanceof Error ? err.message : 'unknown error'
+      posthog.capture('repo_analysis_submission_error', {
+        repo_url: url,
+        error: rawMsg,
+      })
       if (rawMsg.includes('Failed to fetch') || rawMsg.includes('NetworkError') || rawMsg.includes('Network request failed')) {
         setError(`CONNECTION FAILED — IS THE SERVER RUNNING? (${rawMsg})`)
       } else {
@@ -574,6 +591,11 @@ function ProgressPage({ repoUrl, jobId, onComplete, onHome }: { repoUrl: string;
         if (data.status === 'failed') {
           setJobStatus('failed')
           setErrorMsg(data.error || 'Unknown error')
+          posthog.capture('repo_analysis_failed', {
+            repo_url: repoUrl,
+            job_id: jobId,
+            error: data.error || 'Unknown error',
+          })
           clearInterval(intervalRef.current!)
         }
       } catch {
@@ -914,6 +936,11 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
           if (isMounted) {
             setFetchError(errText)
             setLoading(false)
+            posthog.capture('repo_results_fetch_failed', {
+              repo_url: repoUrl,
+              job_id: jobId,
+              error: errText,
+            })
           }
           return
         }
@@ -926,13 +953,30 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
           if (isMounted) {
             setResult(data)
             setLoading(false)
+            posthog.capture('repo_analysis_completed', {
+              repo_url: repoUrl,
+              job_id: jobId,
+              total_files: data.summary?.total_files,
+              total_functions: data.summary?.total_functions,
+              total_classes: data.summary?.total_classes,
+              import_edges: data.summary?.import_edges,
+              average_complexity: data.summary?.average_complexity,
+              skip_llm: data.skip_llm,
+              branch: data.branch || 'main',
+            })
           }
         } else if (isMounted) {
           if (attempt < 5) {
             timer = setTimeout(() => fetchResult(attempt + 1), 1500)
           } else {
-            setFetchError(data?.error ? String(data.error).toUpperCase() : 'INVALID OR EMPTY RESULT PAYLOAD')
+            const errText = data?.error ? String(data.error).toUpperCase() : 'INVALID OR EMPTY RESULT PAYLOAD'
+            setFetchError(errText)
             setLoading(false)
+            posthog.capture('repo_results_fetch_failed', {
+              repo_url: repoUrl,
+              job_id: jobId,
+              error: errText,
+            })
           }
         }
       } catch {
@@ -941,6 +985,11 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
         } else if (isMounted) {
           setFetchError('NETWORK ERROR FETCHING RESULTS')
           setLoading(false)
+          posthog.capture('repo_results_fetch_failed', {
+            repo_url: repoUrl,
+            job_id: jobId,
+            error: 'NETWORK ERROR FETCHING RESULTS',
+          })
         }
       }
     }
@@ -988,6 +1037,12 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
     })
 
   const handleDownload = (content: string, filename: string, mime = 'text/plain') => {
+    posthog.capture('report_downloaded', {
+      repo_url: repoUrl,
+      job_id: jobId,
+      filename: filename,
+      file_type: filename.endsWith('.md') ? 'markdown' : (filename.endsWith('.json') ? 'json' : 'other'),
+    })
     const blob = new Blob([content], { type: mime })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -1074,7 +1129,14 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
           return (
             <div key={tab.id} style={{ display: 'flex', alignItems: 'stretch' }}>
               <motion.button
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id)
+                  posthog.capture('results_tab_viewed', {
+                    repo_url: repoUrl,
+                    job_id: jobId,
+                    tab_name: tab.id,
+                  })
+                }}
                 whileTap={{ scale: 0.97 }}
                 transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
                 style={{

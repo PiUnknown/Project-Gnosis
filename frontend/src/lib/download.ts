@@ -1,9 +1,10 @@
-/**
- * Download utility functions for Project Gnosis artefacts.
- * All functions trigger a browser file download using a temporary <a> element.
- */
+import posthog from "posthog-js";
 
 function triggerDownload(content: string, filename: string, mimeType: string): void {
+    posthog.capture('report_downloaded', {
+        filename,
+        file_type: filename.endsWith('.md') ? 'markdown' : (filename.endsWith('.json') ? 'json' : 'other'),
+    });
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
