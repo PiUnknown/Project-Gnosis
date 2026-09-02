@@ -4,6 +4,7 @@ import App from './App'
 import './index.css'
 
 import { PostHogProvider } from '@posthog/react'
+import { Analytics } from '@vercel/analytics/react'
 
 const options = {
   api_host: import.meta.env.VITE_POSTHOG_HOST || "https://eu.i.posthog.com",
@@ -17,6 +18,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       options={options}
     >
       <App />
+      <Analytics />
     </PostHogProvider>
   </React.StrictMode>,
 )
+
