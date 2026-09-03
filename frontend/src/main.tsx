@@ -12,6 +12,7 @@ Sentry.init({
   dsn: import.meta.env.VITE_SENTRY_DSN || "https://2bd0f370583a6d64b0920920e804fc45@o4512010180066048.ingest.de.sentry.io/4512010184929360",
   environment: import.meta.env.MODE || "production",
 })
+Sentry.captureMessage("Gnosis System Online - Sentry Connected")
 
 const options = {
   api_host: import.meta.env.VITE_POSTHOG_HOST || "/ingest",
