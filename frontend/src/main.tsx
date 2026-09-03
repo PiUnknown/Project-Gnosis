@@ -14,7 +14,8 @@ Sentry.init({
 })
 
 const options = {
-  api_host: import.meta.env.VITE_POSTHOG_HOST || "https://eu.i.posthog.com",
+  api_host: import.meta.env.VITE_POSTHOG_HOST || "/ingest",
+  ui_host: "https://eu.posthog.com",
   disable_session_recording: true,
 }
 
