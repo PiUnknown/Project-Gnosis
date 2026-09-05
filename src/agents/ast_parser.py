@@ -147,25 +147,64 @@ def run(state: ArchaeonState) -> ArchaeonState:
 
 
 # -----------------------------------------------------------------------
+# -----------------------------------------------------------------------
 # Internal import resolution
 # -----------------------------------------------------------------------
 
+def _extract_go_modules(state: ArchaeonState) -> list:
+    modules = []
+    for path, content in state.raw_contents.items():
+        if path == "go.mod" or path.endswith("/go.mod"):
+            for line in content.splitlines():
+                line = line.strip()
+                if line.startswith("module "):
+                    mod_name = line[len("module "):].strip().strip('"\'')
+                    if mod_name:
+                        prefix = path[:-6] if path.endswith("/go.mod") else ""
+                        modules.append((mod_name, prefix))
+    return modules
+
+
+def _extract_rust_crates(state: ArchaeonState) -> list:
+    crates = []
+    for path, content in state.raw_contents.items():
+        if path == "Cargo.toml" or path.endswith("/Cargo.toml"):
+            in_package = False
+            for line in content.splitlines():
+                line = line.strip()
+                if line.startswith("[package]"):
+                    in_package = True
+                    continue
+                elif line.startswith("["):
+                    in_package = False
+                if in_package and line.startswith("name"):
+                    parts = line.split("=", 1)
+                    if len(parts) == 2:
+                        crate_name = parts[1].strip().strip('"\'')
+                        if crate_name:
+                            crates.append(crate_name)
+    return crates
+
+
 def _resolve_internal_imports(state: ArchaeonState, file_paths: set) -> None:
+    go_modules = _extract_go_modules(state)
+    rust_crates = _extract_rust_crates(state)
+
     for file_path, symbol_table in state.symbol_tables.items():
         lang = symbol_table.language
         for imp in symbol_table.imports:
             if lang == 'Python':
                 imp.is_internal = _is_internal_python(imp.module, file_paths)
             elif lang in ('JavaScript', 'TypeScript'):
-                imp.is_internal = _is_internal_js(imp.module)
+                imp.is_internal = _is_internal_js(imp.module, file_paths)
             elif lang == 'Go':
-                imp.is_internal = _is_internal_go(imp.module, file_paths)
+                imp.is_internal = _is_internal_go(imp.module, file_paths, go_modules)
             elif lang == 'Rust':
-                imp.is_internal = _is_internal_rust(imp.module)
+                imp.is_internal = _is_internal_rust(imp.module, file_paths, rust_crates)
             elif lang == 'Java':
                 imp.is_internal = _is_internal_java(imp.module, file_paths)
             elif lang in ('C', 'C++', 'C/C++ Header', 'C++ Header'):
-                imp.is_internal = _is_internal_c(imp.module)
+                imp.is_internal = _is_internal_c(imp.module, file_paths)
 
 
 def _is_internal_python(module: str, file_paths: set) -> bool:
@@ -173,48 +212,117 @@ def _is_internal_python(module: str, file_paths: set) -> bool:
         return False
     if module.startswith('.'):
         return True
-    as_file = module.replace('.', '/') + '.py'
-    if as_file in file_paths:
-        return True
-    as_init = module.replace('.', '/') + '/__init__.py'
-    return as_init in file_paths
+    base = module.replace('.', '/')
+    for prefix in ('', 'src/', 'app/'):
+        if (prefix + base + '.py') in file_paths or (prefix + base + '/__init__.py') in file_paths:
+            return True
+    return False
 
 
-def _is_internal_js(module: str) -> bool:
-    return module.startswith('./') or module.startswith('../')
-
-
-def _is_internal_go(module: str, file_paths: set) -> bool:
+def _is_internal_js(module: str, file_paths: set = None) -> bool:
     if not module:
         return False
-    # stdlib has no dots in first path component
+    if module.startswith('./') or module.startswith('../'):
+        return True
+    
+    if not file_paths:
+        return False
+
+    cleaned = module
+    if module.startswith('@/') or module.startswith('~/') or module.startswith('#/'):
+        cleaned = module[2:]
+    elif module.startswith('@src/'):
+        cleaned = module[5:]
+
+    candidates = [
+        cleaned,
+        f"src/{cleaned}",
+        f"app/{cleaned}",
+        f"lib/{cleaned}",
+        f"frontend/src/{cleaned}",
+        f"frontend/{cleaned}"
+    ]
+    _exts = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '']
+    _indices = ['/index.ts', '/index.tsx', '/index.js', '/index.jsx']
+
+    for cand in candidates:
+        for ext in _exts:
+            if (cand + ext) in file_paths:
+                return True
+        for idx in _indices:
+            if (cand + idx) in file_paths:
+                return True
+    return False
+
+
+def _is_internal_go(module: str, file_paths: set, go_modules: list = None) -> bool:
+    if not module:
+        return False
+    module = module.strip('"\' ')
+    if module.startswith('./') or module.startswith('../'):
+        return True
+
+    # Standard library has no dots in the first path component
     first_part = module.split('/')[0]
     if '.' not in first_part:
         return False
-    # internal if path matches manifest files
-    return any(module in f or f.startswith(module.split('/')[-1]) for f in file_paths)
+
+    # 1. Match against detected go.mod module declaration
+    if go_modules:
+        for mod_name, mod_prefix in go_modules:
+            if module == mod_name:
+                return True
+            if module.startswith(mod_name + '/'):
+                rel_pkg = module[len(mod_name) + 1:]
+                target_dir = f"{mod_prefix}{rel_pkg}" if mod_prefix else rel_pkg
+                if any((f.startswith(target_dir + '/') or f'/{target_dir}/' in f) and f.endswith('.go') for f in file_paths):
+                    return True
+
+    # 2. Heuristic suffix match: check if subpath matches any directory containing .go files
+    parts = module.split('/')
+    for i in range(1, len(parts)):
+        subpath = '/'.join(parts[i:])
+        if any((f.startswith(subpath + '/') or f'/{subpath}/' in f) and f.endswith('.go') for f in file_paths):
+            return True
+
+    return False
 
 
-def _is_internal_rust(module: str) -> bool:
+def _is_internal_rust(module: str, file_paths: set, rust_crates: list = None) -> bool:
     if not module:
         return False
-    # internal if starts with "crate::", "super::", or "self::"
-    return module.startswith("crate::") or module.startswith("super::") or module.startswith("self::")
+    if module.startswith("crate::") or module.startswith("super::") or module.startswith("self::"):
+        return True
+    first = module.split('::')[0]
+    if rust_crates and first in rust_crates:
+        return True
+    return any(f.startswith(f"{first}/") or f.startswith(f"crates/{first}/") for f in file_paths)
 
 
 def _is_internal_java(module: str, file_paths: set) -> bool:
     if not module:
         return False
-    # internal if module path maps to a .java file in manifest
-    path_prefix = module.replace('.', '/')
-    return any(f.startswith(path_prefix) for f in file_paths)
+    # Exclude common external frameworks
+    if module.startswith(("java.", "javax.", "android.", "androidx.", "org.springframework.", "org.junit.", "org.slf4j.")):
+        return False
+
+    path_suffix = module.replace('.', '/')
+    if path_suffix.endswith('/*'):
+        path_suffix = path_suffix[:-2]
+
+    for f in file_paths:
+        if f.endswith('.java') or f.endswith('.kt') or f.endswith('.scala'):
+            if f.startswith(path_suffix + '/') or f'/{path_suffix}/' in f or f.endswith(f"{path_suffix}.java") or f.endswith(f"{path_suffix}.kt") or f'/{path_suffix}.' in f or f == f"{path_suffix}.java":
+                return True
+    return False
 
 
-def _is_internal_c(module: str) -> bool:
+def _is_internal_c(module: str, file_paths: set) -> bool:
     if not module:
         return False
-    # internal if module does NOT start with "<" (quoted includes are local)
-    return not module.startswith("<")
+    clean = module.strip('"<> ')
+    header_name = clean.split('/')[-1]
+    return any(f.endswith('/' + header_name) or f == header_name for f in file_paths)
 
 
 # -----------------------------------------------------------------------

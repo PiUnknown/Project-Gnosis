@@ -448,3 +448,81 @@ class TestImportResolution:
 
         assert st.imports[0].is_internal is False
         assert st.imports[1].is_internal is True
+
+    def test_go_module_url_resolution(self):
+        state = ArchaeonState(repo_url="https://github.com/levitateos/soda-os")
+        state.raw_contents = {
+            "go.mod": "module github.com/levitateos/soda-os\n\ngo 1.22\n",
+            "cmd/soda/main.go": "package main\n",
+            "internal/daemon/server.go": "package daemon\n"
+        }
+        file_paths = set(state.raw_contents.keys())
+
+        from src.parsers.base import ImportInfo
+        from src.utils.graph_utils import resolve_import_to_paths
+        st = SymbolTable(file_path="cmd/soda/main.go", language="Go", module_docstring=None)
+        imp_stdlib = ImportInfo(module="fmt", names=[], is_from_import=False, is_internal=False)
+        imp_external = ImportInfo(module="github.com/gin-gonic/gin", names=[], is_from_import=False, is_internal=False)
+        imp_internal = ImportInfo(module="github.com/levitateos/soda-os/internal/daemon", names=[], is_from_import=False, is_internal=False)
+        st.imports = [imp_stdlib, imp_external, imp_internal]
+        state.symbol_tables["cmd/soda/main.go"] = st
+
+        _resolve_internal_imports(state, file_paths)
+
+        assert imp_stdlib.is_internal is False
+        assert imp_external.is_internal is False
+        assert imp_internal.is_internal is True
+
+        resolved = resolve_import_to_paths("cmd/soda/main.go", imp_internal, "Go", file_paths)
+        assert "internal/daemon/server.go" in resolved
+
+    def test_ts_path_aliases_resolution(self):
+        state = ArchaeonState(repo_url="https://github.com/owner/nextjs-app")
+        file_paths = {
+            "src/components/Button.tsx",
+            "src/lib/api.ts",
+            "src/pages/index.tsx"
+        }
+
+        from src.parsers.base import ImportInfo
+        from src.utils.graph_utils import resolve_import_to_paths
+        st = SymbolTable(file_path="src/pages/index.tsx", language="TypeScript", module_docstring=None)
+        imp_react = ImportInfo(module="react", names=[], is_from_import=True, is_internal=False)
+        imp_alias1 = ImportInfo(module="@/components/Button", names=[], is_from_import=True, is_internal=False)
+        imp_alias2 = ImportInfo(module="~/lib/api", names=[], is_from_import=True, is_internal=False)
+        st.imports = [imp_react, imp_alias1, imp_alias2]
+        state.symbol_tables["src/pages/index.tsx"] = st
+
+        _resolve_internal_imports(state, file_paths)
+
+        assert imp_react.is_internal is False
+        assert imp_alias1.is_internal is True
+        assert imp_alias2.is_internal is True
+
+        res1 = resolve_import_to_paths("src/pages/index.tsx", imp_alias1, "TypeScript", file_paths)
+        res2 = resolve_import_to_paths("src/pages/index.tsx", imp_alias2, "TypeScript", file_paths)
+        assert "src/components/Button.tsx" in res1
+        assert "src/lib/api.ts" in res2
+
+    def test_java_maven_layout_resolution(self):
+        state = ArchaeonState(repo_url="https://github.com/owner/java-app")
+        file_paths = {
+            "src/main/java/com/example/service/UserService.java",
+            "src/main/java/com/example/controller/UserController.java"
+        }
+
+        from src.parsers.base import ImportInfo
+        from src.utils.graph_utils import resolve_import_to_paths
+        st = SymbolTable(file_path="src/main/java/com/example/controller/UserController.java", language="Java", module_docstring=None)
+        imp_java = ImportInfo(module="java.util.List", names=[], is_from_import=True, is_internal=False)
+        imp_service = ImportInfo(module="com.example.service.UserService", names=[], is_from_import=True, is_internal=False)
+        st.imports = [imp_java, imp_service]
+        state.symbol_tables["src/main/java/com/example/controller/UserController.java"] = st
+
+        _resolve_internal_imports(state, file_paths)
+
+        assert imp_java.is_internal is False
+        assert imp_service.is_internal is True
+
+        res = resolve_import_to_paths("src/main/java/com/example/controller/UserController.java", imp_service, "Java", file_paths)
+        assert "src/main/java/com/example/service/UserService.java" in res

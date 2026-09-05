@@ -37,6 +37,7 @@ _JS_INDEX_FILES = ['index.ts', 'index.tsx', 'index.js', 'index.jsx']
 
 
 # -----------------------------------------------------------------------
+# -----------------------------------------------------------------------
 # Public entry point
 # -----------------------------------------------------------------------
 
@@ -58,6 +59,8 @@ def resolve_import_to_paths(
         return _resolve_c(importer_path, import_info, file_paths)
     if language == 'Go':
         return _resolve_go(importer_path, import_info, file_paths)
+    if language == 'Java':
+        return _resolve_java(importer_path, import_info, file_paths)
     return []
 
 
@@ -77,9 +80,13 @@ def _resolve_python_absolute(module: str, file_paths: set) -> list:
     segments = [s.strip() for s in module.split(',')]
     resolved = []
     for seg in segments:
-        base   = seg.replace('.', '/')
-        result = _try_python_path_variants(base, file_paths)
-        resolved.extend(result)
+        base = seg.replace('.', '/')
+        # Check direct, src/, and app/ layouts
+        for prefix in ('', 'src/', 'app/'):
+            result = _try_python_path_variants(prefix + base, file_paths)
+            if result:
+                resolved.extend(result)
+                break
     return resolved
 
 
@@ -144,23 +151,41 @@ def _normalize_posix_path(path: str) -> str:
 
 
 def _resolve_js(importer_path: str, module: str, file_paths: set) -> list:
-    if not (module.startswith('./') or module.startswith('../')):
-        return []
-
     importer_dir = PurePosixPath(importer_path).parent
-    raw_target   = str(importer_dir / module).replace('\\', '/')
-    raw_target   = _normalize_posix_path(raw_target)
+    targets = []
 
-    if raw_target in file_paths:
-        return [raw_target]
-    for ext in _JS_EXTENSIONS:
-        candidate = raw_target + ext
-        if candidate in file_paths:
-            return [candidate]
-    for index_file in _JS_INDEX_FILES:
-        candidate = raw_target + '/' + index_file
-        if candidate in file_paths:
-            return [candidate]
+    if module.startswith('./') or module.startswith('../'):
+        raw_target = str(importer_dir / module).replace('\\', '/')
+        targets.append(_normalize_posix_path(raw_target))
+    else:
+        # Handle path aliases (@/, ~/, #/, src/, etc.)
+        cleaned = module
+        if module.startswith('@/') or module.startswith('~/') or module.startswith('#/'):
+            cleaned = module[2:]
+        elif module.startswith('@src/'):
+            cleaned = module[5:]
+
+        targets.extend([
+            cleaned,
+            f"src/{cleaned}",
+            f"app/{cleaned}",
+            f"lib/{cleaned}",
+            f"frontend/src/{cleaned}",
+            f"frontend/{cleaned}"
+        ])
+
+    for raw_target in targets:
+        raw_target = _normalize_posix_path(raw_target)
+        if raw_target in file_paths:
+            return [raw_target]
+        for ext in _JS_EXTENSIONS:
+            candidate = raw_target + ext
+            if candidate in file_paths:
+                return [candidate]
+        for index_file in _JS_INDEX_FILES:
+            candidate = raw_target + '/' + index_file
+            if candidate in file_paths:
+                return [candidate]
     return []
 
 
@@ -235,14 +260,40 @@ def _resolve_go(importer_path: str, import_info, file_paths: set) -> list:
     module = import_info.module.strip('"\' ')
     importer_dir = PurePosixPath(importer_path).parent
 
-    # Relative imports
+    # 1. Relative imports
     if module.startswith('./') or module.startswith('../'):
         raw = _normalize_posix_path(str(importer_dir / module).replace('\\', '/'))
-        return [p for p in file_paths if p.startswith(raw + '/') and p.endswith('.go')]
+        return [p for p in file_paths if (p.startswith(raw + '/') or p == raw + '.go') and p.endswith('.go')]
 
-    # Internal package imports
-    pkg_suffix = module.split('/')[-1]
+    # 2. Heuristic package subpath match
+    # E.g. "github.com/levitateos/soda-os/internal/daemon" -> match files in "internal/daemon/"
+    parts = module.split('/')
+    for i in range(1, len(parts)):
+        subpath = '/'.join(parts[i:])
+        matched = [p for p in file_paths if (p.startswith(subpath + '/') or f'/{subpath}/' in p) and p.endswith('.go')]
+        if matched:
+            return matched
+
+    # 3. Last segment package name fallback
+    pkg_suffix = parts[-1]
     return [p for p in file_paths if f'/{pkg_suffix}/' in p and p.endswith('.go')]
+
+
+# -----------------------------------------------------------------------
+# Java resolution
+# -----------------------------------------------------------------------
+
+def _resolve_java(importer_path: str, import_info, file_paths: set) -> list:
+    module = import_info.module.strip('; ')
+    path_suffix = module.replace('.', '/')
+    if path_suffix.endswith('/*'):
+        pkg_dir = path_suffix[:-2]
+        return [p for p in file_paths if (p.endswith('.java') or p.endswith('.kt')) and f'/{pkg_dir}/' in p]
+
+    # Direct class file match
+    target_java = f"{path_suffix}.java"
+    target_kt = f"{path_suffix}.kt"
+    return [p for p in file_paths if p.endswith(target_java) or p.endswith(target_kt) or f'/{path_suffix}.' in p]
 
 
 # -----------------------------------------------------------------------
