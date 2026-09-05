@@ -108,7 +108,7 @@ const AGENT_DESCS = [
 function GnosisLogo({ size = 24 }: { size?: number }) {
   return (
     <img
-      src="/logos/gnosis_symbol_white.png"
+      src="/logo_white.png"
       alt="Project Gnosis Symbol"
       width={size}
       height={size}
