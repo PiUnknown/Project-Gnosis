@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, useReducedMotion } from 'motion/react'
 import posthog from 'posthog-js'
 const API_BASE = import.meta.env.VITE_API_URL || "";
-const APP_VERSION = "1.0.1";
+const APP_VERSION = "1.0.2";
 
 function useWindowWidth() {
   const [width, setWidth] = useState(
@@ -83,6 +83,16 @@ interface AnalysisResult {
 
 type RiskLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'
 
+const AGENT_NAMES = [
+  'Ingestion',
+  'AST Parser',
+  'Dependency Graph',
+  'Complexity Scorer',
+  'Code RAG',
+  'Explainability',
+  'Doc Generator',
+]
+
 const AGENT_DESCS = [
   'Fetching repository file tree from GitHub API',
   'Parsing syntax trees with tree-sitter',
@@ -94,22 +104,22 @@ const AGENT_DESCS = [
 ]
 
 // ─── GnosisLogo ───────────────────────────────────────────────────────────────
-// Gnosis (Greek: γνῶσις) means knowledge through direct seeing.
-// The eye: a diamond outline + diamond pupil — knowledge that perceives.
-// All straight lines, no curves, consistent with 0px radius system.
-function GnosisLogo() {
+// Official Project Gnosis Symbol: Isolated geometric 'G' + AST network + Eye of Gnosis
+function GnosisLogo({ size = 24 }: { size?: number }) {
   return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      style={{ display: 'block', flexShrink: 0 }}
-    >
-      <path d="M1,9 L9,2 L17,9 L9,16 Z" stroke="white" strokeWidth="1.2" />
-      <rect x="7.5" y="7.5" width="3" height="3" transform="rotate(45 9 9)" fill="white" />
-    </svg>
+    <img
+      src="/logos/gnosis_symbol_white.png"
+      alt="Project Gnosis Symbol"
+      width={size}
+      height={size}
+      style={{
+        display: 'block',
+        flexShrink: 0,
+        width: size,
+        height: size,
+        objectFit: 'contain',
+      }}
+    />
   )
 }
 
