@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, useReducedMotion } from 'motion/react'
 import posthog from 'posthog-js'
 const API_BASE = import.meta.env.VITE_API_URL || "";
-const APP_VERSION = "1.0.4";
+const APP_VERSION = "1.0.5";
 
 function useWindowWidth() {
   const [width, setWidth] = useState(
@@ -426,12 +426,9 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
           }}
         >
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 58, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
-              UNDERSTAND
-            </div>
-            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 58, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
-              ANY CODEBASE
-            </div>
+            <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 58, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase', margin: 0 }}>
+              Gnosis - Code Archaeology Agent for Any GitHub Repo
+            </h1>
           </div>
 
           <p style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 16, fontWeight: 400, color: 'rgba(255,255,255,0.65)', maxWidth: 420, lineHeight: 1.6, margin: '0 0 32px 0' }}>
