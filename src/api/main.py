@@ -316,7 +316,9 @@ def list_jobs():
     return JobListResponse(total=len(summaries), jobs=summaries)
 
 @app.get("/health", response_model=HealthResponse, tags=["Info"])
+@app.head("/health", tags=["Info"])
 @app.get("/api/health")
+@app.head("/api/health")
 def health():
     stats = get_queue_stats()
     return HealthResponse(
@@ -329,6 +331,7 @@ def health():
     )
 
 @app.get("/")
+@app.head("/")
 def root():
     return {
         "name":    "Project Gnosis — Code Archaeology Agent",

@@ -154,6 +154,18 @@ class TestHealthAndRoot:
         body = response.json()
         assert "endpoints" in body
 
+    def test_health_head_returns_200(self, client):
+        response = client.head("/health")
+        assert response.status_code == 200
+
+    def test_health_api_head_returns_200(self, client):
+        response = client.head("/api/health")
+        assert response.status_code == 200
+
+    def test_root_head_returns_200(self, client):
+        response = client.head("/")
+        assert response.status_code == 200
+
     def test_health_active_jobs_is_integer(self, client):
         response = client.get("/health")
         assert isinstance(response.json()["active_jobs"], int)
