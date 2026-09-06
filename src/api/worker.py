@@ -44,10 +44,16 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 class WorkerHealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "application/json")
-        self.end_headers()
-        self.wfile.write(b'{"status": "worker_active", "service": "gnosis-worker"}')
+        if self.path in ("/", "/health"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"ok")
+        else:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"ok")
 
     def log_message(self, format, *args):
         # Silence HTTP access logs to keep worker output clean
@@ -57,22 +63,20 @@ class WorkerHealthHandler(BaseHTTPRequestHandler):
 def _start_health_server(port: int):
     try:
         server = HTTPServer(("0.0.0.0", port), WorkerHealthHandler)
-        logger.info(f"[Worker Health] Listening on port {port} for platform health checks.")
+        logger.info(f"[Worker Health] Listening on 0.0.0.0:{port} for platform health checks.")
         server.serve_forever()
     except Exception as exc:
-        logger.warning(f"[Worker Health] Could not start health server on port {port}: {exc}")
+        logger.warning(f"[Worker Health] Could not start HTTP server on port {port}: {exc}")
 
 
 def start_worker():
-    # If a PORT is specified (e.g. Render Web Service), bind a lightweight health server
-    port_env = os.getenv("PORT")
-    if port_env:
-        try:
-            port = int(port_env)
-            health_thread = threading.Thread(target=_start_health_server, args=(port,), daemon=True)
-            health_thread.start()
-        except ValueError:
-            pass
+    # Start minimal background HTTP server (default port 8000) for platform health checks / cron pings
+    try:
+        port = int(os.getenv("PORT", "8000"))
+        health_thread = threading.Thread(target=_start_health_server, args=(port,), daemon=True)
+        health_thread.start()
+    except Exception as exc:
+        logger.warning(f"[Worker Health] Failed to initialize background HTTP server: {exc}")
 
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     queue_name = os.getenv("RQ_QUEUE_NAME", DEFAULT_QUEUE_NAME)

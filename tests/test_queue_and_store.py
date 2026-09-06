@@ -203,3 +203,36 @@ class TestQueueManagement:
             assert stats["redis_connected"] is True
             assert stats["mode"] == "rq_distributed"
             assert stats["queue_depth"] == 0
+
+
+class TestWorkerHealthHandler:
+
+    def test_worker_health_handler_root_and_health(self):
+        from src.api.worker import WorkerHealthHandler
+        from http.server import HTTPServer
+        import socket
+        import threading
+        import urllib.request
+
+        # Find a free port
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+
+        server = HTTPServer(("127.0.0.1", port), WorkerHealthHandler)
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+
+        try:
+            # Test GET /
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/") as resp:
+                assert resp.status == 200
+                assert resp.read() == b"ok"
+
+            # Test GET /health
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/health") as resp:
+                assert resp.status == 200
+                assert resp.read() == b"ok"
+        finally:
+            server.shutdown()
+
