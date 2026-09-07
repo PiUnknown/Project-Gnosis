@@ -1,3 +1,7 @@
+# Pin PyTorch CPU-only index to prevent downloading multi-GB CUDA/NVIDIA wheels on CPU-only Azure App Service
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.2.0+cpu
+
 requests>=2.31.0
 python-dotenv>=1.0.0
 networkx>=3.2
@@ -15,7 +19,6 @@ tree-sitter-c>=0.21.0
 tree-sitter-cpp>=0.21.0
 fastapi>=0.109.0
 uvicorn>=0.27.0
-streamlit>=1.31.0
 gitpython>=3.1.41
 pyvis>=0.3.2
 openai>=1.0.0
