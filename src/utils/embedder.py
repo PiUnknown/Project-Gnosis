@@ -14,7 +14,7 @@ PUBLIC INTERFACE:
 CONFIGURATION:
   NVIDIA_API_KEY          (required) — from https://build.nvidia.com
   NVIDIA_BASE_URL         (optional) — defaults to https://integrate.api.nvidia.com/v1
-  NVIDIA_EMBEDDING_MODEL  (optional) — defaults to nvidia/nv-embedqa-e5-v5
+  NVIDIA_EMBEDDING_MODEL  (optional) — defaults to nvidia/llama-nemotron-embed-vl-1b-v2
 """
 
 import os
@@ -25,7 +25,7 @@ from typing import List, Optional
 logger = logging.getLogger(__name__)
 
 NVIDIA_BASE_URL_DEFAULT = "https://integrate.api.nvidia.com/v1"
-NVIDIA_EMBEDDING_MODEL_DEFAULT = "nvidia/nv-embedqa-e5-v5"
+NVIDIA_EMBEDDING_MODEL_DEFAULT = "nvidia/llama-nemotron-embed-vl-1b-v2"
 
 # Batching to respect API payload limits
 BATCH_SIZE = 32
@@ -33,8 +33,8 @@ PER_CALL_TIMEOUT_SECONDS = 60.0
 MAX_RETRIES = 3
 BASE_DELAY_SECONDS = 1.0
 
-# Default dimension for nv-embedqa-e5-v5
-EMBEDDING_DIM = 1024
+# Default dimension for nvidia/llama-nemotron-embed-vl-1b-v2
+EMBEDDING_DIM = 2048
 
 _client = None
 

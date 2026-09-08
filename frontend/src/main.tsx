@@ -15,21 +15,23 @@ Sentry.init({
 Sentry.captureMessage("Gnosis System Online - Sentry Connected")
 
 const options = {
-  api_host: import.meta.env.VITE_POSTHOG_HOST || "/ingest",
+  api_host: import.meta.env.VITE_POSTHOG_HOST || (import.meta.env.PROD ? "/ingest" : "https://eu.i.posthog.com"),
   ui_host: "https://eu.posthog.com",
   disable_session_recording: true,
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <PostHogProvider 
-      apiKey={import.meta.env.VITE_POSTHOG_PROJECT_TOKEN || "phc_vEgQtXumCU6NkHgdDiGm5J8MnDg4wEXTMuUjXRAYorDP"}
-      options={options}
-    >
-      <App />
-      <Analytics />
-      <SpeedInsights />
-    </PostHogProvider>
+    <Sentry.ErrorBoundary fallback={<div style={{ padding: 24, color: '#fff', background: '#1400FF', fontFamily: 'monospace' }}>An error occurred while loading the application. Please refresh.</div>}>
+      <PostHogProvider 
+        apiKey={import.meta.env.VITE_POSTHOG_PROJECT_TOKEN || "phc_vEgQtXumCU6NkHgdDiGm5J8MnDg4wEXTMuUjXRAYorDP"}
+        options={options}
+      >
+        <App />
+        <Analytics />
+        <SpeedInsights />
+      </PostHogProvider>
+    </Sentry.ErrorBoundary>
   </React.StrictMode>,
 )
 

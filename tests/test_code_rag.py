@@ -735,7 +735,7 @@ class TestNvidiaEmbedder:
     def test_embed_query_empty(self):
         from src.utils.embedder import embed_query
         result = embed_query("")
-        assert len(result) == 1024
+        assert len(result) == 2048
         assert all(v == 0.0 for v in result)
 
     def test_embed_texts_batches_and_returns_embeddings(self):
@@ -770,14 +770,14 @@ class TestNvidiaEmbedder:
         mock_client = MagicMock()
         mock_item = MagicMock()
         mock_item.index = 0
-        mock_item.embedding = [0.9] * 1024
+        mock_item.embedding = [0.9] * 2048
         mock_resp = MagicMock()
         mock_resp.data = [mock_item]
         mock_client.embeddings.create.return_value = mock_resp
 
         with patch("src.utils.embedder.get_client", return_value=mock_client):
             result = embedder.embed_query("payment processing")
-            assert len(result) == 1024
+            assert len(result) == 2048
             assert result[0] == 0.9
 
     def test_missing_api_key_raises(self):
