@@ -724,3 +724,66 @@ class TestCodeRAGAgent:
         chunks2 = retriever.get_file_chunks("src/file2.js")
         assert len(chunks1) == 3
         assert len(chunks2) == 2
+
+
+class TestNvidiaEmbedder:
+
+    def test_embed_texts_empty(self):
+        from src.utils.embedder import embed_texts
+        assert embed_texts([]) == []
+
+    def test_embed_query_empty(self):
+        from src.utils.embedder import embed_query
+        result = embed_query("")
+        assert len(result) == 1024
+        assert all(v == 0.0 for v in result)
+
+    def test_embed_texts_batches_and_returns_embeddings(self):
+        from src.utils import embedder
+        from unittest.mock import MagicMock
+
+        embedder.reset_client()
+
+        mock_client = MagicMock()
+        mock_item1 = MagicMock()
+        mock_item1.index = 0
+        mock_item1.embedding = [0.1, 0.2, 0.3]
+        mock_item2 = MagicMock()
+        mock_item2.index = 1
+        mock_item2.embedding = [0.4, 0.5, 0.6]
+
+        mock_resp = MagicMock()
+        mock_resp.data = [mock_item2, mock_item1]  # Out of order to test sorting by index
+        mock_client.embeddings.create.return_value = mock_resp
+
+        with patch("src.utils.embedder.get_client", return_value=mock_client):
+            results = embedder.embed_texts(["hello", "world"])
+            assert results == [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
+            assert mock_client.embeddings.create.called
+
+    def test_embed_query_calls_api(self):
+        from src.utils import embedder
+        from unittest.mock import MagicMock
+
+        embedder.reset_client()
+
+        mock_client = MagicMock()
+        mock_item = MagicMock()
+        mock_item.index = 0
+        mock_item.embedding = [0.9] * 1024
+        mock_resp = MagicMock()
+        mock_resp.data = [mock_item]
+        mock_client.embeddings.create.return_value = mock_resp
+
+        with patch("src.utils.embedder.get_client", return_value=mock_client):
+            result = embedder.embed_query("payment processing")
+            assert len(result) == 1024
+            assert result[0] == 0.9
+
+    def test_missing_api_key_raises(self):
+        from src.utils import embedder
+        embedder.reset_client()
+
+        with patch.dict("os.environ", {"NVIDIA_API_KEY": ""}, clear=False):
+            with pytest.raises(EnvironmentError, match="NVIDIA_API_KEY is not set"):
+                embedder.get_client()
