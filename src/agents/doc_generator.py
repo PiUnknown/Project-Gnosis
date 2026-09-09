@@ -876,7 +876,7 @@ def generate_agent_context_doc(state: ArchaeonState) -> str:
     repo = _repo_name(state)
 
     header = (
-        f"# Repository Agent Context: `{repo}`\n\n"
+        f"# Repository Agent Context: {repo}\n\n"
         f"> This document is optimised for AI coding agents.\n"
         f"> For human-readable documentation see `onboarding.md`.\n\n"
         f"---\n\n"

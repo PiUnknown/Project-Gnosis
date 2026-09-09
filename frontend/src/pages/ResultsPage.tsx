@@ -243,7 +243,7 @@ function MarkdownPane({ content }: { content: string }) {
                         inline ? (
                             <code style={{
                                 fontFamily: "'IBM Plex Mono', monospace",
-                                fontSize: "12px",
+                                fontSize: "inherit",
                                 background: "rgba(20,0,255,0.08)",
                                 padding: "1px 5px",
                                 color: "#0F00CC",

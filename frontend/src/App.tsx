@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, useReducedMotion } from 'motion/react'
 import posthog from 'posthog-js'
 const API_BASE = import.meta.env.VITE_API_URL || "";
-const APP_VERSION = "1.0.6";
+const APP_VERSION = "1.0.7";
 
 function useWindowWidth() {
   const [width, setWidth] = useState(

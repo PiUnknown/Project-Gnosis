@@ -135,6 +135,16 @@ body {
   background: rgba(20, 0, 255, 0.08);
   padding: 2px 6px;
 }
+.gnosis-markdown h1 code,
+.gnosis-markdown h2 code,
+.gnosis-markdown h3 code {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: transparent;
+  padding: 0;
+  border: none;
+}
 .gnosis-markdown pre {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 13px;
