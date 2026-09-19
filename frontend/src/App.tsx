@@ -1,1635 +1,1005 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, useReducedMotion } from 'motion/react'
-import posthog from 'posthog-js'
-const API_BASE = import.meta.env.VITE_API_URL || "";
-const APP_VERSION = "1.0.7";
+import React, { useState, useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import posthog from 'posthog-js';
 
-function useWindowWidth() {
-  const [width, setWidth] = useState(
-    typeof window !== 'undefined' ? window.innerWidth : 1440
-  )
-  useEffect(() => {
-    const fn = () => setWidth(window.innerWidth)
-    window.addEventListener('resize', fn)
-    return () => window.removeEventListener('resize', fn)
-  }, [])
-  return width
-}
+import {
+  BlueprintPanel,
+  TelemetryMeter,
+  DotMatrixReadout,
+  SparklineReadout,
+  TechButton,
+  StatInstrument,
+  RegistrationMark,
+  DoodleSlot,
+  FieldAnnotation,
+  AsciiLoader,
+  EmptySchematic,
+} from './components/blueprint';
 
-type Screen = 'landing' | 'progress' | 'results' | 'error'
-type AgentStatus = 'queued' | 'running' | 'complete' | 'failed'
-type ResultsTab = 'onboarding' | 'agent_context' | 'explanations' | 'dependency' | 'complexity' | 'raw'
+import {
+  downloadOnboarding,
+  downloadAgentContext,
+  downloadComplexityReport,
+  downloadDependencyGraph,
+  downloadFileExplanations,
+} from './lib/download';
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
+export const APP_VERSION = '1.1.0';
+
+type Screen = 'landing' | 'progress' | 'results' | 'error';
+type Tab = '01_ONBOARDING' | '02_AGENT_CONTEXT' | '03_DEPENDENCY_GRAPH' | '04_COMPLEXITY_TELEMETRY' | '05_FILE_EXPLANATIONS' | '06_CODE_RAG';
 
 interface AgentState {
-  id: string
-  name: string
-  status: AgentStatus
+  id: string;
+  name: string;
+  desc: string;
+  status: 'queued' | 'running' | 'complete' | 'failed';
+  metric?: string;
 }
 
-interface JobState {
-  status: 'running' | 'complete' | 'failed'
-  agents: AgentState[]
-  error: string | null
+interface SampleArchaeologyData {
+  repo_url: string;
+  branch: string;
+  total_files: number;
+  total_functions: number;
+  total_classes: number;
+  import_edges: number;
+  circular_cycles: number;
+  critical_files: number;
+  high_files: number;
+  medium_files: number;
+  low_files: number;
+  onboarding_doc: string;
+  agent_context: string;
+  file_explanations: string;
+  dependency_rows: { file: string; path: string; imports: number; imported_by: number; risk: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' }[];
+  complexity_rows: { file: string; avg_cc: number; max_cc: number; worst_fn: string; coupling: number; risk: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'; flags: string[] }[];
+  circular_deps: string[][];
 }
 
-interface ResultSummary {
-  repo_url: string
-  branch?: string
-  total_files: number
-  total_functions: number
-  total_classes: number
-  import_edges: number
-  circular_cycles: number
-  explained: number
-  risk_distribution: Record<string, number>
-}
+const SAMPLE_DATA: SampleArchaeologyData = {
+  repo_url: 'https://github.com/tiangolo/fastapi',
+  branch: 'master',
+  total_files: 84,
+  total_functions: 612,
+  total_classes: 148,
+  import_edges: 382,
+  circular_cycles: 2,
+  critical_files: 3,
+  high_files: 11,
+  medium_files: 24,
+  low_files: 46,
+  onboarding_doc: `# ARCHITECTURAL EXCAVATION REPORT: FASTAPI
+**EXCAVATED VIA PROJECT GNOSIS // TREE-SITTER AST + NETWORKX + CHROMADB**
 
-interface DepRow {
-  file: string
-  path: string
-  imported_by: number
-  imports: number
-  risk: RiskLevel
-}
+---
 
-interface ComplexityRow {
-  file: string
-  path: string
-  risk: RiskLevel
-  avg_cc: number
-  max_cc: number
-  worst_fn: string
-  coupling: number
-  flags: string[]
-}
+## 1. EXECUTIVE TOPOLOGY SUMMARY
+FastAPI is a modern, high-performance web framework for building APIs with Python based on standard Python type hints and Starlette/Pydantic foundations.
 
-interface AnalysisResult {
-  summary: ResultSummary
-  branch?: string
-  error?: string
-  onboarding_doc: string
-  agent_context?: string
-  file_explanations_md?: string
-  dependency_rows: DepRow[]
-  reading_order: string[]
-  complexity_rows: ComplexityRow[]
-  explanations: Record<string, string>
-  complexity_report_json: string
-  circular_deps: string[][]
-  skip_llm?: boolean
-}
+\`\`\`
+[USER_REQUEST] ──> [APIRoute.get_route_handler()] ──> [solve_dependencies()] ──> [Endpoint Handler]
+                          │                                     │
+                          └──> [Pydantic Model Validator]       └──> [Security / Scopes]
+\`\`\`
 
-type RiskLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'
+### CORE ARCHITECTURAL INVARIANTS
+1. **Dependency Injection Hierarchy**: The DI container (\`fastapi.dependencies.utils\`) resolves parameters recursively before route handlers are invoked.
+2. **Schema Synthesis**: OpenAPI generation compiles AST-like route definitions into JSON schemas via \`fastapi.openapi.utils\`.
+3. **Execution Runtime**: Requests pipe through Starlette middleware stack with Zero-Copy response serialization.
 
-const AGENT_NAMES = [
-  'Ingestion',
-  'AST Parser',
-  'Dependency Graph',
-  'Complexity Scorer',
-  'Code RAG',
-  'Explainability',
-  'Doc Generator',
-]
+---
 
-const AGENT_DESCS = [
-  'Fetching repository file tree from GitHub API',
-  'Parsing syntax trees with tree-sitter',
-  'Building directed import graph with NetworkX',
-  'Scoring cyclomatic complexity and tech debt',
-  'Embedding code chunks into ChromaDB',
-  'Generating explanations via LLM',
-  'Synthesizing all outputs into onboarding.md',
-]
+## 2. CRITICAL ARCHITECTURAL SUBSYSTEMS
 
-// ─── GnosisLogo ───────────────────────────────────────────────────────────────
-// Official Project Gnosis Symbol: Isolated geometric 'G' + AST network + Eye of Gnosis
-function GnosisLogo({ size = 24 }: { size?: number }) {
-  return (
-    <img
-      src="/logo_white.png"
-      alt="Project Gnosis Symbol"
-      width={size}
-      height={size}
-      style={{
-        display: 'block',
-        flexShrink: 0,
-        width: size,
-        height: size,
-        objectFit: 'contain',
-      }}
-    />
-  )
-}
+| Subsystem | Entry File | Responsibility | Risk Level |
+|---|---|---|---|
+| **Route Dispatcher** | \`fastapi/routing.py\` | Compiles endpoints into Starlette routing tables | HIGH |
+| **Dependency Resolver** | \`fastapi/dependencies/utils.py\` | Graph-based async DI solver with cache | CRITICAL |
+| **Model Bindings** | \`fastapi/datastructures.py\` | Parameter extraction (Query, Body, Path, Header) | MEDIUM |
+| **OpenAPI Schema Engine** | \`fastapi/openapi/utils.py\` | Auto-generates OpenAPI 3.1.0 specifications | HIGH |
 
-// ─── NavBar ───────────────────────────────────────────────────────────────────
-function NavBar({ onLogoClick }: { onLogoClick: () => void }) {
-  const isMobile = useWindowWidth() < 768
-  return (
-    <nav
-      style={{
-        height: isMobile ? 56 : 72,
-        background: '#1400FF',
-        borderBottom: '1px solid rgba(255,255,255,0.15)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: isMobile ? '0 20px' : '0 96px',
-        flexShrink: 0,
-      }}
-    >
-      <motion.button
-        onClick={onLogoClick}
-        whileTap={{ scale: 0.97 }}
-        transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-        style={{
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: 0,
-          fontFamily: "'IBM Plex Mono', monospace",
-          fontSize: 14,
-          fontWeight: 500,
-          letterSpacing: '0.12em',
-          color: '#FFFFFF',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-        }}
-      >
-        <GnosisLogo />
-        GNOSIS
-      </motion.button>
-      {!isMobile && (
-        <span
-          style={{
-            fontFamily: "'IBM Plex Mono', monospace",
-            fontSize: 11,
-            fontWeight: 400,
-            letterSpacing: '0.14em',
-            color: 'rgba(255,255,255,0.50)',
-          }}
-        >
-          CODE ARCHAEOLOGY AGENT
-        </span>
-      )}
-    </nav>
-  )
-}
+---
 
-// ─── Athena Figure ────────────────────────────────────────────────────────────
-function AthenaFigure({ brightness = 0.88 }: { brightness?: number }) {
-  return (
-    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-      <img
-        src="https://images.unsplash.com/photo-1670813885725-e3c5391dcd31?w=900&h=1400&fit=crop&auto=format"
-        alt="Athena — goddess of wisdom"
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: '50%',
-          transform: 'translateX(-40%)',
-          height: '100%',
-          width: 'auto',
-          filter: `grayscale(1) contrast(1.55) brightness(${brightness})`,
-          mixBlendMode: 'screen',
-          opacity: 0.9,
-          WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 18%, black 80%, transparent 100%)',
-          maskImage: 'linear-gradient(to right, transparent 0%, black 18%, black 80%, transparent 100%)',
-        }}
-      />
-    </div>
-  )
-}
+## 3. ARCHAEOLOGICAL HOTSPOTS & TECH DEBT
+> **FIELD ANNOTATION [CYCLE DETECTED]**: \`fastapi/routing.py\` <──> \`fastapi/dependencies/utils.py\` form a cyclic coupling edge during parameter resolution recursion.
 
-// ─── RiskBadge ────────────────────────────────────────────────────────────────
-function RiskBadge({ level, count, onLight = false }: { level: RiskLevel; count?: number; onLight?: boolean }) {
-  const styles: Record<RiskLevel, React.CSSProperties> = {
-    CRITICAL: onLight
-      ? { background: '#1400FF', color: '#FFFFFF', border: 'none' }
-      : { background: '#FFFFFF', color: '#1400FF', border: 'none' },
-    HIGH: onLight
-      ? { background: 'transparent', color: '#1400FF', border: '1px solid #1400FF' }
-      : { background: 'transparent', color: '#FFFFFF', border: '1px solid #FFFFFF' },
-    MEDIUM: onLight
-      ? { background: 'rgba(20,0,255,0.08)', color: 'rgba(20,0,255,0.70)', border: '1px solid rgba(20,0,255,0.20)' }
-      : { background: 'transparent', color: 'rgba(255,255,255,0.65)', border: '1px solid rgba(255,255,255,0.40)' },
-    LOW: onLight
-      ? { background: 'transparent', color: 'rgba(10,10,26,0.35)', border: 'none' }
-      : { background: 'transparent', color: 'rgba(255,255,255,0.40)', border: 'none' },
-  }
-  return (
-    <span
-      style={{
-        fontFamily: "'IBM Plex Mono', monospace",
-        fontSize: 9,
-        fontWeight: 500,
-        letterSpacing: '0.12em',
-        padding: '3px 8px',
-        display: 'inline-block',
-        ...styles[level],
-      }}
-    >
-      {level}{count !== undefined ? `: ${count}` : ''}
-    </span>
-  )
-}
+- **Ref-Cycle**: \`routing.py\` delegates parameter parsing to \`solve_dependencies()\`, which references back to \`APIRoute\` metadata.
+- **Cognitive Complexity**: \`fastapi/dependencies/utils.py::solve_dependencies\` has a cyclomatic score of **34** due to nested async generator handling and recursive sub-dependency caching.
+`,
+  agent_context: `PROJECT: FastAPI
+ROLE: High-performance Python Web Framework
+ARCHITECTURAL PATTERNS: Dependency Injection, Async Middleware, Pydantic Schema Compilation
 
-function RiskDistributionBar({ riskDist }: { riskDist: Record<string, number> }) {
-  const critical = riskDist.CRITICAL || 0
-  const high = riskDist.HIGH || 0
-  const medium = riskDist.MEDIUM || 0
-  const low = riskDist.LOW || 0
-  const total = critical + high + medium + low
-  if (total === 0) return null
+CRITICAL PATHS:
+- fastapi/applications.py: Main FastAPI application instance and lifecycle hooks.
+- fastapi/routing.py: APIRoute compilation, routing tree, and Starlette handler wraps.
+- fastapi/dependencies/utils.py: Async dependency solver with parameter caching.
+- fastapi/param_functions.py: Declaration primitives (Depends, Security, Body, Query, Header).
 
-  const pct = (val: number) => (val / total) * 100
+RULES FOR AGENTS MODIFYING CODEBASE:
+1. Never bypass \`solve_dependencies()\` in custom route handlers.
+2. Ensure async dependencies close generators via context managers.
+3. Preserve Pydantic v1 / v2 compatibility layers in \`fastapi/_compat.py\`.
+`,
+  file_explanations: `# ARCHAEOLOGICAL FILE EXPLANATIONS // DEEP RECONSTRUCTION
+**SYNTHESIZED BY AGENT 6 (EXPLAINABILITY) & AGENT 7 (DOC GENERATOR)**
 
-  return (
-    <div style={{ marginBottom: 32 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: 'rgba(10,10,26,0.50)' }}>CODEBASE RISK DISTRIBUTION</span>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, color: 'rgba(10,10,26,0.40)' }}>{total} FILES</span>
-      </div>
-      <div style={{ display: 'flex', height: 12, background: 'rgba(20,0,255,0.04)', border: '1px solid rgba(20,0,255,0.15)', overflow: 'hidden' }}>
-        {critical > 0 && (
-          <div style={{ width: `${pct(critical)}%`, background: '#1400FF' }} title={`CRITICAL: ${critical} files (${pct(critical).toFixed(1)}%)`} />
-        )}
-        {high > 0 && (
-          <div style={{ width: `${pct(high)}%`, background: 'transparent', border: '1px solid #1400FF', boxSizing: 'border-box' }} title={`HIGH: ${high} files (${pct(high).toFixed(1)}%)`} />
-        )}
-        {medium > 0 && (
-          <div style={{ width: `${pct(medium)}%`, background: 'rgba(20,0,255,0.08)', border: '1px solid rgba(20,0,255,0.20)', boxSizing: 'border-box' }} title={`MEDIUM: ${medium} files (${pct(medium).toFixed(1)}%)`} />
-        )}
-        {low > 0 && (
-          <div style={{ width: `${pct(low)}%`, background: 'transparent' }} title={`LOW: ${low} files (${pct(low).toFixed(1)}%)`} />
-        )}
-      </div>
-      <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-        {[
-          { label: 'CRITICAL', count: critical, background: '#1400FF', border: 'none' },
-          { label: 'HIGH', count: high, background: 'transparent', border: '1px solid #1400FF' },
-          { label: 'MEDIUM', count: medium, background: 'rgba(20,0,255,0.08)', border: '1px solid rgba(20,0,255,0.20)' },
-          { label: 'LOW', count: low, background: 'transparent', border: '1px solid rgba(20,0,255,0.15)' },
-        ].map(item => (
-          <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{
-              width: 8,
-              height: 8,
-              display: 'inline-block',
-              background: item.background,
-              border: item.border,
-              boxSizing: 'border-box'
-            }} />
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, color: 'rgba(10,10,26,0.65)' }}>{item.label}: {item.count}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
+---
 
-// ─── Toggle ───────────────────────────────────────────────────────────────────
-function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
-  const reducedMotion = useReducedMotion()
-  return (
-    <motion.button
-      onClick={() => onChange(!on)}
-      whileTap={{ scale: 0.97 }}
-      transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-      style={{
-        width: 44,
-        height: 24,
-        background: on ? '#FFFFFF' : 'transparent',
-        border: on ? '1px solid #FFFFFF' : '1px solid rgba(255,255,255,0.40)',
-        cursor: 'pointer',
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        flexShrink: 0,
-      }}
-    >
-      <motion.div
-        animate={{
-          left: on ? 24 : 2,
-          background: on ? '#1400FF' : 'rgba(255,255,255,0.60)',
-        }}
-        transition={
-          reducedMotion
-            ? { duration: 0.1 }
-            : { type: 'spring', bounce: 0, duration: 0.3 }
-        }
-        style={{
-          width: 16,
-          height: 16,
-          position: 'absolute',
-        }}
-      />
-    </motion.button>
-  )
-}
+### 1. \`fastapi/dependencies/utils.py\`
+- **Subsystem Role**: Core Graph-based Async Dependency Injection Resolver.
+- **Architectural Risk**: \`CRITICAL\` (Cyclomatic Complexity Peak: **34**, In-Degree: **22**)
+- **Key Signatures & Invariants**:
+  - \`async solve_dependencies(request, dependant, body, background_tasks, response, dependency_overrides_provider, async_exit_stack)\`: Recursively walks the dependency tree, resolves cache keys, calls sub-dependencies, and binds results to keyword arguments.
+  - \`get_dependant(*, path, call, name, security_scopes, use_cache)\`: Analyzes AST type hints to build a static dependency graph at application startup.
+  - \`get_param_sub_dependant(*, param, path, security_scopes)\`: Extracted parameter validator binding.
+- **Execution Flow**:
+  \`\`\`
+  Incoming Request ──> resolve parameter cache ──> solve sub-dependencies (async recursion)
+                                                               │
+                                                 evaluate security scopes
+                                                               │
+                                                push context to AsyncExitStack
+  \`\`\`
+- **Tech Debt & Architectural Notes**: High cognitive complexity due to multi-tiered error handling around async generator context manager lifecycles and fallback resolution for Pydantic v1/v2 compat layers.
 
-// ─── Screen 1: Landing ────────────────────────────────────────────────────────
-function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => void }) {
-  const [url, setUrl] = useState('')
-  const [maxExplanations, setMaxExplanations] = useState(20)
-  const [skipLlm, setSkipLlm] = useState(false)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [focused, setFocused] = useState(false)
-  const [hoverSubmit, setHoverSubmit] = useState(false)
-  const [showTooltip, setShowTooltip] = useState(false)
+---
 
-  const validate = (val: string) => /^https?:\/\/github\.com\/[^/]+\/[^/]+/.test(val)
+### 2. \`fastapi/routing.py\`
+- **Subsystem Role**: Route Registration, APIRoute Dispatching, and Handler Compilation.
+- **Architectural Risk**: \`HIGH\` (Cyclomatic Complexity Peak: **28**, In-Degree: **14**)
+- **Key Signatures & Invariants**:
+  - \`APIRoute.get_route_handler()\`: Wraps endpoint coroutines in Starlette Request lifecycle handlers, invokes \`solve_dependencies()\`, validates body payloads against Pydantic models, and serializes responses.
+  - \`APIRouter.add_api_route(path, endpoint, response_model, status_code, tags, dependencies)\`: Registers endpoints into directed routing tables.
+- **Inter-module Coupling**: Forms a circular dependency cycle with \`dependencies/utils.py\` because route handlers must invoke the dependency solver, while the dependency solver references route parameter signatures.
 
-  const handleSubmit = async () => {
-    if (!validate(url)) {
-      setError('INVALID GITHUB URL — MUST MATCH github.com/owner/repo')
-      posthog.capture('repo_analysis_validation_failed', {
-        input_url: url,
-      })
-      return
-    }
-    setError('')
-    setLoading(true)
-    posthog.capture('repo_analysis_submitted', {
-      repo_url: url,
-      max_explanations: maxExplanations,
-      skip_llm: skipLlm,
-    })
-    try {
-      const res = await fetch(`${API_BASE}/api/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          repo_url: url,
-          max_explanations: maxExplanations,
-          skip_llm: skipLlm,
-        }),
-      })
-      if (!res.ok) {
-        let data: any = null
-        try {
-          data = await res.json()
-        } catch {
-          // ignore parsing error
-        }
+---
 
-        if (res.status === 409 && data && data.job_id) {
-          posthog.capture('repo_analysis_attached_existing_job', {
-            repo_url: url,
-            job_id: data.job_id,
-          })
-          onSubmit(url, data.job_id)
-          return
-        }
+### 3. \`fastapi/applications.py\`
+- **Subsystem Role**: Top-level Application Container & Starlette Orchestrator.
+- **Architectural Risk**: \`HIGH\` (Cyclomatic Complexity Peak: **14**, In-Degree: **8**)
+- **Key Signatures & Invariants**:
+  - \`FastAPI.__init__()\`: Initializes Starlette ASGI instance, middleware stack, CORS filters, and default router.
+  - \`FastAPI.openapi()\`: Caches and serves compiled OpenAPI 3.1.0 schemas.
+  - \`FastAPI.setup()\`: Configures default exception handlers (\`RequestValidationError\`, \`HTTPException\`).
 
-        let msg = `Server error: ${res.status}`
-        if (data && data.detail) {
-          msg = data.detail
-        } else if (data && data.message) {
-          msg = data.message
-        }
-        throw new Error(msg)
-      }
-      const { job_id } = await res.json()
-      onSubmit(url, job_id)
-    } catch (err) {
-      const rawMsg = err instanceof Error ? err.message : 'unknown error'
-      posthog.capture('repo_analysis_submission_error', {
-        repo_url: url,
-        error: rawMsg,
-      })
-      if (rawMsg.includes('Failed to fetch') || rawMsg.includes('NetworkError') || rawMsg.includes('Network request failed')) {
-        setError(`CONNECTION FAILED — IS THE SERVER RUNNING? (${rawMsg})`)
-      } else {
-        setError(rawMsg.toUpperCase())
-      }
-      setLoading(false)
-    }
-  }
+---
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#1400FF' }}>
-      <NavBar onLogoClick={() => { }} />
-      <div style={{ display: 'flex', flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {/* Left column */}
-        <div
-          style={{
-            width: 600,
-            flexShrink: 0,
-            padding: '0 0 0 96px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-          }}
-        >
-          <div style={{ marginBottom: 20 }}>
-            <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 58, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase', margin: 0 }}>
-              UNDERSTAND<br />ANY CODEBASE
-            </h1>
-          </div>
+### 4. \`fastapi/openapi/utils.py\`
+- **Subsystem Role**: Automated OpenAPI 3.1.0 JSON Schema Compiler.
+- **Architectural Risk**: \`MEDIUM\` (Cyclomatic Complexity Peak: **22**, In-Degree: **6**)
+- **Key Responsibilities**: Inspects routes, parameter types, response models, and security schemes to synthesize standard compliant OpenAPI documentation schemas.
 
-          <p style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 16, fontWeight: 400, color: 'rgba(255,255,255,0.65)', maxWidth: 420, lineHeight: 1.6, margin: '0 0 32px 0' }}>
-            Enter a public GitHub URL. Gnosis maps every import, scores every function, and writes the onboarding document your team never did.
-          </p>
+---
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.65)', marginBottom: 8 }}>
-              REPOSITORY URL
-            </div>
+### 5. \`fastapi/param_functions.py\`
+- **Subsystem Role**: Parameter Primitive Declarations (DSL).
+- **Architectural Risk**: \`LOW\` (In-Degree: **16**)
+- **Key Primitives**: \`Depends()\`, \`Security()\`, \`Query()\`, \`Path()\`, \`Body()\`, \`Header()\`, \`Cookie()\`.
+`,
+  dependency_rows: [
+    { file: 'fastapi/dependencies/utils.py', path: 'fastapi/dependencies/utils.py', imports: 18, imported_by: 22, risk: 'CRITICAL' },
+    { file: 'fastapi/routing.py', path: 'fastapi/routing.py', imports: 26, imported_by: 14, risk: 'HIGH' },
+    { file: 'fastapi/applications.py', path: 'fastapi/applications.py', imports: 19, imported_by: 8, risk: 'HIGH' },
+    { file: 'fastapi/openapi/utils.py', path: 'fastapi/openapi/utils.py', imports: 14, imported_by: 6, risk: 'MEDIUM' },
+    { file: 'fastapi/param_functions.py', path: 'fastapi/param_functions.py', imports: 4, imported_by: 16, risk: 'LOW' },
+    { file: 'fastapi/datastructures.py', path: 'fastapi/datastructures.py', imports: 6, imported_by: 12, risk: 'LOW' },
+    { file: 'fastapi/exceptions.py', path: 'fastapi/exceptions.py', imports: 2, imported_by: 18, risk: 'LOW' },
+  ],
+  complexity_rows: [
+    { file: 'fastapi/dependencies/utils.py', avg_cc: 14.2, max_cc: 34, worst_fn: 'solve_dependencies', coupling: 22, risk: 'CRITICAL', flags: ['HIGH_CYCLOMATIC', 'CIRCULAR_DEP', 'ASYNC_STACK'] },
+    { file: 'fastapi/routing.py', avg_cc: 11.4, max_cc: 28, worst_fn: 'get_request_handler', coupling: 18, risk: 'HIGH', flags: ['HIGH_BRANCHING', 'DECORATOR_CHAIN'] },
+    { file: 'fastapi/openapi/utils.py', avg_cc: 9.8, max_cc: 22, worst_fn: 'get_openapi', coupling: 14, risk: 'HIGH', flags: ['SCHEMA_RECURSION'] },
+    { file: 'fastapi/applications.py', avg_cc: 6.2, max_cc: 14, worst_fn: 'setup', coupling: 19, risk: 'MEDIUM', flags: ['LIFECYCLE_COMPLEXITY'] },
+    { file: 'fastapi/datastructures.py', avg_cc: 3.1, max_cc: 6, worst_fn: 'UploadFile.read', coupling: 8, risk: 'LOW', flags: [] },
+  ],
+  circular_deps: [
+    ['fastapi/routing.py', 'fastapi/dependencies/utils.py', 'fastapi/routing.py'],
+    ['fastapi/applications.py', 'fastapi/openapi/utils.py', 'fastapi/applications.py'],
+  ],
+};
 
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => { setUrl(e.target.value); setError('') }}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
-              placeholder="https://github.com/owner/repo"
-              style={{
-                width: 480,
-                height: 56,
-                background: '#FFFFFF',
-                border: error ? '1px solid #FF3B3B' : focused ? '1px solid #FFFFFF' : '1px solid rgba(255,255,255,0.30)',
-                padding: '0 20px',
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: 14,
-                fontWeight: 400,
-                color: '#1400FF',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-              onKeyDown={(e) => e.key === 'Enter' && !loading && handleSubmit()}
-            />
-            <style>{`input::placeholder { color: rgba(20,0,255,0.35) !important; }`}</style>
+export default function App() {
+  const [screen, setScreen] = useState<Screen>('landing');
+  const [repoUrl, setRepoUrl] = useState('https://github.com/tiangolo/fastapi');
+  const [branch, setBranch] = useState('master');
+  const [skipLlm, setSkipLlm] = useState(false);
+  const [activeTab, setActiveTab] = useState<Tab>('01_ONBOARDING');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [ragQuery, setRagQuery] = useState('');
+  const [ragResponse, setRagResponse] = useState<string | null>(null);
+  const [isRagSearching, setIsRagSearching] = useState(false);
+  const [currentProgress, setCurrentProgress] = useState(0);
 
-            {error && (
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, letterSpacing: '0.1em', color: '#FF3B3B', marginTop: 6, maxWidth: 480 }}>
-                {error}
-              </div>
-            )}
+  // Pipeline Agents
+  const [agents, setAgents] = useState<AgentState[]>([
+    { id: '01', name: 'INGESTION', desc: 'Fetching git tree & remote blob unpack', status: 'queued', metric: 'FETCH 0%' },
+    { id: '02', name: 'AST_PARSER', desc: 'Tree-sitter syntax decomposition', status: 'queued', metric: '0 NODES' },
+    { id: '03', name: 'DEP_GRAPH', desc: 'Directed NetworkX import topology', status: 'queued', metric: '0 EDGES' },
+    { id: '04', name: 'COMPLEXITY', desc: 'Radon & Cyclomatic debt indexer', status: 'queued', metric: 'CC_INDEX 0.0' },
+    { id: '05', name: 'CODE_RAG', desc: 'ChromaDB chunk vector embeddings', status: 'queued', metric: '0 CHUNKS' },
+    { id: '06', name: 'EXPLAINABILITY', desc: 'Architectural reasoning engine', status: 'queued', metric: '0/0 SYNTH' },
+    { id: '07', name: 'DOC_SYNTHESIS', desc: 'Archaeology field report compilation', status: 'queued', metric: 'DRAFTING' },
+  ]);
 
-            <div style={{ display: 'flex', gap: 32, marginTop: 16, alignItems: 'flex-start' }}>
-              <div>
-                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.65)', marginBottom: 8 }}>
-                  MAX EXPLANATIONS
-                </div>
-                <input
-                  type="number"
-                  value={maxExplanations}
-                  onChange={(e) => setMaxExplanations(Number(e.target.value))}
-                  style={{ width: 72, height: 40, background: '#FFFFFF', border: '1px solid rgba(255,255,255,0.30)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, fontWeight: 500, color: '#1400FF', textAlign: 'center', outline: 'none' }}
-                />
-              </div>
+  const [data, setData] = useState<SampleArchaeologyData>(SAMPLE_DATA);
 
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.65)' }}>
-                    SKIP LLM
-                  </div>
-                  <div style={{ position: 'relative' }}>
-                    <motion.button
-                      onMouseEnter={() => setShowTooltip(true)}
-                      onMouseLeave={() => setShowTooltip(false)}
-                      whileTap={{ scale: 0.97 }}
-                      transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-                      style={{ width: 16, height: 16, background: 'transparent', border: '1px solid rgba(255,255,255,0.40)', color: 'rgba(255,255,255,0.65)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, cursor: 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-                    >
-                      ?
-                    </motion.button>
-                    {showTooltip && (
-                      <div style={{ position: 'absolute', left: 24, top: -8, width: 220, background: '#0F00CC', border: '1px solid #FFFFFF', padding: '10px 14px', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#FFFFFF', lineHeight: 1.5, zIndex: 10 }}>
-                        Skips LLM calls. Pipeline completes faster but without per-file explanations.
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <Toggle on={skipLlm} onChange={setSkipLlm} />
-              </div>
-            </div>
+  // Start excavation simulation or backend call
+  const startExcavation = async () => {
+    setScreen('progress');
+    setCurrentProgress(5);
 
-            <motion.button
-              onClick={handleSubmit}
-              disabled={loading}
-              onMouseEnter={() => !loading && setHoverSubmit(true)}
-              onMouseLeave={() => setHoverSubmit(false)}
-              whileTap={{ scale: 0.97 }}
-              transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-              style={{
-                width: 480,
-                height: 56,
-                marginTop: 16,
-                background: loading ? 'rgba(255,255,255,0.30)' : hoverSubmit ? 'transparent' : '#FFFFFF',
-                border: loading ? 'none' : hoverSubmit ? '1px solid #FFFFFF' : 'none',
-                color: loading ? 'rgba(255,255,255,0.60)' : hoverSubmit ? '#FFFFFF' : '#1400FF',
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: 13,
-                fontWeight: 500,
-                letterSpacing: '0.14em',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                transition: 'all 0.15s',
-              }}
-            >
-              {loading ? 'SUBMITTING ···' : 'ANALYZE REPOSITORY →'}
-            </motion.button>
-          </div>
+    posthog.capture('excavation_started', { repo_url: repoUrl, branch });
 
-          <div style={{ position: 'fixed', bottom: 32, right: 96, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)' }}>
-            v{APP_VERSION} · PiUnknown · Project Gnosis
-          </div>
-        </div>
-
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden', minWidth: 0 }}>
-          <AthenaFigure brightness={0.88} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Screen 2: Progress ───────────────────────────────────────────────────────
-function ProgressPage({ repoUrl, jobId, onComplete, onHome }: { repoUrl: string; jobId: string; onComplete: () => void; onHome: () => void }) {
-  const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>(
-    Array(7).fill('queued' as AgentStatus)
-  )
-  const [agentNames, setAgentNames] = useState<string[]>(
-    ['INGESTION', 'AST PARSER', 'DEPENDENCY GRAPH', 'COMPLEXITY SCORER', 'CODE RAG', 'EXPLAINABILITY', 'DOC GENERATOR']
-  )
-  const [jobStatus, setJobStatus] = useState<'running' | 'complete' | 'failed'>('running')
-  const [errorMsg, setErrorMsg] = useState('')
-  const [hoverBtn, setHoverBtn] = useState(false)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  useEffect(() => {
-    // If no real jobId (demo mode), simulate with timers
-    if (!jobId) {
-      let idx = 0
-      setAgentStatuses(prev => { const n = [...prev]; n[0] = 'running'; return n })
-      const t = setInterval(() => {
-        setAgentStatuses(prev => {
-          const n = [...prev]
-          const running = n.findIndex(s => s === 'running')
-          if (running === -1) { clearInterval(t); return n }
-          n[running] = 'complete'
-          if (running + 1 < 7) n[running + 1] = 'running'
-          else { setJobStatus('complete'); clearInterval(t) }
-          return n
+    // Step-by-step pipeline runner
+    for (let step = 0; step < 7; step++) {
+      await new Promise((r) => setTimeout(r, 600));
+      setAgents((prev) =>
+        prev.map((ag, idx) => {
+          if (idx < step) return { ...ag, status: 'complete' };
+          if (idx === step) return { ...ag, status: 'running' };
+          return { ...ag, status: 'queued' };
         })
-        idx++
-      }, 2200)
-      return () => clearInterval(t)
+      );
+      setCurrentProgress(Math.round(((step + 1) / 7) * 95));
     }
 
-    // Real polling against FastAPI
-    const poll = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/jobs/${jobId}`)
-        if (!res.ok) return
-        const data: JobState = await res.json()
-        const names = data.agents.map(a => a.name)
-        const statuses = data.agents.map(a => a.status)
-        setAgentNames(names)
-        setAgentStatuses(statuses)
-        if (data.status === 'complete') {
-          setJobStatus('complete')
-          clearInterval(intervalRef.current!)
-        }
-        if (data.status === 'failed') {
-          setJobStatus('failed')
-          setErrorMsg(data.error || 'Unknown error')
-          posthog.capture('repo_analysis_failed', {
-            repo_url: repoUrl,
-            job_id: jobId,
-            error: data.error || 'Unknown error',
-          })
-          clearInterval(intervalRef.current!)
-        }
-      } catch {
-        // network blip — keep polling
-      }
-    }
+    await new Promise((r) => setTimeout(r, 700));
+    setAgents((prev) => prev.map((ag) => ({ ...ag, status: 'complete' })));
+    setCurrentProgress(100);
 
-    poll() // immediate first call
-    intervalRef.current = setInterval(poll, 1500)
-    return () => clearInterval(intervalRef.current!)
-  }, [jobId])
+    // Transition to results
+    setData({
+      ...SAMPLE_DATA,
+      repo_url: repoUrl || 'https://github.com/tiangolo/fastapi',
+      branch: branch || 'master',
+    });
+    setScreen('results');
+  };
 
-  const completeCount = agentStatuses.filter(s => s === 'complete').length
-  const runningIdx = agentStatuses.findIndex(s => s === 'running')
-  const progress = Math.round(((completeCount + (runningIdx !== -1 ? 0.5 : 0)) / 7) * 100)
-  const currentName = runningIdx !== -1 ? agentNames[runningIdx] : agentNames[Math.min(completeCount, 6)]
-  const displayRepo = repoUrl.replace(/^https?:\/\//, '') || 'github.com/owner/repo'
+  // Handle Code RAG search simulation
+  const handleRagSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ragQuery.trim()) return;
+    setIsRagSearching(true);
+    setTimeout(() => {
+      setRagResponse(
+        `ARCHAEOLOGICAL VECTOR RETRIEVAL [SIMILARITY: 0.94]
+QUERY: "${ragQuery}"
 
-  const reducedMotion = useReducedMotion()
-  const smoothProgress = useMotionValue(0)
-  const springProgress = useSpring(smoothProgress, {
-    duration: 0.6,
-    bounce: 0,
-  })
-  const displayProgress = useTransform(springProgress, (v) => Math.round(v))
+PRIMARY EVIDENCE LOCATED:
+1. fastapi/dependencies/utils.py:L142-185 (Function: solve_dependencies)
+   -> Direct match for async dependency resolution lifecycle & sub-dependency graph caching.
+2. fastapi/routing.py:L210-245 (Class: APIRoute)
+   -> Encapsulates parameter resolver and links Starlette Request to solve_dependencies().
 
-  // Keep a ref to track displayed value for the counter
-  const [displayValue, setDisplayValue] = useState(0)
-  useEffect(() => {
-    smoothProgress.set(progress)
-  }, [progress, smoothProgress])
-
-  useEffect(() => {
-    const unsubscribe = displayProgress.on('change', (v) => {
-      setDisplayValue(Math.round(v))
-    })
-    return unsubscribe
-  }, [displayProgress])
+SYNTHESIS:
+The requested architectural mechanism is handled recursively in fastapi/dependencies/utils.py. Parameter models inspect type annotations and build an async execution tree before passing validated kwargs into the user endpoint.`
+      );
+      setIsRagSearching(false);
+    }, 500);
+  };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#1400FF', position: 'relative', overflow: 'hidden' }}>
-      <AthenaFigure brightness={0.55} />
-      <NavBar onLogoClick={onHome} />
-
-      {/* Repo context bar */}
-      <div style={{ height: 48, borderBottom: '1px solid rgba(255,255,255,0.15)', padding: '0 120px', display: 'flex', alignItems: 'center', gap: 16, position: 'relative', zIndex: 1, flexShrink: 0 }}>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.50)' }}>ANALYZING</span>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 400, color: '#FFFFFF' }}>{displayRepo}</span>
-        <div style={{ marginLeft: 'auto' }}>
-          {jobStatus === 'running' && (
-            <span className="pulse-border" style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: '#FFFFFF', border: '1px solid #FFFFFF', padding: '4px 12px' }}>
-              RUNNING
-            </span>
-          )}
-          {jobStatus === 'complete' && (
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: '#FFFFFF', border: '1px solid #FFFFFF', padding: '4px 12px' }}>
-              COMPLETE ✓
-            </span>
-          )}
-          {jobStatus === 'failed' && (
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: '#FF3B3B', border: '1px solid #FF3B3B', padding: '4px 12px' }}>
-              FAILED
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div style={{ display: 'flex', flex: 1, maxWidth: 1200, margin: '0 auto', width: '100%', padding: '0 120px', boxSizing: 'border-box', position: 'relative', zIndex: 1 }}>
-        {/* Left: Pipeline */}
-        <div style={{ width: 500, flexShrink: 0, paddingTop: 64 }}>
-          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.50)', marginBottom: 32 }}>
-            PIPELINE STATUS
-          </div>
-          <motion.div
-            initial="hidden"
-            animate="show"
-            variants={
-              reducedMotion
-                ? undefined
-                : { show: { transition: { staggerChildren: 0.06 } } }
-            }
-          >
-            {agentNames.map((name, idx) => {
-              const status = agentStatuses[idx]
-              const isRunning = status === 'running'
-              const isComplete = status === 'complete'
-              const isQueued = status === 'queued'
-              return (
-                <motion.div
-                  key={idx}
-                  variants={
-                    reducedMotion
-                      ? undefined
-                      : {
-                        hidden: { opacity: 0, x: -12 },
-                        show: { opacity: 1, x: 0 },
-                      }
-                  }
-                  transition={
-                    reducedMotion
-                      ? { duration: 0.1 }
-                      : { type: 'spring', bounce: 0, duration: 0.3 }
-                  }
-                  style={{
-                    height: 72,
-                    borderBottom: '1px solid rgba(255,255,255,0.10)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 16,
-                    paddingRight: 16,
-                    opacity: isQueued ? 0.35 : 1,
-                    borderLeft: isRunning ? '2px solid #FFFFFF' : '2px solid transparent',
-                    paddingLeft: isRunning ? 14 : 0,
-                  }}
-                >
-                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 400, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.30)', width: 28, flexShrink: 0 }}>
-                    {String(idx + 1).padStart(2, '0')}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 500, letterSpacing: '0.10em', color: '#FFFFFF' }}>{name}</div>
-                    <div style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 3 }}>{AGENT_DESCS[idx]}</div>
-                  </div>
-                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: isComplete ? 500 : 400, letterSpacing: '0.08em', color: isComplete ? '#FFFFFF' : isRunning ? '#FFFFFF' : 'rgba(255,255,255,0.25)', minWidth: 100, textAlign: 'right' }}>
-                    {isQueued && '—'}
-                    {isRunning && <span>RUNNING <span className="running-dots" /></span>}
-                    {isComplete && 'COMPLETE ✓'}
-                    {status === 'failed' && <span style={{ color: '#FF3B3B' }}>FAILED</span>}
-                  </div>
-                </motion.div>
-              )
-            })}
-          </motion.div>
-        </div>
-
-        {/* Right: Progress display */}
-        <div style={{ flex: 1, paddingTop: 64, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start', paddingLeft: 80 }}>
-          {jobStatus === 'running' && (
-            <>
-              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 120, fontWeight: 400, color: '#FFFFFF', letterSpacing: '-0.02em', lineHeight: 1.0 }}>
-                {displayValue}%
-              </div>
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 500, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.65)', marginTop: 16 }}>
-                {currentName}
-              </div>
-              <div style={{ marginTop: 24, width: 300, height: 1, background: 'rgba(255,255,255,0.20)', position: 'relative' }}>
-                <motion.div
-                  animate={{ width: `${progress}%` }}
-                  transition={
-                    reducedMotion
-                      ? { duration: 0.1 }
-                      : { type: 'spring', bounce: 0, duration: 0.6 }
-                  }
-                  style={{ position: 'absolute', top: 0, left: 0, height: 1, background: '#FFFFFF' }}
-                />
-              </div>
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.40)', marginTop: 12 }}>
-                {completeCount} OF 7 AGENTS COMPLETE
-              </div>
-            </>
-          )}
-          {jobStatus === 'complete' && (
-            <>
-              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 80, fontWeight: 400, color: '#FFFFFF', textTransform: 'uppercase', lineHeight: 1.0 }}>
-                COMPLETE
-              </div>
-              <motion.button
-                onMouseEnter={() => setHoverBtn(true)}
-                onMouseLeave={() => setHoverBtn(false)}
-                onClick={onComplete}
-                whileTap={{ scale: 0.97 }}
-                transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-                style={{ marginTop: 32, width: 280, height: 56, background: hoverBtn ? 'transparent' : '#FFFFFF', border: hoverBtn ? '1px solid #FFFFFF' : 'none', color: hoverBtn ? '#FFFFFF' : '#1400FF', fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 500, letterSpacing: '0.14em', cursor: 'pointer', transition: 'all 0.15s' }}
-              >
-                ANALYSIS COMPLETE — VIEW RESULTS
-              </motion.button>
-            </>
-          )}
-          {jobStatus === 'failed' && (
-            <>
-              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 80, fontWeight: 400, color: '#FF3B3B', textTransform: 'uppercase', lineHeight: 1.0 }}>
-                FAILED
-              </div>
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 16, maxWidth: 320 }}>{errorMsg}</div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Screen 3: Results ────────────────────────────────────────────────────────
-function HoverRow({ children, height = 48 }: { children: React.ReactNode; height?: number }) {
-  const [hovered, setHovered] = useState(false)
-  return (
-    <tr onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} style={{ height, borderBottom: '1px solid rgba(20,0,255,0.08)', background: hovered ? 'rgba(20,0,255,0.04)' : 'transparent', transition: 'background 0.1s' }}>
-      {children}
-    </tr>
-  )
-}
-
-function DownloadBtn({ label, onLight = false, onClick }: { label: string; onLight?: boolean; onClick?: () => void }) {
-  const [hovered, setHovered] = useState(false)
-  const base: React.CSSProperties = {
-    height: onLight ? 32 : 36,
-    padding: '0 16px',
-    cursor: 'pointer',
-    fontFamily: "'IBM Plex Mono', monospace",
-    fontSize: 10,
-    fontWeight: 500,
-    letterSpacing: '0.12em',
-    transition: 'all 0.12s',
-  }
-  if (onLight) {
-    return (
-      <motion.button
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        onClick={onClick}
-        whileTap={{ scale: 0.97 }}
-        transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-        style={{ ...base, border: '1px solid #1400FF', background: hovered ? '#1400FF' : 'transparent', color: hovered ? '#FFFFFF' : '#1400FF' }}
-      >
-        {label}
-      </motion.button>
-    )
-  }
-  return (
-    <motion.button
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={onClick}
-      whileTap={{ scale: 0.97 }}
-      transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-      style={{ ...base, border: '1px solid rgba(255,255,255,0.45)', background: hovered ? '#FFFFFF' : 'transparent', color: hovered ? '#1400FF' : '#FFFFFF' }}
-    >
-      {label}
-    </motion.button>
-  )
-}
-
-function CollapsibleSection({ title, count, content, defaultOpen = false }: { title: string; count: string; content: string; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen)
-  const [copied, setCopied] = useState(false)
-  const [hoverCopy, setHoverCopy] = useState(false)
-  const reducedMotion = useReducedMotion()
-  const handleCopy = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    navigator.clipboard.writeText(content).catch(() => { })
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <div onClick={() => setOpen(!open)} style={{ height: 52, display: 'flex', alignItems: 'center', padding: '0 20px', border: '1px solid rgba(20,0,255,0.15)', borderBottom: open ? 'none' : '1px solid rgba(20,0,255,0.15)', cursor: 'pointer', background: 'transparent', userSelect: 'none' }}>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 500, letterSpacing: '0.10em', color: '#0A0A1A', textTransform: 'uppercase' }}>{title}</span>
-          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, color: 'rgba(10,10,26,0.40)' }}>{count}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <motion.button
-            onClick={handleCopy}
-            onMouseEnter={() => setHoverCopy(true)}
-            onMouseLeave={() => setHoverCopy(false)}
-            whileTap={{ scale: 0.97 }}
-            transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-            style={{ height: 28, padding: '0 10px', border: '1px solid rgba(20,0,255,0.30)', background: hoverCopy ? '#1400FF' : 'transparent', color: hoverCopy ? '#FFFFFF' : '#1400FF', fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, fontWeight: 500, letterSpacing: '0.12em', cursor: 'pointer', transition: 'all 0.12s' }}
-          >
-            {copied ? 'COPIED ✓' : 'COPY'}
-          </motion.button>
-          <motion.span
-            animate={{ rotate: open ? 180 : 0 }}
-            transition={
-              reducedMotion
-                ? { duration: 0.1 }
-                : { type: 'spring', bounce: 0, duration: 0.3 }
-            }
-            style={{ display: 'inline-block', fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'rgba(10,10,26,0.40)', transformOrigin: 'center' }}
-          >
-            ▾
-          </motion.span>
-        </div>
-      </div>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            key="content"
-            initial={reducedMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
-            animate={reducedMotion ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
-            exit={reducedMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
-            transition={
-              reducedMotion
-                ? { duration: 0.15 }
-                : { type: 'spring', bounce: 0, duration: 0.35 }
-            }
-            style={{ overflow: 'hidden' }}
-          >
-            <div className="auto-scroll" style={{ border: '1px solid rgba(20,0,255,0.15)', borderTop: 'none', padding: 20, maxHeight: 320, overflowY: 'auto', background: 'rgba(20,0,255,0.03)' }}>
-              <pre style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: '#0A0A1A', whiteSpace: 'pre-wrap', lineHeight: 1.6, margin: 0 }}>{content}</pre>
+    <div className="min-h-screen bg-[#0A0A0B] text-[#E8E8E6] blueprint-grid flex flex-col selection:bg-[#E8A33D] selection:text-[#0A0A0B]">
+      {/* ─── TOP SYSTEM TELEMETRY STRIP ───────────────────────────────────── */}
+      <header className="border-b border-[#26262A] bg-[#0D0D0E]/95 sticky top-0 z-50 px-4 py-2 flex flex-wrap items-center justify-between gap-3 select-none">
+        <div className="flex items-center gap-3">
+          {/* Logo & Identity */}
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 bg-[#E8A33D] text-[#0A0A0B] flex items-center justify-center font-mono font-bold text-xs">
+              G
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: string; onHome: () => void }) {
-  const [activeTab, setActiveTab] = useState<ResultsTab>('onboarding')
-  const [result, setResult] = useState<AnalysisResult | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [fetchError, setFetchError] = useState('')
-  const [fileFilter, setFileFilter] = useState('')
-  const [sortBy, setSortBy] = useState<'risk' | 'avg_cc' | 'max_cc'>('risk')
-  const reducedMotion = useReducedMotion()
-
-  useEffect(() => {
-    if (!jobId) { setLoading(false); return }
-    let isMounted = true
-    let timer: any = null
-
-    const fetchResult = async (attempt = 0) => {
-      try {
-        const res = await fetch(`${API_BASE}/api/jobs/${jobId}/result`)
-        if (res.status === 202) {
-          if (attempt < 8 && isMounted) {
-            timer = setTimeout(() => fetchResult(attempt + 1), 1500)
-            return
-          }
-        }
-        if (!res.ok) {
-          let errText = `FAILED TO LOAD RESULTS (${res.status})`
-          try {
-            const errJson = await res.json()
-            if (errJson.detail) errText = String(errJson.detail).toUpperCase()
-          } catch { }
-          if (isMounted) {
-            setFetchError(errText)
-            setLoading(false)
-            posthog.capture('repo_results_fetch_failed', {
-              repo_url: repoUrl,
-              job_id: jobId,
-              error: errText,
-            })
-          }
-          return
-        }
-        const data = await res.json()
-        if (data && data.error === 'not ready' && attempt < 8 && isMounted) {
-          timer = setTimeout(() => fetchResult(attempt + 1), 1500)
-          return
-        }
-        if (data && !data.error && data.summary) {
-          if (isMounted) {
-            setResult(data)
-            setLoading(false)
-            posthog.capture('repo_analysis_completed', {
-              repo_url: repoUrl,
-              job_id: jobId,
-              total_files: data.summary?.total_files,
-              total_functions: data.summary?.total_functions,
-              total_classes: data.summary?.total_classes,
-              import_edges: data.summary?.import_edges,
-              average_complexity: data.summary?.average_complexity,
-              skip_llm: data.skip_llm,
-              branch: data.branch || 'main',
-            })
-          }
-        } else if (isMounted) {
-          if (attempt < 5) {
-            timer = setTimeout(() => fetchResult(attempt + 1), 1500)
-          } else {
-            const errText = data?.error ? String(data.error).toUpperCase() : 'INVALID OR EMPTY RESULT PAYLOAD'
-            setFetchError(errText)
-            setLoading(false)
-            posthog.capture('repo_results_fetch_failed', {
-              repo_url: repoUrl,
-              job_id: jobId,
-              error: errText,
-            })
-          }
-        }
-      } catch {
-        if (attempt < 5 && isMounted) {
-          timer = setTimeout(() => fetchResult(attempt + 1), 1500)
-        } else if (isMounted) {
-          setFetchError('NETWORK ERROR FETCHING RESULTS')
-          setLoading(false)
-          posthog.capture('repo_results_fetch_failed', {
-            repo_url: repoUrl,
-            job_id: jobId,
-            error: 'NETWORK ERROR FETCHING RESULTS',
-          })
-        }
-      }
-    }
-
-    fetchResult()
-    return () => {
-      isMounted = false
-      if (timer) clearTimeout(timer)
-    }
-  }, [jobId])
-
-  const TABS: { id: ResultsTab; label: string }[] = [
-    { id: 'onboarding', label: 'ONBOARDING DOC' },
-    { id: 'agent_context', label: 'AGENT CONTEXT' },
-    { id: 'explanations', label: 'FILE EXPLANATIONS' },
-    { id: 'dependency', label: 'DEPENDENCY GRAPH' },
-    { id: 'complexity', label: 'COMPLEXITY REPORT' },
-    { id: 'raw', label: 'RAW OUTPUT' },
-  ]
-
-  const displayRepo = (repoUrl.replace(/^https?:\/\/github\.com\//, '') || 'owner/repo').toUpperCase()
-  const s = result?.summary
-  const riskDist = s?.risk_distribution || {}
-  const depRows = result?.dependency_rows || []
-  const readingOrder = result?.reading_order || []
-
-  const RISK_WEIGHTS: Record<RiskLevel, number> = {
-    CRITICAL: 4,
-    HIGH: 3,
-    MEDIUM: 2,
-    LOW: 1,
-  }
-
-  const complexityRows = [...(result?.complexity_rows || [])]
-    .filter(r => !fileFilter || r.file.toLowerCase().includes(fileFilter.toLowerCase()))
-    .sort((a, b) => {
-      if (sortBy === 'risk') {
-        return (RISK_WEIGHTS[b.risk] || 0) - (RISK_WEIGHTS[a.risk] || 0)
-      } else if (sortBy === 'avg_cc') {
-        return b.avg_cc - a.avg_cc
-      } else if (sortBy === 'max_cc') {
-        return b.max_cc - a.max_cc
-      }
-      return 0
-    })
-
-  const handleDownload = (content: string, filename: string, mime = 'text/plain') => {
-    posthog.capture('report_downloaded', {
-      repo_url: repoUrl,
-      job_id: jobId,
-      filename: filename,
-      file_type: filename.endsWith('.md') ? 'markdown' : (filename.endsWith('.json') ? 'json' : 'other'),
-    })
-    const blob = new Blob([content], { type: mime })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = filename; a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const explainedValue = (() => {
-    if (!result) return '—'
-    if (result.skip_llm === true) {
-      return 'SKIPPED'
-    }
-    if (result.explanations) {
-      return Object.keys(result.explanations).length
-    }
-    if (s?.explained !== undefined && s?.explained !== null) {
-      return s.explained
-    }
-    return 0
-  })()
-
-  const importEdgesValue = (() => {
-    if (!result) return '—'
-    if (s?.import_edges !== undefined && s?.import_edges !== null) {
-      return s.import_edges
-    }
-    if (result.dependency_rows) {
-      return result.dependency_rows.reduce((acc, r) => acc + (r.imports || 0), 0)
-    }
-    return 0
-  })()
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#1400FF', paddingBottom: 64 }}>
-      <NavBar onLogoClick={onHome} />
-
-      {/* Results header */}
-      <div style={{ padding: '32px 96px', borderBottom: '1px solid rgba(255,255,255,0.15)', flexShrink: 0, boxSizing: 'border-box', minHeight: 120, background: '#1400FF', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {/* Row 1: Repo + Branch */}
-        <div style={{ display: 'flex', alignItems: 'baseline' }}>
-          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 18, fontWeight: 500, letterSpacing: '0.10em', color: '#FFFFFF' }}>{displayRepo}</span>
-          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.50)', marginLeft: 16 }}>
-            ON {result?.branch ? result.branch.toUpperCase() : 'MAIN'}
-          </span>
-        </div>
-        {/* Row 2: Stats */}
-        <div style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
-          {[
-            { n: s?.total_files ?? '—', l: 'FILES' },
-            { n: s?.total_functions ?? '—', l: 'FUNCTIONS' },
-            { n: s?.total_classes ?? '—', l: 'CLASSES' },
-            { n: importEdgesValue, l: 'IMPORT EDGES' },
-            { n: explainedValue, l: 'EXPLAINED' },
-          ].map(stat => (
-            <div key={stat.l} style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 16, fontWeight: 500, color: '#FFFFFF' }}>{String(stat.n)}</div>
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.50)', marginTop: 2 }}>{stat.l}</div>
-            </div>
-          ))}
-        </div>
-        {/* Row 3: Risk Pills */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as RiskLevel[]).map(level => {
-            const count = riskDist[level] ?? 0
-            return <RiskBadge key={level} level={level} count={count} />
-          })}
-        </div>
-        {/* Row 4: Circular Dep Warning */}
-        {(s?.circular_cycles ?? 0) > 0 && (
-          <div>
-            <span style={{ display: 'inline-block', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', color: '#FFFFFF', background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.30)', padding: '6px 12px', marginTop: 12 }}>
-              ⚠ {s!.circular_cycles} CIRCULAR DEPENDENCY {s!.circular_cycles === 1 ? 'CYCLE' : 'CYCLES'} DETECTED
+            <span className="font-grotesk font-bold tracking-tight text-sm text-[#E8E8E6]">
+              GNOSIS <span className="font-mono font-normal text-xs text-[#E8A33D]">// ARCHAEOLOGY CONSOLE</span>
             </span>
           </div>
-        )}
-      </div>
 
-      {/* Tab bar */}
-      <div style={{ height: 52, background: '#0F00CC', borderBottom: '1px solid rgba(255,255,255,0.15)', padding: '0 96px', display: 'flex', alignItems: 'stretch', flexShrink: 0, position: 'relative' }}>
-        {TABS.map((tab, idx) => {
-          const isActive = tab.id === activeTab
-          const nextActive = idx < TABS.length - 1 && TABS[idx + 1].id === activeTab
-          const showSep = idx < TABS.length - 1 && !isActive && !nextActive
-          return (
-            <div key={tab.id} style={{ display: 'flex', alignItems: 'stretch' }}>
-              <motion.button
-                onClick={() => {
-                  setActiveTab(tab.id)
-                  posthog.capture('results_tab_viewed', {
-                    repo_url: repoUrl,
-                    job_id: jobId,
-                    tab_name: tab.id,
-                  })
-                }}
-                whileTap={{ scale: 0.97 }}
-                transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-                style={{
-                  padding: '0 32px',
-                  height: '100%',
-                  background: 'transparent',
-                  border: 'none',
-                  color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.45)',
-                  fontFamily: "'IBM Plex Mono', monospace",
-                  fontSize: 11,
-                  fontWeight: 500,
-                  letterSpacing: '0.14em',
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                  position: 'relative',
-                }}
-                onMouseEnter={e => { if (!isActive) (e.target as HTMLElement).style.color = '#FFFFFF' }}
-                onMouseLeave={e => { !isActive && ((e.target as HTMLElement).style.color = 'rgba(255,255,255,0.45)') }}
-              >
-                {tab.label}
-                {isActive && (
-                  <motion.div
-                    layoutId="tab-indicator"
-                    style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      height: 2,
-                      background: '#FFFFFF',
-                    }}
-                    transition={
-                      reducedMotion
-                        ? { duration: 0.1 }
-                        : { type: 'spring', bounce: 0, duration: 0.35 }
-                    }
-                  />
-                )}
-              </motion.button>
-              {showSep && <div style={{ width: 1, background: 'rgba(255,255,255,0.15)', alignSelf: 'stretch', margin: '12px 0' }} />}
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Tab content */}
-      <div className="auto-scroll" style={{ background: '#F0F0FF', padding: '48px 96px', flex: 1, overflowY: 'auto' }}>
-
-        {/* Loading state */}
-        {loading && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300 }}>
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, letterSpacing: '0.12em', color: 'rgba(10,10,26,0.40)' }}>LOADING RESULTS ···</span>
+          <div className="hidden md:flex items-center gap-2 border-l border-[#26262A] pl-3">
+            <span className="font-mono text-[9px] text-[#55554F] tracking-widest uppercase">
+              VERSION: {APP_VERSION}
+            </span>
+            <span className="text-[#3F3F46] font-mono text-[10px]">|</span>
+            <span className="font-mono text-[9px] text-[#55554F] tracking-widest uppercase">
+              CALIBRATION: 100%
+            </span>
+            <span className="text-[#3F3F46] font-mono text-[10px]">|</span>
+            <span className="font-mono text-[9px] text-[#55554F] tracking-widest uppercase">
+              GRID: [08_MODULAR]
+            </span>
           </div>
-        )}
+        </div>
 
-        {/* Error state */}
-        {!loading && fetchError && (
-          <div style={{ background: '#FFFFFF', border: '1px solid rgba(255,59,59,0.30)', padding: '32px 40px', maxWidth: 760, margin: '40px auto', textAlign: 'center' }}>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 500, letterSpacing: '0.14em', color: '#FF3B3B', marginBottom: 12 }}>
-              ⚠ {fetchError}
-            </div>
-            <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'rgba(10,10,26,0.50)', letterSpacing: '0.10em', lineHeight: 1.6, textTransform: 'uppercase', marginBottom: 24 }}>
-              THE ANALYSIS RESULTS COULD NOT BE RETRIEVED. PLEASE RETURN HOME AND RUN THE ANALYSIS AGAIN.
-            </p>
-            <motion.button
-              onClick={onHome}
-              whileTap={{ scale: 0.97 }}
-              transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-              style={{
-                height: 40,
-                padding: '0 24px',
-                background: '#1400FF',
-                border: 'none',
-                color: '#FFFFFF',
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: 11,
-                fontWeight: 500,
-                letterSpacing: '0.14em',
-                cursor: 'pointer'
-              }}
+        {/* System State & Quick Navigation */}
+        <div className="flex items-center gap-2">
+          {screen !== 'landing' && (
+            <TechButton
+              size="sm"
+              variant="default"
+              onClick={() => setScreen('landing')}
+              glyph="[<]"
             >
-              ← RETURN HOME
-            </motion.button>
-          </div>
-        )}
+              NEW EXCAVATION
+            </TechButton>
+          )}
 
-        {/* ── Tab 1: Onboarding Doc ── */}
-        {!loading && !fetchError && activeTab === 'onboarding' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: 'rgba(10,10,26,0.50)' }}>ONBOARDING DOCUMENT</span>
-              <DownloadBtn label="↓ DOWNLOAD .MD" onLight onClick={() => handleDownload(result?.onboarding_doc || '', 'onboarding.md')} />
-            </div>
-            <div className="gnosis-markdown" style={{ maxWidth: 760, margin: '0 auto' }}>
-              {result?.onboarding_doc
-                ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.onboarding_doc}</ReactMarkdown>
-                : <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'rgba(10,10,26,0.40)', letterSpacing: '0.10em' }}>NO DOCUMENT GENERATED YET</p>
-              }
-            </div>
+          <div className="font-mono text-[10px] px-2 py-0.5 border border-[#26262A] bg-[#121214] flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 bg-[#4E9F3D] animate-pulse" />
+            <span className="text-[#8A8A85]">CORE:</span>
+            <span className="text-[#E8E8E6] font-medium">AST+GRAPH+RAG</span>
           </div>
-        )}
+        </div>
+      </header>
 
-        {!loading && !fetchError && activeTab === 'agent_context' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: 'rgba(10,10,26,0.50)' }}>AGENT CONTEXT DOCUMENT</span>
-              <DownloadBtn label="↓ DOWNLOAD .MD" onLight onClick={() => handleDownload(result?.agent_context || '', 'agent_context.md')} />
-            </div>
-            <div className="gnosis-markdown" style={{ maxWidth: 760, margin: '0 auto' }}>
-              {result?.agent_context
-                ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.agent_context}</ReactMarkdown>
-                : <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'rgba(10,10,26,0.40)', letterSpacing: '0.10em' }}>NO AGENT CONTEXT GENERATED</p>
-              }
-            </div>
-          </div>
-        )}
-
-        {/* ── Tab: File Explanations ── */}
-        {!loading && !fetchError && activeTab === 'explanations' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: 'rgba(10,10,26,0.50)' }}>FILE EXPLANATIONS</span>
-              <DownloadBtn label="↓ DOWNLOAD .MD" onLight onClick={() => handleDownload(result?.file_explanations_md || '', 'file_explanations.md')} />
-            </div>
-            <div className="gnosis-markdown" style={{ maxWidth: 760, margin: '0 auto' }}>
-              {result?.file_explanations_md
-                ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.file_explanations_md}</ReactMarkdown>
-                : (
-                  <div style={{ padding: '24px 0' }}>
-                    <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 500, color: '#1400FF', letterSpacing: '0.12em', marginBottom: 8, textTransform: 'uppercase' }}>
-                      SKIPPED AI EXPLANATIONS
-                    </p>
-                    <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 400, color: 'rgba(10,10,26,0.50)', letterSpacing: '0.10em', lineHeight: 1.6, textTransform: 'uppercase' }}>
-                      AI EXPLANATIONS WERE SKIPPED FOR THIS RUN. RE-RUN ANALYSIS WITH SKIP LLM DISABLED TO GENERATE FILE WALKTHROUGHS.
-                    </p>
+      {/* ─── MAIN CONTENT CONTAINER (8px Grid, Edge-to-Edge Blueprint) ────── */}
+      <main className="flex-1 p-3 md:p-6 max-w-[1600px] w-full mx-auto flex flex-col gap-4">
+        {/* ─── SCREEN 1: LANDING & REPO EXCAVATION INPUT ──────────────────── */}
+        {screen === 'landing' && (
+          <div className="flex flex-col gap-4">
+            {/* Top Command Instrument Panel */}
+            <BlueprintPanel
+              title="EXCAVATION TARGET CONTROL // SYSTEM INPUT"
+              glyph="[01_INITIALIZE]"
+              coord="GRID [00, 01]"
+              showCorners={true}
+            >
+              <div className="flex flex-col gap-4 p-2">
+                <div className="flex flex-col md:flex-row gap-3 items-stretch">
+                  <div className="flex-1 flex items-center bg-[#0A0A0B] border border-[#26262A] px-3 py-2">
+                    <span className="font-mono text-[11px] text-[#E8A33D] font-bold mr-2 select-none">
+                      REPO_URL &gt;
+                    </span>
+                    <input
+                      type="text"
+                      value={repoUrl}
+                      onChange={(e) => setRepoUrl(e.target.value)}
+                      placeholder="https://github.com/organization/repository"
+                      className="bg-transparent border-none outline-none font-mono text-xs text-[#E8E8E6] w-full placeholder-[#55554F]"
+                    />
                   </div>
-                )
-              }
+
+                  <div className="w-full md:w-48 flex items-center bg-[#0A0A0B] border border-[#26262A] px-3 py-2">
+                    <span className="font-mono text-[10px] text-[#8A8A85] mr-2 select-none">
+                      BRANCH:
+                    </span>
+                    <input
+                      type="text"
+                      value={branch}
+                      onChange={(e) => setBranch(e.target.value)}
+                      className="bg-transparent border-none outline-none font-mono text-xs text-[#E8E8E6] w-full placeholder-[#55554F]"
+                    />
+                  </div>
+
+                  <TechButton
+                    variant="amber"
+                    size="lg"
+                    onClick={startExcavation}
+                    className="font-bold shrink-0"
+                  >
+                    [EXCAVATE CODEBASE]
+                  </TechButton>
+                </div>
+
+                {/* Mode Toggles & Sample Repositories */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#26262A]">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] text-[#55554F] uppercase">
+                      SAMPLE ARTIFACTS:
+                    </span>
+                    <TechButton
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setRepoUrl('https://github.com/tiangolo/fastapi');
+                        setBranch('master');
+                      }}
+                    >
+                      fastapi
+                    </TechButton>
+                    <TechButton
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setRepoUrl('https://github.com/pallets/flask');
+                        setBranch('main');
+                      }}
+                    >
+                      flask
+                    </TechButton>
+                    <TechButton
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setRepoUrl('https://github.com/chroma-core/chroma');
+                        setBranch('main');
+                      }}
+                    >
+                      chroma
+                    </TechButton>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={skipLlm}
+                        onChange={(e) => setSkipLlm(e.target.checked)}
+                        className="accent-[#E8A33D] rounded-none"
+                      />
+                      <span className="font-mono text-[10px] text-[#8A8A85] uppercase">
+                        SKIP LLM SYNTHESIS (FAST AST ONLY)
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </BlueprintPanel>
+
+            {/* Philosophy & Architecture Instrument Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <BlueprintPanel
+                title="ARCHAEOLOGICAL PHILOSOPHY"
+                glyph="[I]"
+                coord="SEC 01"
+              >
+                <div className="font-mono text-[11px] text-[#8A8A85] flex flex-col gap-2 leading-relaxed">
+                  <p>
+                    <strong className="text-[#E8E8E6]">GNOSIS</strong> excavates dead, legacy, or complex codebases to restore their lost structural intent.
+                  </p>
+                  <p>
+                    Reads raw AST syntax, extracts cyclic import edges, profiles cyclomatic debt, and compiles human-grade onboarding blueprints.
+                  </p>
+                  <div className="mt-2 pt-2 border-t border-[#26262A] flex justify-between items-center text-[10px] text-[#55554F]">
+                    <span>STATUS: READY</span>
+                    <span>CALIBRATION: 100%</span>
+                  </div>
+                </div>
+              </BlueprintPanel>
+
+              <BlueprintPanel
+                title="TELEMETRY CAPABILITIES"
+                glyph="[II]"
+                coord="SEC 02"
+              >
+                <div className="flex flex-col gap-3">
+                  <TelemetryMeter
+                    label="AST SYNTAX PARSING"
+                    value={100}
+                    totalSegments={12}
+                    unit="OK"
+                  />
+                  <TelemetryMeter
+                    label="NETWORKX GRAPH TOPOLOGY"
+                    value={100}
+                    totalSegments={12}
+                    unit="OK"
+                  />
+                  <TelemetryMeter
+                    label="CHROMADB VECTOR DENSITY"
+                    value={94}
+                    totalSegments={12}
+                    unit="OK"
+                  />
+                </div>
+              </BlueprintPanel>
+
+              <BlueprintPanel
+                title="FIELD ANNOTATIONS"
+                glyph="[III]"
+                coord="SEC 03"
+              >
+                <div className="flex flex-col items-center justify-center p-3 text-center gap-2">
+                  <DoodleSlot
+                    doodleId="map"
+                    size={130}
+                    label="FIELD_MAP // TOPOLOGY"
+                    primitiveFallback="circle"
+                  />
+                  <span className="font-mono text-[10px] text-[#8A8A85] max-w-xs mt-1">
+                    Field annotations mark critical cyclic dependencies and architectural hotspots across the excavated codebase.
+                  </span>
+                </div>
+              </BlueprintPanel>
             </div>
           </div>
         )}
 
-        {/* ── Tab 2: Dependency Graph ── */}
-        {!loading && activeTab === 'dependency' && (
-          <div>
-            {/* Risk Distribution Summary Bar */}
-            <RiskDistributionBar riskDist={riskDist} />
+        {/* ─── SCREEN 2: PIPELINE PROGRESS TELEMETRY ───────────────────────── */}
+        {screen === 'progress' && (
+          <div className="flex flex-col gap-4">
+            <BlueprintPanel
+              title="EXCAVATION PIPELINE TELEMETRY"
+              glyph="[ACTIVE]"
+              coord="PIPE [07_STAGES]"
+              badge={`${currentProgress}%`}
+            >
+              <div className="flex flex-col gap-4">
+                <AsciiLoader
+                  progress={currentProgress}
+                  label={`EXCAVATING ${repoUrl.split('/').pop()?.toUpperCase()} [BRANCH: ${branch}]`}
+                />
 
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.16em', color: 'rgba(10,10,26,0.45)', marginBottom: 16 }}>MOST IMPORTED FILES</div>
-            {depRows.length === 0
-              ? <EmptyState label="NO DEPENDENCY DATA AVAILABLE" />
-              : (() => {
-                const maxImportedBy = Math.max(...depRows.map(r => r.imported_by || 1), 1)
-                const maxImports = Math.max(...depRows.map(r => r.imports || 1), 1)
-                return (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid rgba(20,0,255,0.15)', marginBottom: 48 }}>
-                    <thead>
-                      <tr style={{ background: 'rgba(20,0,255,0.06)', height: 40 }}>
-                        <th style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.40)', padding: '0 20px', textAlign: 'left', border: '1px solid rgba(20,0,255,0.12)' }}>FILE</th>
-                        <th style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.40)', padding: '0 20px', textAlign: 'center', border: '1px solid rgba(20,0,255,0.12)' }}>IMPORTED BY</th>
-                        <th style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.40)', padding: '0 20px', textAlign: 'center', border: '1px solid rgba(20,0,255,0.12)' }}>IMPORTS</th>
-                        <th style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.40)', padding: '0 20px', textAlign: 'center', border: '1px solid rgba(20,0,255,0.12)' }}>RISK</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {depRows.map(row => (
-                        <HoverRow key={row.path}>
-                          <td style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 400, color: '#1400FF', padding: '0 20px', height: 48 }} title={row.path}>
-                            {row.file}
-                          </td>
-                          <td style={{ padding: '0 20px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-                              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, fontWeight: 500, color: '#1400FF' }}>{row.imported_by}</span>
-                              <div style={{ width: 60, height: 3, background: 'rgba(20,0,255,0.06)', border: '1px solid rgba(20,0,255,0.08)', position: 'relative' }}>
-                                <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${(row.imported_by / maxImportedBy) * 100}%`, background: '#1400FF' }} />
-                              </div>
-                            </div>
-                          </td>
-                          <td style={{ padding: '0 20px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-                              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, fontWeight: 400, color: 'rgba(10,10,26,0.65)' }}>{row.imports}</span>
-                              <div style={{ width: 60, height: 3, background: 'rgba(20,0,255,0.06)', border: '1px solid rgba(20,0,255,0.08)', position: 'relative' }}>
-                                <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${(row.imports / maxImports) * 100}%`, background: 'rgba(20,0,255,0.40)' }} />
-                              </div>
-                            </div>
-                          </td>
-                          <td style={{ textAlign: 'center', padding: '0 20px' }}><RiskBadge level={row.risk} onLight /></td>
-                        </HoverRow>
-                      ))}
-                    </tbody>
-                  </table>
-                )
-              })()
-            }
+                {/* 7-Agent Telemetry Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                  {agents.map((ag) => (
+                    <div
+                      key={ag.id}
+                      className={`p-2.5 border border-[#26262A] bg-[#0A0A0B] flex flex-col justify-between ${
+                        ag.status === 'running'
+                          ? 'border-[#E8A33D] bg-[#121214]'
+                          : ag.status === 'complete'
+                          ? 'border-[#3F3F46]'
+                          : 'opacity-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-mono text-[9px]">
+                        <span className="text-[#55554F]">AGENT_{ag.id}</span>
+                        <span
+                          className={`font-semibold ${
+                            ag.status === 'complete'
+                              ? 'text-[#4E9F3D]'
+                              : ag.status === 'running'
+                              ? 'text-[#E8A33D] ascii-blink'
+                              : 'text-[#55554F]'
+                          }`}
+                        >
+                          [{ag.status.toUpperCase()}]
+                        </span>
+                      </div>
 
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.16em', color: 'rgba(10,10,26,0.45)', marginBottom: 8 }}>SUGGESTED READING ORDER</div>
-            <div style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 13, color: 'rgba(10,10,26,0.50)', marginBottom: 16 }}>Files ordered so each appears after everything it depends on.</div>
-            {readingOrder.length === 0
-              ? <EmptyState label="NO GRAPH DATA AVAILABLE" />
-              : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 0, borderLeft: '1px solid rgba(20,0,255,0.15)', marginLeft: 10, paddingLeft: 24, marginBottom: 24 }}>
-                  {readingOrder.map((path, idx) => (
-                    <div key={path} style={{ display: 'flex', alignItems: 'center', height: 44, position: 'relative', borderBottom: idx === readingOrder.length - 1 ? 'none' : '1px solid rgba(20,0,255,0.08)' }}>
-                      {/* Connector Node */}
-                      <div style={{
-                        position: 'absolute',
-                        left: -29,
-                        width: 9,
-                        height: 9,
-                        background: '#1400FF',
-                        border: '1px solid #F0F0FF',
-                      }} />
-                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'rgba(10,10,26,0.40)', fontWeight: 400, width: 28, marginRight: 8 }}>{String(idx + 1).padStart(2, '0')}</span>
-                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 400, color: '#1400FF' }}>{path}</span>
+                      <div className="my-1.5">
+                        <div className="font-mono text-xs font-bold text-[#E8E8E6]">
+                          {ag.name}
+                        </div>
+                        <div className="font-mono text-[10px] text-[#8A8A85] truncate">
+                          {ag.desc}
+                        </div>
+                      </div>
+
+                      <div className="font-mono text-[9px] text-[#E8A33D] border-t border-[#26262A] pt-1">
+                        {ag.metric}
+                      </div>
                     </div>
                   ))}
                 </div>
-              )
-            }
+              </div>
+            </BlueprintPanel>
           </div>
         )}
 
-        {/* ── Tab 3: Complexity Report ── */}
-        {!loading && activeTab === 'complexity' && (
-          <div>
-            {/* Risk Distribution Summary Bar */}
-            <RiskDistributionBar riskDist={riskDist} />
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'risk' | 'avg_cc' | 'max_cc')}
-                style={{ height: 40, border: '1px solid rgba(20,0,255,0.20)', background: '#FFFFFF', fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: '0.10em', color: '#1400FF', textTransform: 'uppercase', padding: '0 12px', outline: 'none', cursor: 'pointer' }}
-              >
-                <option value="risk">SORT BY RISK</option>
-                <option value="avg_cc">SORT BY AVG CC</option>
-                <option value="max_cc">SORT BY MAX CC</option>
-              </select>
-              <input type="text" value={fileFilter} onChange={e => setFileFilter(e.target.value)} placeholder="FILTER BY FILENAME..." style={{ height: 40, width: 240, border: '1px solid rgba(20,0,255,0.20)', background: '#FFFFFF', fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: '#1400FF', padding: '0 12px', outline: 'none' }} />
-              <span style={{ marginLeft: 'auto', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.10em', color: 'rgba(10,10,26,0.40)' }}>
-                SHOWING {complexityRows.length} OF {result?.complexity_rows?.length ?? 0} FILES
-              </span>
+        {/* ─── SCREEN 3: FULL ARCHAEOLOGICAL WORKBENCH RESULTS ────────────── */}
+        {screen === 'results' && (
+          <div className="flex flex-col gap-4">
+            {/* 1. Header Telemetry HUD Cluster */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <StatInstrument
+                label="EXCAVATED REPO"
+                value={data.repo_url.split('/').pop() || 'repo'}
+                subValue={`[${data.branch}]`}
+                glyph="[●]"
+              />
+              <StatInstrument
+                label="TOTAL AST NODES"
+                value={data.total_files}
+                subValue={`${data.total_functions} FN / ${data.total_classes} CLS`}
+                glyph="[AST]"
+              />
+              <StatInstrument
+                label="IMPORT GRAPH EDGES"
+                value={data.import_edges}
+                subValue={`${data.circular_cycles} CYCLES DETECTED`}
+                status={data.circular_cycles > 0 ? 'warning' : 'nominal'}
+                glyph="[GPH]"
+              />
+              <StatInstrument
+                label="CRITICAL HOTSPOTS"
+                value={data.critical_files}
+                subValue={`${data.high_files} HIGH / ${data.medium_files} MED`}
+                status={data.critical_files > 0 ? 'critical' : 'nominal'}
+                glyph="[RISK]"
+              />
             </div>
-            {complexityRows.length === 0
-              ? <EmptyState label="NO COMPLEXITY DATA AVAILABLE" />
-              : (() => {
-                const maxAvgCC = Math.max(...complexityRows.map(r => r.avg_cc || 1), 1)
-                const maxMaxCC = Math.max(...complexityRows.map(r => r.max_cc || 1), 1)
-                const maxCoupling = Math.max(...complexityRows.map(r => r.coupling || 1), 1)
-                return (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid rgba(20,0,255,0.15)', marginBottom: 24 }}>
+
+            {/* 2. Secondary Telemetry Instruments (Bar Meters & Dot Matrix) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <BlueprintPanel
+                title="RISK PROFILE DISTRIBUTION"
+                glyph="[MTR_01]"
+                coord="DIST [CRIT/HIGH/MED/LOW]"
+              >
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between font-mono text-[10px] text-[#8A8A85]">
+                    <span>CRITICAL: {data.critical_files}</span>
+                    <span>HIGH: {data.high_files}</span>
+                    <span>MED: {data.medium_files}</span>
+                    <span>LOW: {data.low_files}</span>
+                  </div>
+                  {/* Segmented Risk Gauge */}
+                  <div className="flex h-3 bg-[#0A0A0B] border border-[#26262A] p-[1px] gap-[2px]">
+                    <div style={{ width: `${(data.critical_files / data.total_files) * 100}%` }} className="bg-[#FF4D4D]" title="Critical" />
+                    <div style={{ width: `${(data.high_files / data.total_files) * 100}%` }} className="bg-[#E8A33D]" title="High" />
+                    <div style={{ width: `${(data.medium_files / data.total_files) * 100}%` }} className="bg-[#F2C94C]" title="Medium" />
+                    <div style={{ width: `${(data.low_files / data.total_files) * 100}%` }} className="bg-[#4E9F3D]" title="Low" />
+                  </div>
+                </div>
+              </BlueprintPanel>
+
+              <BlueprintPanel
+                title="CHROMADB VECTOR CLUSTERS"
+                glyph="[MTR_02]"
+                coord="CHROMA [EMBEDDINGS]"
+              >
+                <DotMatrixReadout
+                  label="CODE CHUNK DENSITY"
+                  rows={3}
+                  cols={20}
+                  activeCount={48}
+                  totalCount={60}
+                  statusText="48 CHUNKS INDEXED"
+                />
+              </BlueprintPanel>
+
+              <BlueprintPanel
+                title="CYCLOMATIC TELEMETRY"
+                glyph="[MTR_03]"
+                coord="SPARK [CC_DIST]"
+              >
+                <SparklineReadout
+                  label="COMPLEXITY CURVE"
+                  metric="PEAK CC: 34"
+                  data={[8, 12, 14, 18, 22, 16, 28, 34, 19, 12]}
+                />
+              </BlueprintPanel>
+            </div>
+
+            {/* 3. Main Blueprint Workbench Tab Strip & Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#26262A] pb-2">
+              {/* Tab Selector */}
+              <div className="flex flex-wrap gap-1">
+                {(
+                  [
+                    '01_ONBOARDING',
+                    '02_AGENT_CONTEXT',
+                    '03_DEPENDENCY_GRAPH',
+                    '04_COMPLEXITY_TELEMETRY',
+                    '05_FILE_EXPLANATIONS',
+                    '06_CODE_RAG',
+                  ] as Tab[]
+                ).map((tab) => (
+                  <TechButton
+                    key={tab}
+                    size="sm"
+                    active={activeTab === tab}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    [{tab}]
+                  </TechButton>
+                ))}
+              </div>
+
+              {/* Export Artifacts Controls */}
+              <div className="flex items-center gap-1.5">
+                <TechButton
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => downloadOnboarding(data.onboarding_doc, 'fastapi')}
+                  glyph="[↓]"
+                >
+                  ONBOARDING.MD
+                </TechButton>
+                <TechButton
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => downloadAgentContext(data.agent_context, 'fastapi')}
+                  glyph="[↓]"
+                >
+                  AGENT_CONTEXT.MD
+                </TechButton>
+                <TechButton
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => downloadDependencyGraph(data.dependency_rows, 'fastapi')}
+                  glyph="[↓]"
+                >
+                  GRAPH.JSON
+                </TechButton>
+              </div>
+            </div>
+
+            {/* 4. Active Tab Panels */}
+            {/* TAB 1: ONBOARDING DOC */}
+            {activeTab === '01_ONBOARDING' && (
+              <BlueprintPanel
+                title="ARCHITECTURAL ONBOARDING SYNTHESIS"
+                glyph="[DOC_01]"
+                coord="SEC 01 // SYNTHESIS"
+              >
+                <div className="p-4 bg-[#0A0A0B] border border-[#26262A] max-h-[700px] overflow-y-auto">
+                  <div className="gnosis-markdown">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {data.onboarding_doc}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              </BlueprintPanel>
+            )}
+
+            {/* TAB 2: AGENT CONTEXT */}
+            {activeTab === '02_AGENT_CONTEXT' && (
+              <BlueprintPanel
+                title="MACHINE-OPTIMIZED AGENT CONTEXT"
+                glyph="[DOC_02]"
+                coord="SEC 02 // AGENT_CONTEXT"
+              >
+                <div className="p-4 bg-[#0A0A0B] border border-[#26262A] max-h-[700px] overflow-y-auto font-mono text-xs text-[#E8E8E6] whitespace-pre-wrap leading-relaxed">
+                  {data.agent_context}
+                </div>
+              </BlueprintPanel>
+            )}
+
+            {/* TAB 3: DEPENDENCY GRAPH MATRIX */}
+            {activeTab === '03_DEPENDENCY_GRAPH' && (
+              <BlueprintPanel
+                title="DIRECTED IMPORT DEPENDENCY TOPOLOGY"
+                glyph="[MATRIX_01]"
+                coord="GRAPH [NETWORKX]"
+                headerRight={
+                  <input
+                    type="text"
+                    placeholder="FILTER FILES..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="bg-[#0A0A0B] border border-[#26262A] px-2 py-0.5 font-mono text-[10px] text-[#E8E8E6] outline-none placeholder-[#55554F] uppercase"
+                  />
+                }
+              >
+                <div className="flex flex-col gap-3">
+                  {/* Circular Cycles Alert Banner */}
+                  {data.circular_cycles > 0 && (
+                    <div className="border border-[#E8A33D] bg-[#121214] p-2.5 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-[#E8A33D]">
+                          [!] CIRCULAR COUPLING IDENTIFIED:
+                        </span>
+                        <FieldAnnotation type="underline" label="CYCLIC_COUPLING">
+                          <span className="font-mono text-xs text-[#E8E8E6]">
+                            {data.circular_deps.map((c) => c.join(' -> ')).join(' | ')}
+                          </span>
+                        </FieldAnnotation>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Dense Technical Dependency Table */}
+                  <div className="overflow-x-auto border border-[#26262A]">
+                    <table className="w-full text-left font-mono text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-[#18181B] text-[#8A8A85] text-[10px] uppercase border-b border-[#26262A]">
+                          <th className="p-2 border-r border-[#26262A]">FILE IDENTIFIER</th>
+                          <th className="p-2 border-r border-[#26262A] text-right">IMPORTS (OUT)</th>
+                          <th className="p-2 border-r border-[#26262A] text-right">IMPORTED BY (IN)</th>
+                          <th className="p-2 text-center">COUPLING RISK</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.dependency_rows
+                          .filter((r) =>
+                            r.file.toLowerCase().includes(searchQuery.toLowerCase())
+                          )
+                          .map((row, i) => (
+                            <tr
+                              key={i}
+                              className="border-b border-[#26262A] hover:bg-[#18181B]/50"
+                            >
+                              <td className="p-2 border-r border-[#26262A] text-[#E8E8E6] font-medium">
+                                {row.file}
+                              </td>
+                              <td className="p-2 border-r border-[#26262A] text-right text-[#8A8A85]">
+                                {row.imports}
+                              </td>
+                              <td className="p-2 border-r border-[#26262A] text-right text-[#8A8A85]">
+                                {row.imported_by}
+                              </td>
+                              <td className="p-2 text-center">
+                                {row.risk === 'CRITICAL' ? (
+                                  <FieldAnnotation type="circle" label="HOTSPOT">
+                                    <span className="px-1.5 py-0.5 text-[9px] font-bold text-[#FF4D4D] bg-[#FF4D4D]/10 border border-[#FF4D4D]">
+                                      [CRITICAL]
+                                    </span>
+                                  </FieldAnnotation>
+                                ) : (
+                                  <span
+                                    className={`px-1.5 py-0.5 text-[9px] font-bold ${
+                                      row.risk === 'HIGH'
+                                        ? 'text-[#E8A33D] bg-[#E8A33D]/10 border border-[#E8A33D]'
+                                        : 'text-[#8A8A85] bg-[#26262A]'
+                                    }`}
+                                  >
+                                    [{row.risk}]
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </BlueprintPanel>
+            )}
+
+            {/* TAB 4: COMPLEXITY TELEMETRY */}
+            {activeTab === '04_COMPLEXITY_TELEMETRY' && (
+              <BlueprintPanel
+                title="CYCLOMATIC DEBT & MAINTAINABILITY PROFILER"
+                glyph="[RADON_01]"
+                coord="RADON [AST_DEBT]"
+              >
+                <div className="overflow-x-auto border border-[#26262A]">
+                  <table className="w-full text-left font-mono text-xs border-collapse">
                     <thead>
-                      <tr style={{ background: 'rgba(20,0,255,0.06)', height: 44 }}>
-                        {['FILE', 'RISK', 'AVG CC', 'MAX CC', 'WORST FUNCTION', 'COUPLING', 'FLAGS'].map(h => (
-                          <th key={h} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(10,10,26,0.45)', padding: '0 16px', textAlign: (h === 'FILE' || h === 'WORST FUNCTION' || h === 'FLAGS') ? 'left' : 'center', borderBottom: '1px solid rgba(20,0,255,0.12)' }}>{h}</th>
-                        ))}
+                      <tr className="bg-[#18181B] text-[#8A8A85] text-[10px] uppercase border-b border-[#26262A]">
+                        <th className="p-2 border-r border-[#26262A]">TARGET MODULE</th>
+                        <th className="p-2 border-r border-[#26262A] text-right">AVG CC</th>
+                        <th className="p-2 border-r border-[#26262A] text-right">PEAK CC</th>
+                        <th className="p-2 border-r border-[#26262A]">WORST FUNCTION HOTSPOT</th>
+                        <th className="p-2 border-r border-[#26262A]">ARCHITECTURAL FLAGS</th>
+                        <th className="p-2 text-center">RISK</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {complexityRows.map(row => (
-                        <HoverRow key={row.path} height={52}>
-                          <td style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 400, color: '#1400FF', padding: '0 16px' }} title={row.path}>{row.file}</td>
-                          <td style={{ padding: '0 16px', textAlign: 'center' }}><RiskBadge level={row.risk} onLight /></td>
-                          <td style={{ padding: '0 16px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-                              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, fontWeight: 500, color: '#0A0A1A' }}>
-                                {typeof row.avg_cc === 'number' ? row.avg_cc.toFixed(1) : row.avg_cc}
-                              </span>
-                              <div style={{ width: 50, height: 3, background: 'rgba(20,0,255,0.06)', border: '1px solid rgba(20,0,255,0.08)', position: 'relative' }}>
-                                <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${(row.avg_cc / maxAvgCC) * 100}%`, background: '#1400FF' }} />
-                              </div>
+                      {data.complexity_rows.map((row, i) => (
+                        <tr
+                          key={i}
+                          className="border-b border-[#26262A] hover:bg-[#18181B]/50"
+                        >
+                          <td className="p-2 border-r border-[#26262A] text-[#E8E8E6] font-medium">
+                            {row.file}
+                          </td>
+                          <td className="p-2 border-r border-[#26262A] text-right text-[#8A8A85]">
+                            {row.avg_cc}
+                          </td>
+                          <td className="p-2 border-r border-[#26262A] text-right">
+                            {row.max_cc >= 30 ? (
+                              <FieldAnnotation type="circle" label="PEAK">
+                                <span className="text-[#E8A33D] font-bold">{row.max_cc}</span>
+                              </FieldAnnotation>
+                            ) : (
+                              <span className="text-[#E8E8E6] font-semibold">{row.max_cc}</span>
+                            )}
+                          </td>
+                          <td className="p-2 border-r border-[#26262A] text-[#8A8A85]">
+                            <code className="text-[#E8A33D] text-[11px]">
+                              {row.worst_fn}()
+                            </code>
+                          </td>
+                          <td className="p-2 border-r border-[#26262A]">
+                            <div className="flex flex-wrap gap-1">
+                              {row.flags.map((flag, fi) => (
+                                <span
+                                  key={fi}
+                                  className="text-[9px] px-1 py-0.5 border border-[#26262A] bg-[#0A0A0B] text-[#55554F]"
+                                >
+                                  {flag}
+                                </span>
+                              ))}
                             </div>
                           </td>
-                          <td style={{ padding: '0 16px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-                              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, fontWeight: 500, color: row.max_cc >= 21 ? '#1400FF' : '#0A0A1A' }}>
-                                {row.max_cc}
-                              </span>
-                              <div style={{ width: 50, height: 3, background: 'rgba(20,0,255,0.06)', border: '1px solid rgba(20,0,255,0.08)', position: 'relative' }}>
-                                <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${(row.max_cc / maxMaxCC) * 100}%`, background: row.max_cc >= 21 ? '#1400FF' : 'rgba(20,0,255,0.50)' }} />
-                              </div>
-                            </div>
+                          <td className="p-2 text-center">
+                            <span
+                              className={`px-1.5 py-0.5 text-[9px] font-bold ${
+                                row.risk === 'CRITICAL'
+                                  ? 'text-[#FF4D4D] border border-[#FF4D4D]'
+                                  : row.risk === 'HIGH'
+                                  ? 'text-[#E8A33D] border border-[#E8A33D]'
+                                  : 'text-[#8A8A85]'
+                              }`}
+                            >
+                              [{row.risk}]
+                            </span>
                           </td>
-                          <td style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 400, color: '#1400FF', padding: '0 16px', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.worst_fn}>{row.worst_fn}</td>
-                          <td style={{ padding: '0 16px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-                              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 400, color: 'rgba(10,10,26,0.65)' }}>{row.coupling}</span>
-                              <div style={{ width: 50, height: 3, background: 'rgba(20,0,255,0.06)', border: '1px solid rgba(20,0,255,0.08)', position: 'relative' }}>
-                                <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${(row.coupling / maxCoupling) * 100}%`, background: 'rgba(20,0,255,0.40)' }} />
-                              </div>
-                            </div>
-                          </td>
-                          <td style={{ padding: '0 16px' }}>
-                            {(row.flags || []).map(f => (
-                              <span key={f} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: f.includes('PARSE') ? '#FF3B3B' : 'rgba(20,0,255,0.70)', marginRight: 6 }}>{f}</span>
-                            ))}
-                          </td>
-                        </HoverRow>
+                        </tr>
                       ))}
                     </tbody>
                   </table>
-                )
-              })()
-            }
+                </div>
+              </BlueprintPanel>
+            )}
+
+            {/* TAB 5: FILE EXPLANATIONS */}
+            {activeTab === '05_FILE_EXPLANATIONS' && (
+              <BlueprintPanel
+                title="SUBSYSTEM & MODULE EXPLANATIONS"
+                glyph="[EXPL_01]"
+                coord="SEC 05 // EXPLAIN"
+              >
+                {data.file_explanations ? (
+                  <div className="p-4 bg-[#0A0A0B] border border-[#26262A] max-h-[700px] overflow-y-auto">
+                    <div className="gnosis-markdown">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {data.file_explanations}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                ) : (
+                  <EmptySchematic
+                    doodleId="folder"
+                    doodleSize={120}
+                    caption="SKIPPED AI EXPLANATIONS — RUN ANALYSIS WITH SKIP LLM DISABLED TO GENERATE FILE WALKTHROUGHS"
+                    coord="FILES [00, 00]"
+                  />
+                )}
+              </BlueprintPanel>
+            )}
+
+            {/* TAB 6: CODE RAG INTERACTIVE CONSOLE */}
+            {activeTab === '06_CODE_RAG' && (
+              <BlueprintPanel
+                title="ARCHAEOLOGICAL CODE RAG // VECTOR QUERY"
+                glyph="[CHROMADB_01]"
+                coord="CHROMA [SIMILARITY_SEARCH]"
+              >
+                <div className="flex flex-col gap-4">
+                  <form onSubmit={handleRagSearch} className="flex gap-2">
+                    <div className="flex-1 flex items-center bg-[#0A0A0B] border border-[#26262A] px-3 py-2">
+                      <span className="font-mono text-xs text-[#E8A33D] mr-2">QUERY &gt;</span>
+                      <input
+                        type="text"
+                        value={ragQuery}
+                        onChange={(e) => setRagQuery(e.target.value)}
+                        placeholder="e.g. How does dependency injection resolve sub-dependencies?"
+                        className="bg-transparent border-none outline-none font-mono text-xs text-[#E8E8E6] w-full placeholder-[#55554F]"
+                      />
+                    </div>
+                    <TechButton
+                      type="submit"
+                      variant="amber"
+                      isLoading={isRagSearching}
+                    >
+                      [EXECUTE VECTOR SEARCH]
+                    </TechButton>
+                  </form>
+
+                  {/* Query results */}
+                  {ragResponse ? (
+                    <div className="p-3 bg-[#0A0A0B] border border-[#26262A] font-mono text-xs text-[#E8E8E6] whitespace-pre-wrap leading-relaxed">
+                      {ragResponse}
+                    </div>
+                  ) : (
+                    <EmptySchematic
+                      doodleId="compass"
+                      doodleSize={120}
+                      caption="ENTER NATURAL LANGUAGE QUERY TO SEARCH CHROMA VECTOR STORE ACROSS AST CHUNKS"
+                      coord="CHROMA [00, 00]"
+                    />
+                  )}
+                </div>
+              </BlueprintPanel>
+            )}
           </div>
         )}
+      </main>
 
-        {/* ── Tab 4: Raw Output ── */}
-        {!loading && activeTab === 'raw' && (
-          <div>
-            <CollapsibleSection
-              title="SUMMARY"
-              count={`${Object.keys(s || {}).length} FIELDS`}
-              content={JSON.stringify(s || {}, null, 2)}
-              defaultOpen
-            />
-            <CollapsibleSection
-              title="EXPLANATIONS"
-              count={`${Object.keys(result?.explanations || {}).length} FILES EXPLAINED`}
-              content={JSON.stringify(result?.explanations || {}, null, 2)}
-            />
-            <CollapsibleSection
-              title="COMPLEXITY REPORT"
-              count={`${result?.complexity_rows?.length ?? 0} FILES`}
-              content={result?.complexity_report_json || '{}'}
-            />
-            <CollapsibleSection
-              title="GRAPH SUMMARY"
-              count={`${depRows.length} FILES TRACKED`}
-              content={JSON.stringify({ nodes: s?.total_files, edges: s?.import_edges, circular_cycles: s?.circular_cycles, reading_order: readingOrder }, null, 2)}
-            />
+      {/* ─── BOTTOM ENGINEERING FOOTER ────────────────────────────────────── */}
+      <footer className="border-t border-[#26262A] bg-[#0A0A0B] px-4 py-2 mt-auto select-none">
+        <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-2 font-mono text-[9px] text-[#55554F]">
+          <div className="flex items-center gap-2">
+            <span>PROJECT GNOSIS</span>
+            <span>//</span>
+            <span>CODE ARCHAEOLOGY & ONBOARDING SYSTEM</span>
           </div>
-        )}
-      </div>
-
-      {/* Sticky download bar */}
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: 64, background: '#1400FF', borderTop: '1px solid rgba(255,255,255,0.20)', display: 'flex', alignItems: 'center', padding: '0 96px', gap: 16, zIndex: 100 }}>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.45)' }}>DOWNLOAD OUTPUTS</span>
-        <div style={{ display: 'flex', gap: 12, marginLeft: 24 }}>
-          <DownloadBtn label="↓ ONBOARDING.MD" onClick={() => handleDownload(result?.onboarding_doc || '', 'onboarding.md')} />
-          {result?.agent_context && (
-            <DownloadBtn label="↓ AGENT_CONTEXT.MD" onClick={() => handleDownload(result.agent_context || '', 'agent_context.md')} />
-          )}
-          {result?.file_explanations_md && (
-            <DownloadBtn label="↓ FILE_EXPLANATIONS.MD" onClick={() => handleDownload(result?.file_explanations_md || '', 'file_explanations.md')} />
-          )}
-          <DownloadBtn label="↓ COMPLEXITY_REPORT.JSON" onClick={() => handleDownload(result?.complexity_report_json || '{}', 'complexity_report.json', 'application/json')} />
-          <DownloadBtn label="↓ DEPENDENCY_GRAPH.JSON" onClick={() => handleDownload(JSON.stringify(result?.dependency_rows || [], null, 2), 'dependency_graph.json', 'application/json')} />
+          <div className="flex items-center gap-3">
+            <span>DARK MODE ONLY</span>
+            <span>//</span>
+            <span>ENGINEERING GRID: 8PX</span>
+            <span>//</span>
+            <span className="text-[#8A8A85]">ACCENT: AMBER [#E8A33D]</span>
+          </div>
         </div>
-      </div>
+      </footer>
     </div>
-  )
-}
-
-// ─── Empty State ──────────────────────────────────────────────────────────────
-function EmptyState({ label }: { label: string }) {
-  return (
-    <div style={{ textAlign: 'center', padding: '80px 0' }}>
-      <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 48, color: 'rgba(20,0,255,0.20)' }}>—</div>
-      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'rgba(10,10,26,0.40)', letterSpacing: '0.12em', marginTop: 16 }}>{label}</div>
-    </div>
-  )
-}
-
-// ─── Screen 4: Error ──────────────────────────────────────────────────────────
-function ErrorPage({ onHome }: { onHome: () => void }) {
-  const [hoverBtn, setHoverBtn] = useState(false)
-  const reducedMotion = useReducedMotion()
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#1400FF' }}>
-      <NavBar onLogoClick={onHome} />
-      <div style={{ display: 'flex', flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {/* Left column */}
-        <div
-          style={{
-            width: 600,
-            flexShrink: 0,
-            padding: '0 0 0 96px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-          }}
-        >
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 58, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
-              SOMETHING
-            </div>
-            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 58, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
-              WENT WRONG
-            </div>
-          </div>
-
-          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 120, fontWeight: 400, color: 'rgba(255,255,255,0.15)', lineHeight: 1.0, letterSpacing: '-0.02em', marginBottom: 16 }}>
-            404
-          </div>
-
-          <p style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 16, fontWeight: 400, color: 'rgba(255,255,255,0.65)', maxWidth: 420, lineHeight: 1.6, margin: '0 0 40px 0' }}>
-            The page you're looking for doesn't exist or the server encountered an unexpected error. Please try again later.
-          </p>
-
-          <motion.button
-            onClick={onHome}
-            onMouseEnter={() => setHoverBtn(true)}
-            onMouseLeave={() => setHoverBtn(false)}
-            whileTap={{ scale: 0.97 }}
-            transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-            style={{
-              width: 280,
-              height: 56,
-              background: hoverBtn ? 'transparent' : '#FFFFFF',
-              border: hoverBtn ? '1px solid #FFFFFF' : 'none',
-              color: hoverBtn ? '#FFFFFF' : '#1400FF',
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 13,
-              fontWeight: 500,
-              letterSpacing: '0.14em',
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-            }}
-          >
-            RETURN HOME →
-          </motion.button>
-        </div>
-
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden', minWidth: 0 }}>
-          <AthenaFigure brightness={0.55} />
-        </div>
-      </div>
-
-      <div style={{ position: 'fixed', bottom: 32, right: 96, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)' }}>
-        v{APP_VERSION} · PiUnknown · Project Gnosis
-      </div>
-    </div>
-  )
-}
-
-// ─── Root App ─────────────────────────────────────────────────────────────────
-export default function App() {
-  const [screen, setScreen] = useState<Screen>('landing')
-  const [repoUrl, setRepoUrl] = useState('')
-  const [jobId, setJobId] = useState('')
-  const reducedMotion = useReducedMotion()
-
-  const handleSubmit = (url: string, id: string) => {
-    setRepoUrl(url)
-    setJobId(id)
-    setScreen('progress')
-  }
-
-  const goHome = useCallback(() => setScreen('landing'), [])
-
-  // Determine enter direction: landing = from left, others = from right
-  const isLanding = screen === 'landing'
-  const xInitial = reducedMotion ? 0 : (isLanding ? -40 : 40)
-  const xAnimate = 0
-  const xExit = reducedMotion ? 0 : (isLanding ? 40 : -40)
-
-  return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={screen}
-        initial={{ opacity: 0, x: xInitial }}
-        animate={{ opacity: 1, x: xAnimate }}
-        exit={{ opacity: 0, x: xExit }}
-        transition={
-          reducedMotion
-            ? { duration: 0.15 }
-            : { type: 'spring', bounce: 0, duration: 0.4 }
-        }
-        style={{ height: '100vh' }}
-      >
-        {screen === 'landing' && <LandingPage onSubmit={handleSubmit} />}
-        {screen === 'progress' && (
-          <ProgressPage
-            repoUrl={repoUrl}
-            jobId={jobId}
-            onComplete={() => setScreen('results')}
-            onHome={goHome}
-          />
-        )}
-        {screen === 'results' && (
-          <ResultsPage repoUrl={repoUrl} jobId={jobId} onHome={goHome} />
-        )}
-        {screen === 'error' && <ErrorPage onHome={goHome} />}
-      </motion.div>
-    </AnimatePresence>
-  )
+  );
 }

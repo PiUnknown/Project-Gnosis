@@ -1,16 +1,28 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap');
 @import 'tailwindcss';
 
 @theme {
-  --color-gnosis-blue: #1400FF;
-  --color-gnosis-blue-dark: #0F00CC;
-  --color-gnosis-light: #F0F0FF;
-  --color-gnosis-error: #FF3B3B;
-  --font-playfair: 'Playfair Display', Georgia, serif;
-  --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+  --color-bg-base: #0A0A0B;
+  --color-bg-panel: #121214;
+  --color-border-subtle: #26262A;
+  --color-border-active: #3F3F46;
+  --color-text-primary: #E8E8E6;
+  --color-text-secondary: #8A8A85;
+  --color-text-micro: #55554F;
+  --color-accent-amber: #E8A33D;
+  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+  --font-grotesk: 'Space Grotesk', 'Inter', system-ui, sans-serif;
   --font-inter: 'Inter', system-ui, sans-serif;
+}
+
+:root {
+  --bg-base: #0A0A0B;
+  --bg-panel: #121214;
+  --border-subtle: #26262A;
+  --border-active: #3F3F46;
+  --text-primary: #E8E8E6;
+  --text-secondary: #8A8A85;
+  --text-micro: #55554F;
+  --accent-amber: #E8A33D;
 }
 
 * {
@@ -19,179 +31,222 @@
 }
 
 body {
-  font-family: 'Inter', system-ui, sans-serif;
-  background-color: #1400FF;
+  font-family: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+  background-color: #0A0A0B;
+  color: #E8E8E6;
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar for light content areas */
-.light-scroll::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-.light-scroll::-webkit-scrollbar-track {
-  background: rgba(20, 0, 255, 0.08);
-}
-.light-scroll::-webkit-scrollbar-thumb {
-  background: rgba(20, 0, 255, 0.25);
-}
-.light-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(20, 0, 255, 0.40);
+/* Blueprint Engineering Grid Background */
+.blueprint-grid {
+  background-color: #0A0A0B;
+  background-image: 
+    linear-gradient(to right, rgba(232, 232, 230, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(232, 232, 230, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
-/* Hide scrollbars by default, show on hover */
-.auto-scroll {
-  scrollbar-width: none;
-}
-.auto-scroll::-webkit-scrollbar {
-  display: none;
-}
-.auto-scroll:hover {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(20,0,255,0.25) rgba(20,0,255,0.08);
-}
-.auto-scroll:hover::-webkit-scrollbar {
-  display: block;
-  width: 6px;
-}
-.auto-scroll:hover::-webkit-scrollbar-track {
-  background: rgba(20, 0, 255, 0.08);
-}
-.auto-scroll:hover::-webkit-scrollbar-thumb {
-  background: rgba(20, 0, 255, 0.25);
+.blueprint-grid-dense {
+  background-color: #0A0A0B;
+  background-image: 
+    linear-gradient(to right, rgba(232, 232, 230, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(232, 232, 230, 0.035) 1px, transparent 1px);
+  background-size: 8px 8px;
 }
 
-@keyframes dotCycle {
-  0%, 24% { content: '·'; }
-  25%, 49% { content: '··'; }
-  50%, 74% { content: '···'; }
-  75%, 100% { content: ''; }
+/* Monospace Microtext standard */
+.microtext {
+  font-family: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #55554F;
 }
 
-@keyframes borderPulse {
+/* Custom technical scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #0A0A0B;
+  border-left: 1px solid #26262A;
+}
+::-webkit-scrollbar-thumb {
+  background: #26262A;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #E8A33D;
+}
+
+/* Monospace selection */
+::selection {
+  background-color: #E8A33D;
+  color: #0A0A0B;
+}
+
+/* Technical hover inversion */
+.hover-invert {
+  transition: background-color 0.05s ease, color 0.05s ease;
+}
+.hover-invert:hover {
+  background-color: #E8E8E6 !important;
+  color: #0A0A0B !important;
+}
+
+.hover-amber {
+  transition: background-color 0.05s ease, color 0.05s ease;
+}
+.hover-amber:hover {
+  background-color: #E8A33D !important;
+  color: #0A0A0B !important;
+}
+
+/* ASCII and Telemetry animations */
+@keyframes asciiPulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  50% { opacity: 0.35; }
 }
 
-@keyframes spinnerCycle {
-  0%   { content: '|'; }
-  25%  { content: '/'; }
-  50%  { content: '—'; }
-  75%  { content: '\\'; }
+.ascii-blink {
+  animation: asciiPulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-.running-dots::after {
-  content: '···';
-  animation: dotCycle 1.2s steps(1) infinite;
-}
-
-.pulse-border {
-  animation: borderPulse 1.4s ease-in-out infinite;
-}
-
-/* Markdown styles for onboarding doc */
-.gnosis-markdown h1 {
-  font-family: 'Playfair Display', Georgia, serif;
-  font-size: 48px;
-  font-weight: 400;
-  text-transform: uppercase;
-  color: #1400FF;
-  margin-bottom: 24px;
-  line-height: 1.0;
-  letter-spacing: -0.01em;
-}
-.gnosis-markdown h2 {
-  font-family: 'Playfair Display', Georgia, serif;
-  font-size: 32px;
-  font-weight: 400;
-  text-transform: uppercase;
-  color: #1400FF;
-  margin-top: 48px;
-  margin-bottom: 16px;
-  line-height: 1.0;
-}
-.gnosis-markdown h3 {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 13px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: #1400FF;
-  margin-top: 32px;
-  margin-bottom: 12px;
-}
-.gnosis-markdown p {
+/* Markdown rendering for Blueprint Archaeological Reports */
+.gnosis-markdown {
   font-family: 'Inter', system-ui, sans-serif;
-  font-size: 16px;
-  color: #0A0A1A;
-  line-height: 1.7;
-  margin-bottom: 16px;
+  color: #E8E8E6;
+  line-height: 1.65;
 }
-.gnosis-markdown code {
-  font-family: 'IBM Plex Mono', monospace;
+
+.gnosis-markdown h1 {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #E8E8E6;
+  border-bottom: 1px solid #26262A;
+  padding-bottom: 12px;
+  margin-top: 24px;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+}
+
+.gnosis-markdown h2 {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: #E8E8E6;
+  border-bottom: 1px solid #26262A;
+  padding-bottom: 8px;
+  margin-top: 28px;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+
+.gnosis-markdown h3 {
+  font-family: 'JetBrains Mono', 'IBM Plex Mono', monospace;
   font-size: 13px;
-  color: #1400FF;
-  background: rgba(20, 0, 255, 0.08);
+  font-weight: 600;
+  color: #E8A33D;
+  margin-top: 20px;
+  margin-bottom: 8px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.gnosis-markdown p {
+  font-size: 14px;
+  color: #8A8A85;
+  margin-bottom: 14px;
+}
+
+.gnosis-markdown strong {
+  color: #E8E8E6;
+  font-weight: 600;
+}
+
+.gnosis-markdown code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #E8A33D;
+  background: #121214;
+  border: 1px solid #26262A;
   padding: 2px 6px;
 }
-.gnosis-markdown h1 code,
-.gnosis-markdown h2 code,
-.gnosis-markdown h3 code {
-  font-family: inherit;
-  font-size: inherit;
+
+.gnosis-markdown pre {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #E8E8E6;
+  background: #0D0D0E;
+  border: 1px solid #26262A;
+  padding: 16px;
+  overflow-x: auto;
+  margin: 16px 0;
+}
+
+.gnosis-markdown pre code {
   color: inherit;
   background: transparent;
-  padding: 0;
   border: none;
+  padding: 0;
 }
-.gnosis-markdown pre {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 13px;
-  color: #0A0A1A;
-  background: rgba(20, 0, 255, 0.04);
-  border: 1px solid rgba(20, 0, 255, 0.12);
-  padding: 20px 24px;
-  overflow-x: auto;
-  margin-bottom: 24px;
-}
-.gnosis-markdown a {
-  color: #1400FF;
-  text-decoration: underline;
-}
-.gnosis-markdown a:hover {
-  color: #0F00CC;
-}
-.gnosis-markdown blockquote {
-  border-left: 2px solid #1400FF;
+
+.gnosis-markdown ul, .gnosis-markdown ol {
+  font-size: 14px;
+  color: #8A8A85;
   padding-left: 20px;
-  color: rgba(10, 10, 26, 0.65);
-  font-style: italic;
-  margin: 24px 0;
+  margin-bottom: 14px;
 }
+
+.gnosis-markdown li {
+  margin-bottom: 6px;
+}
+
+.gnosis-markdown blockquote {
+  border-left: 2px solid #E8A33D;
+  background: #121214;
+  padding: 10px 16px;
+  color: #8A8A85;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  margin: 16px 0;
+}
+
 .gnosis-markdown table {
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: 24px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  margin: 16px 0;
+  border: 1px solid #26262A;
 }
+
 .gnosis-markdown th {
-  font-family: 'IBM Plex Mono', monospace;
+  background: #18181B;
+  color: #E8E8E6;
   font-size: 10px;
-  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: rgba(10, 10, 26, 0.70);
-  background: rgba(20, 0, 255, 0.06);
-  border: 1px solid rgba(20, 0, 255, 0.12);
-  padding: 10px 16px;
+  letter-spacing: 0.08em;
+  border: 1px solid #26262A;
+  padding: 8px 12px;
   text-align: left;
 }
+
 .gnosis-markdown td {
-  font-family: 'Inter', system-ui, sans-serif;
-  font-size: 14px;
-  color: #0A0A1A;
-  border: 1px solid rgba(20, 0, 255, 0.10);
-  padding: 10px 16px;
+  border: 1px solid #26262A;
+  padding: 8px 12px;
+  color: #8A8A85;
+}
+
+.gnosis-markdown tr:nth-child(even) {
+  background: #0E0E10;
 }
 
 @media (prefers-reduced-motion: reduce) {
