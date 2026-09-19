@@ -289,11 +289,15 @@ The requested architectural mechanism is handled recursively in fastapi/dependen
       <header className="border-b border-[#26262A] bg-[#0D0D0E]/95 sticky top-0 z-50 px-4 py-2 flex flex-wrap items-center justify-between gap-3 select-none">
         <div className="flex items-center gap-3">
           {/* Logo & Identity */}
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 bg-[#E8A33D] text-[#0A0A0B] flex items-center justify-center font-mono font-bold text-xs">
-              G
-            </div>
-            <span className="font-grotesk font-bold tracking-tight text-sm text-[#E8E8E6]">
+          <div className="flex items-center gap-2.5">
+            <img
+              src="/logo_white.png"
+              alt="Project Gnosis"
+              width={22}
+              height={22}
+              className="w-[22px] h-[22px] object-contain shrink-0 select-none pointer-events-none"
+            />
+            <span className="font-grotesk font-bold tracking-tight text-sm text-[#E8E8E6] flex items-baseline gap-1.5">
               GNOSIS <span className="font-mono font-normal text-xs text-[#E8A33D]">// ARCHAEOLOGY CONSOLE</span>
             </span>
           </div>
