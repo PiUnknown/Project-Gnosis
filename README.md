@@ -180,8 +180,8 @@ Python-specific code metrics library. Computes cyclomatic complexity per functio
 **ChromaDB**
 Embedded vector database. Stores code chunks as embeddings with metadata (file path, symbol name, language, complexity score). Requires SQLite >= 3.35 — on Azure, the system SQLite is too old and must be patched with `pysqlite3-binary` (see Deployment section).
 
-**NVIDIA NIM (nv-embed-v1 embeddings)**
-Embedding model hosted on NVIDIA NIM's serverless API. Generates 4096-dimensional vectors for code chunks via HTTP (`nvidia/nv-embed-v1`). No local model load, no CPU matrix multiplication — critical for constrained Azure App Service plans. Uses `input_type="passage"` when indexing and `input_type="query"` during retrieval (asymmetric model).
+**NVIDIA NIM (nemotron-3-embed-1b embeddings)**
+Embedding model hosted on NVIDIA NIM's serverless API. Generates 2048-dimensional vectors for code chunks via HTTP (`nvidia/nemotron-3-embed-1b`). No local model load, no CPU matrix multiplication — critical for constrained Azure App Service plans. Uses `input_type="passage"` when indexing and `input_type="query"` during retrieval (asymmetric model).
 
 **NVIDIA NIM (meta/llama-3.1-8b-instruct)**
 LLM inference via NVIDIA's serverless NIM API. Accessed through an OpenAI-compatible client pointed at the NVIDIA endpoint. Replaced Groq in August 2026. Default Model: `meta/llama-3.1-8b-instruct` (responds in 5-15s on the free tier; `meta/llama-3.3-70b-instruct` is supported via runtime environment override). Temperature set to 0.1 for consistent, accurate explanations.
@@ -330,7 +330,7 @@ code-archaeology-agent/
 │   │   ├── tree_sitter_utils.py # Language parser initialization
 │   │   ├── nvidia_client.py     # NVIDIA NIM API client wrapper with retry logic
 │   │   ├── chunker.py           # AST-based code chunker
-│   │   ├── embedder.py          # NVIDIA NIM embedding client (nv-embed-v1)
+│   │   ├── embedder.py          # NVIDIA NIM embedding client (nemotron-3-embed-1b)
 │   │   ├── retriever.py         # ChromaDB retrieval interface
 │   │   ├── graph_utils.py       # Import resolution + pyvis rendering
 │   │   └── filters.py           # File exclusion logic
@@ -503,7 +503,7 @@ For production on Azure, these are set via Azure App Service Application Setting
 **Root Cause:** sentence-transformers' CPU-based embedding of all chunks in a single large batch ran into memory limits and request timeouts on constrained App Service plans due to large numpy allocations.
 
 **Resolution:**
-- Replaced local sentence-transformers inference with NVIDIA NIM's hosted embedding API (`nvidia/nv-embed-v1`, 4096-dim) in `embedder.py`. Embedding is now HTTP calls to NVIDIA's GPUs — no model loaded into App Service memory.
+- Replaced local sentence-transformers inference with NVIDIA NIM's hosted embedding API (`nvidia/nemotron-3-embed-1b`, 2048-dim) in `embedder.py`. Embedding is now HTTP calls to NVIDIA's GPUs — no model loaded into App Service memory.
 - Configured chunk processing in streaming batches (`STREAM_BATCH_SIZE = 128` in `code_rag.py`) to reduce peak memory pressure.
 - Added explicit garbage collection (`gc.collect()`) after loading and embedding each batch of chunks to release memory immediately.
 - Added per-batch logging in `embedder.py` to trace progress and ensure consistent throughput.
@@ -567,7 +567,7 @@ authentication module.
 v1 runs agents sequentially. Agents 3, 4, and 5 could run in parallel (all depend on Agent 2's output but not on each other). Sequential is simpler to debug and the total runtime is acceptable for repos under 500 files. Parallel execution is a v2 optimization.
 
 **Local embeddings vs API embeddings**
-Local models (e.g. `all-MiniLM-L6-v2`) run offline with no API cost, but load 80MB+ into memory and do CPU matrix multiplication — this OOM'd/stalled Azure App Service. Project Gnosis now uses NVIDIA NIM's hosted `nvidia/nv-embed-v1` (4096-dim) over the same OpenAI-compatible client as Agent 6: negligible App Service memory, GPU-backed latency (~1-3s/batch), reuses `NVIDIA_API_KEY`.
+Local models (e.g. `all-MiniLM-L6-v2`) run offline with no API cost, but load 80MB+ into memory and do CPU matrix multiplication — this OOM'd/stalled Azure App Service. Project Gnosis now uses NVIDIA NIM's hosted `nvidia/nemotron-3-embed-1b` (2048-dim) over the same OpenAI-compatible client as Agent 6: negligible App Service memory, GPU-backed latency (~1-3s/batch), reuses `NVIDIA_API_KEY`.
 
 **ChromaDB vs FAISS**
 ChromaDB: persistent, metadata filtering, easier API. FAISS: faster at scale, no metadata filtering. For repos under 50k chunks, ChromaDB is fine. FAISS becomes relevant at 500k+ chunks (very large monorepos).
@@ -606,7 +606,7 @@ All job state lives in a module-level dict with a threading lock. Jobs are lost 
 - Multi-language AST parsing support: Python, JavaScript, TypeScript, Go, Rust, Java, C, and C++ via Tree-Sitter grammars.
 - Dynamic repository sizing tiers (Full, Warning, Sampled, and Rejection modes).
 - Multi-threaded concurrent file ingestion (15 concurrent threads).
-- Batched embeddings (NVIDIA NIM nv-embed-v1 + ChromaDB) with rate-limit pacing and progress logging.
+- Batched embeddings (NVIDIA NIM nemotron-3-embed-1b + ChromaDB) with rate-limit pacing and progress logging.
 - Distributed Task Queue with Redis (Upstash) and dedicated background worker processes (Render).
 - Full-stack production deployment: React SPA on Vercel, FastAPI Web API on Azure App Service.
 
