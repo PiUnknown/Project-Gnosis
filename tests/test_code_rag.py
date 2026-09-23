@@ -105,12 +105,14 @@ _INVALID_CHARS_PATTERN = re.compile(r'[^a-zA-Z0-9_-]')
 
 @pytest.fixture
 def mock_embed():
-    """Mock embed_texts and embed_query to avoid loading the 80MB ML model."""
+    """Mock embed_texts and embed_query to avoid calling the NVIDIA API."""
+    from src.utils.embedder import EMBEDDING_DIM
+
     def fake_embed_texts(texts):
-        return [[0.1] * 384 for _ in texts]
+        return [[0.1] * EMBEDDING_DIM for _ in texts]
 
     def fake_embed_query(text):
-        return [0.1] * 384
+        return [0.1] * EMBEDDING_DIM
 
     with patch("src.utils.embedder.embed_texts", side_effect=fake_embed_texts):
         with patch("src.utils.embedder.embed_query", side_effect=fake_embed_query):
@@ -733,9 +735,9 @@ class TestNvidiaEmbedder:
         assert embed_texts([]) == []
 
     def test_embed_query_empty(self):
-        from src.utils.embedder import embed_query
+        from src.utils.embedder import embed_query, EMBEDDING_DIM
         result = embed_query("")
-        assert len(result) == 2048
+        assert len(result) == EMBEDDING_DIM
         assert all(v == 0.0 for v in result)
 
     def test_embed_texts_batches_and_returns_embeddings(self):
@@ -770,14 +772,14 @@ class TestNvidiaEmbedder:
         mock_client = MagicMock()
         mock_item = MagicMock()
         mock_item.index = 0
-        mock_item.embedding = [0.9] * 2048
+        mock_item.embedding = [0.9] * embedder.EMBEDDING_DIM
         mock_resp = MagicMock()
         mock_resp.data = [mock_item]
         mock_client.embeddings.create.return_value = mock_resp
 
         with patch("src.utils.embedder.get_client", return_value=mock_client):
             result = embedder.embed_query("payment processing")
-            assert len(result) == 2048
+            assert len(result) == embedder.EMBEDDING_DIM
             assert result[0] == 0.9
 
     def test_missing_api_key_raises(self):
