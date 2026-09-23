@@ -18,7 +18,7 @@ import threading
 
 from src.state import ArchaeonState
 from src.utils.chunker import make_chunks
-from src.utils.embedder import embed_texts
+from src.utils.embedder import embed_texts, EMBEDDING_DIM
 from src.utils.retriever import make_collection_name, DEFAULT_CHROMA_DB_PATH
 
 CHUNKABLE_LANGUAGES = frozenset({
@@ -74,8 +74,32 @@ def run(state: ArchaeonState) -> ArchaeonState:
         metadata={"hnsw:space": "cosine"}
     )
 
+    # If the embedding model/dimension changed since the last run (e.g.
+    # sentence-transformers 384-dim or nemotron 2048-dim -> nv-embed-v1
+    # 4096-dim), an incremental run cannot mix vector sizes in one
+    # collection. Recreate the collection and re-embed every file.
+    force_full_reembed = False
+    if state.is_incremental and collection.count() > 0:
+        try:
+            peek = collection.peek(limit=1)
+            existing = (peek or {}).get("embeddings") or []
+            if existing and len(existing[0]) != EMBEDDING_DIM:
+                force_full_reembed = True
+                client.delete_collection(name=collection_name)
+                collection = client.get_or_create_collection(
+                    name=collection_name,
+                    metadata={"hnsw:space": "cosine"}
+                )
+                print(
+                    f"  [RAG] Embedding dim changed "
+                    f"({len(existing[0])} -> {EMBEDDING_DIM}); "
+                    f"rebuilding collection with full re-embed."
+                )
+        except Exception:
+            pass
+
     # In incremental mode, delete chunks for deleted or modified files
-    if state.is_incremental and state.manifest_diff:
+    if state.is_incremental and not force_full_reembed and state.manifest_diff:
         paths_to_remove = list(state.manifest_diff.deleted_paths | {old_f.path for old_f, _ in state.manifest_diff.modified})
         if paths_to_remove:
             try:
@@ -104,7 +128,12 @@ def run(state: ArchaeonState) -> ArchaeonState:
     for idx, (file_path, symbol_table) in enumerate(state.symbol_tables.items()):
         print(f"\r  Processing files: {idx + 1}/{total_files}", end="", flush=True)
 
-        if state.is_incremental and state.manifest_diff and file_path not in state.manifest_diff.changed_paths:
+        if (
+            state.is_incremental
+            and not force_full_reembed
+            and state.manifest_diff
+            and file_path not in state.manifest_diff.changed_paths
+        ):
             skipped += 1
             continue
 

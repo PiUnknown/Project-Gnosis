@@ -49,7 +49,7 @@ Upstash Redis / Cloud Redis Instance (Persistent Job Store & RQ Queue)
 Background Worker Process (Render / Container Service)
 Pipeline Agents 1–7
   ↓
-GitHub API → tree-sitter → NetworkX → radon → ChromaDB → sentence-transformers → NVIDIA NIM
+GitHub API → tree-sitter → NetworkX → radon → ChromaDB → NVIDIA NIM (embeddings + LLM)
   ↓ (Writes progress & final results)
 Upstash Redis
   ↓ (Polled by FastAPI Web API)
@@ -106,7 +106,7 @@ GitHub URL
     v
 [Agent 5: Code RAG Agent]
     - Chunk code at AST boundaries (not token boundaries)
-    - Embed chunks using sentence-transformers (all-MiniLM-L6-v2)
+    - Embed chunks using NVIDIA NIM `nvidia/nv-embed-v1` (4096-dim, hosted API)
     - Store in ChromaDB with metadata
     |
     v
@@ -278,7 +278,7 @@ class ArchaeonState:
 }
 ```
 
-**Embedding model:** `sentence-transformers/all-MiniLM-L6-v2` (384-dim, runs locally)
+**Embedding model:** `nvidia/nv-embed-v1` (4096-dim, NVIDIA NIM hosted API — `input_type="passage"` for indexing, `"query"` for retrieval)
 **Vector store:** ChromaDB, persistent client, cosine similarity
 
 **Azure SQLite fix (required):**
@@ -445,7 +445,7 @@ Sticky download bar: three outlined-white buttons (onboarding.md, complexity_rep
 | Graph construction | NetworkX | Standard Python graph library, DiGraph + PageRank support |
 | Complexity analysis | radon (Python), custom AST walker (JS/TS) | radon is the standard for Python metrics |
 | Vector store | ChromaDB + pysqlite3-binary | Lightweight, local; pysqlite3-binary required on Azure |
-| Embeddings | sentence-transformers (all-MiniLM-L6-v2) | Free, runs locally, no API cost |
+| Embeddings | NVIDIA NIM (`nvidia/nv-embed-v1`) | Hosted GPU inference; reuses NVIDIA_API_KEY; no local model load |
 | LLM inference | NVIDIA NIM (meta/llama-3.1-8b-instruct) | OpenAI-compatible API, responds faster on free tier than 70b |
 | Backend | FastAPI + Azure App Service | Async, clean; Azure for production reliability |
 | CI/CD | GitHub Actions | Auto-deploys to Azure on push to master |
