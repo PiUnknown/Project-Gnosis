@@ -91,7 +91,8 @@ def _short_path(path: str, max_parts: int = 3) -> str:
 
 
 def _timestamp() -> str:
-    return datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    from datetime import timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 
 def _total_functions(state: ArchaeonState) -> int:

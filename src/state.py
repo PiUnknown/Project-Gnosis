@@ -70,3 +70,8 @@ class ArchaeonState:
     files_discovered: int = 0
     files_analyzed: int = 0
     analyzed_paths: Optional[set] = None
+
+    # --- Incremental Updates ---
+    is_incremental: bool = False
+    manifest_diff: Any = None
+    previous_state: Any = None

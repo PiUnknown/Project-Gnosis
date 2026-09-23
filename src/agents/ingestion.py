@@ -86,20 +86,39 @@ def run(state: ArchaeonState) -> ArchaeonState:
 
     state.file_manifest = file_manifest
 
-    # Step 5: Fetch raw contents
-    paths = [f.path for f in file_manifest]
-    print(f"  Fetching content for {len(paths)} files (via raw.githubusercontent.com)...")
+    # Step 5: Check incremental mode and fetch contents
+    if state.is_incremental and state.previous_state and state.previous_state.file_manifest:
+        from src.utils.diff_engine import compute_manifest_diff
+        state.manifest_diff = compute_manifest_diff(
+            state.previous_state.file_manifest,
+            state.file_manifest
+        )
+        paths_to_fetch = list(state.manifest_diff.changed_paths)
+        print(f"  [Incremental] Delta detected: {len(state.manifest_diff.added)} added, "
+              f"{len(state.manifest_diff.modified)} modified, {len(state.manifest_diff.deleted)} deleted, "
+              f"{len(state.manifest_diff.unchanged)} unchanged.")
+        print(f"  Fetching content for {len(paths_to_fetch)} changed files...")
+    else:
+        paths_to_fetch = [f.path for f in file_manifest]
+        print(f"  Fetching content for {len(paths_to_fetch)} files (via raw/API)...")
 
     raw_contents = fetch_file_contents_batch(
         state.owner,
         state.repo_name,
         state.default_branch,
-        paths,
+        paths_to_fetch,
+        token=state.github_token,
         delay=0.05
     )
+
+    # In incremental mode, preserve previous raw contents for unchanged files if available
+    if state.is_incremental and state.previous_state and state.previous_state.raw_contents:
+        for f in (state.manifest_diff.unchanged if state.manifest_diff else []):
+            if f.path in state.previous_state.raw_contents and f.path not in raw_contents:
+                raw_contents[f.path] = state.previous_state.raw_contents[f.path]
+
     state.raw_contents = raw_contents
-    
-    del paths
+    del paths_to_fetch
 
     # Step 6: Update line counts now that content is available
     for metadata in state.file_manifest:
@@ -107,6 +126,14 @@ def run(state: ArchaeonState) -> ArchaeonState:
             content = state.raw_contents[metadata.path]
             metadata.line_count = content.count("\n") + 1
             del content
+        elif state.is_incremental and state.previous_state:
+            # Fallback for unchanged file line counts from previous manifest
+            prev_meta = next(
+                (pm for pm in state.previous_state.file_manifest if pm.path == metadata.path),
+                None
+            )
+            if prev_meta and prev_meta.line_count:
+                metadata.line_count = prev_meta.line_count
 
     # Summary
     _print_summary(state)

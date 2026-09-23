@@ -30,6 +30,7 @@ WHY TSX IS SEPARATE:
   are identical in both grammars, so extract_js() works unchanged for
   both. Only the grammar binary selected at parse time differs.
 """
+from typing import Optional
 from src.state import ArchaeonState
 from src.parsers.base import SymbolTable
 from src.utils.tree_sitter_utils import get_parser
@@ -45,7 +46,79 @@ PARSEABLE = {
 }
 
 
+def _parse_single_file(file_meta, raw_content: Optional[str]) -> tuple[str, Optional[SymbolTable], bool, bool]:
+    """
+    Parse a single file using the appropriate tree-sitter grammar.
+    Returns: (path, symbol_table, is_skipped, is_error)
+    """
+    path = file_meta.path
+    lang = file_meta.language
+
+    if raw_content is None or lang not in PARSEABLE:
+        return path, None, True, False
+
+    parser = None
+    source_bytes = None
+    tree = None
+    try:
+        grammar_key = "TSX" if path.endswith(".tsx") else lang
+        parser = get_parser(grammar_key)
+        if not parser:
+            return path, None, True, False
+
+        source_bytes = bytes(raw_content, 'utf-8')
+        tree = parser.parse(source_bytes)
+        has_error = tree.root_node.has_error
+
+        try:
+            if lang == 'Python':
+                docstring, functions, classes, imports = extract_python(tree, source_bytes)
+            elif lang in ('JavaScript', 'TypeScript'):
+                docstring, functions, classes, imports = extract_js(tree, source_bytes, lang)
+            elif lang in ("Go", "Rust", "Java", "C", "C++", "C/C++ Header", "C++ Header"):
+                docstring, functions, classes, imports = extract_generic(tree, source_bytes, lang)
+            else:
+                return path, None, True, False
+        except Exception as exc:
+            st = SymbolTable(
+                file_path=path,
+                language=lang,
+                module_docstring=None,
+                parse_error=True,
+                parse_error_detail=f"Extraction error: {exc}"
+            )
+            return path, st, False, True
+
+        st = SymbolTable(
+            file_path=path,
+            language=lang,
+            module_docstring=docstring,
+            functions=functions,
+            classes=classes,
+            imports=imports,
+            parse_error=has_error,
+            parse_error_detail="tree-sitter detected syntax errors" if has_error else None
+        )
+        return path, st, False, False
+    except Exception as exc:
+        st = SymbolTable(
+            file_path=path,
+            language=lang,
+            module_docstring=None,
+            parse_error=True,
+            parse_error_detail=f"Parse exception: {exc}"
+        )
+        return path, st, False, True
+    finally:
+        del parser
+        del source_bytes
+        del tree
+
+
 def run(state: ArchaeonState) -> ArchaeonState:
+    import concurrent.futures
+    import os
+
     print(f"\n[Agent 2: AST Parser]")
 
     file_paths = {f.path for f in state.file_manifest}
@@ -54,85 +127,47 @@ def run(state: ArchaeonState) -> ArchaeonState:
     skipped_count = 0
     error_count = 0
 
-    for i, file_meta in enumerate(state.file_manifest):
-        print(f"\r  Parsing files: {i + 1}/{total}", end="", flush=True)
+    files_to_parse = []
+    # Incremental update check
+    if state.is_incremental and state.previous_state and state.previous_state.symbol_tables:
+        unchanged_paths = state.manifest_diff.unchanged_paths if state.manifest_diff else set()
+        for f in state.file_manifest:
+            if f.path in unchanged_paths and f.path in state.previous_state.symbol_tables:
+                state.symbol_tables[f.path] = state.previous_state.symbol_tables[f.path]
+                parsed_count += 1
+            else:
+                files_to_parse.append(f)
+        print(f"  [Incremental] Reused {parsed_count} cached AST symbol tables. Parsing {len(files_to_parse)} files...")
+    else:
+        files_to_parse = list(state.file_manifest)
 
-        path = file_meta.path
-        lang = file_meta.language
-
-        if path not in state.raw_contents:
-            skipped_count += 1
-            continue
-
-        if lang not in PARSEABLE:
-            skipped_count += 1
-            continue
-
-        parser = None
-        source = None
-        source_bytes = None
-        tree = None
-        try:
-            # FIX: .tsx files need the TSX grammar (language_tsx), not the
-            # TypeScript grammar (language_typescript). The TypeScript grammar
-            # has no JSX support — any <Component /> triggers a parse error.
-            # tree_sitter_utils already has a "TSX" case; we just need to
-            # route .tsx files to it. Language label stays "TypeScript" for
-            # all downstream agents (complexity scorer, doc generator, stats).
-            grammar_key = "TSX" if path.endswith(".tsx") else lang
-
-            parser = get_parser(grammar_key)
-            if not parser:
-                skipped_count += 1
-                continue
-
-            source = state.raw_contents[path]
-            source_bytes = bytes(source, 'utf-8')
-
-            tree = parser.parse(source_bytes)
-            has_error = tree.root_node.has_error
-
-            try:
-                if lang == 'Python':
-                    docstring, functions, classes, imports = extract_python(tree, source_bytes)
-                elif lang in ('JavaScript', 'TypeScript'):
-                    docstring, functions, classes, imports = extract_js(tree, source_bytes, lang)
-                elif lang in ("Go", "Rust", "Java", "C", "C++", "C/C++ Header", "C++ Header"):
-                    docstring, functions, classes, imports = extract_generic(tree, source_bytes, lang)
-                else:
-                    skipped_count += 1
-                    continue
-            except Exception as exc:
-                state.symbol_tables[path] = SymbolTable(
-                    file_path=path,
-                    language=lang,
-                    module_docstring=None,
-                    parse_error=True,
-                    parse_error_detail=f"Extraction error: {exc}"
-                )
-                error_count += 1
-                continue
-
-            state.symbol_tables[path] = SymbolTable(
-                file_path=path,
-                language=lang,
-                module_docstring=docstring,
-                functions=functions,
-                classes=classes,
-                imports=imports,
-                parse_error=has_error,
-                parse_error_detail="tree-sitter detected syntax errors" if has_error else None
-            )
-            parsed_count += 1
-        finally:
-            if parser is not None:
-                del parser
-            if source is not None:
-                del source
-            if source_bytes is not None:
-                del source_bytes
-            if tree is not None:
-                del tree
+    # Parallel parsing
+    if files_to_parse:
+        max_workers = min(12, max(1, os.cpu_count() or 4), len(files_to_parse))
+        tasks = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_file = {
+                executor.submit(_parse_single_file, f, state.raw_contents.get(f.path)): f
+                for f in files_to_parse
+            }
+            done = 0
+            for future in concurrent.futures.as_completed(future_to_file):
+                done += 1
+                if done % 10 == 0 or done == len(files_to_parse):
+                    print(f"\r  Parsing files: {done}/{len(files_to_parse)} (concurrent workers: {max_workers})", end="", flush=True)
+                try:
+                    path, st, is_skipped, is_error = future.result()
+                    if is_skipped:
+                        skipped_count += 1
+                    elif is_error:
+                        error_count += 1
+                        if st:
+                            state.symbol_tables[path] = st
+                    elif st:
+                        state.symbol_tables[path] = st
+                        parsed_count += 1
+                except Exception as exc:
+                    error_count += 1
 
     print()
 

@@ -8,6 +8,7 @@ export interface AnalyzeRequest {
     github_token?: string;
     max_explanations?: number;
     skip_llm?: boolean;
+    incremental?: boolean;
 }
 
 export interface AnalyzeResponse {

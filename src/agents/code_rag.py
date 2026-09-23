@@ -61,24 +61,28 @@ def run(state: ArchaeonState) -> ArchaeonState:
     with _chroma_lock:
         client = chromadb.PersistentClient(path=chroma_path)
 
-    # Delete and recreate on re-runs.
-    # WHY DELETE INSTEAD OF UPSERT:
-    # A re-run may reflect a changed filter list or file cap. Upserting
-    # would leave stale chunks from files no longer in the manifest.
-    # Deleting guarantees the collection exactly reflects this run.
-    # Cost: re-embedding all chunks. Acceptable at this scale.
-    try:
-        client.delete_collection(name=collection_name)
-        print(f"  Existing collection deleted (re-run)")
-    except Exception:
-        pass
+    # In non-incremental runs, delete and recreate on re-runs.
+    if not state.is_incremental:
+        try:
+            client.delete_collection(name=collection_name)
+            print(f"  Existing collection deleted (re-run)")
+        except Exception:
+            pass
 
-    collection = client.create_collection(
+    collection = client.get_or_create_collection(
         name=collection_name,
         metadata={"hnsw:space": "cosine"}
-        # cosine similarity for text: measures angle between vectors,
-        # not magnitude. Two paraphrases score high even if one is long.
     )
+
+    # In incremental mode, delete chunks for deleted or modified files
+    if state.is_incremental and state.manifest_diff:
+        paths_to_remove = list(state.manifest_diff.deleted_paths | {old_f.path for old_f, _ in state.manifest_diff.modified})
+        if paths_to_remove:
+            try:
+                collection.delete(where={"file_path": {"$in": paths_to_remove}})
+                print(f"  [Incremental] Removed stale chunks for {len(paths_to_remove)} deleted/modified files.")
+            except Exception as exc:
+                logger.debug("Failed to delete stale chunks in incremental mode: %s", exc)
 
     # ----------------------------------------------------------------
     # Step 2: Produce, Embed, and Store chunks in streaming batches
@@ -99,6 +103,10 @@ def run(state: ArchaeonState) -> ArchaeonState:
 
     for idx, (file_path, symbol_table) in enumerate(state.symbol_tables.items()):
         print(f"\r  Processing files: {idx + 1}/{total_files}", end="", flush=True)
+
+        if state.is_incremental and state.manifest_diff and file_path not in state.manifest_diff.changed_paths:
+            skipped += 1
+            continue
 
         if state.analyzed_paths is not None and file_path not in state.analyzed_paths:
             skipped += 1

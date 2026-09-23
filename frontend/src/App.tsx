@@ -26,7 +26,7 @@ import {
 } from './lib/download';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 
 type Screen = 'landing' | 'progress' | 'results' | 'error';
 type Tab = '01_ONBOARDING' | '02_AGENT_CONTEXT' | '03_DEPENDENCY_GRAPH' | '04_COMPLEXITY_TELEMETRY' | '05_FILE_EXPLANATIONS' | '06_CODE_RAG';
@@ -206,6 +206,9 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('landing');
   const [repoUrl, setRepoUrl] = useState('https://github.com/tiangolo/fastapi');
   const [branch, setBranch] = useState('master');
+  const [githubToken, setGithubToken] = useState('');
+  const [showToken, setShowToken] = useState(false);
+  const [isIncremental, setIsIncremental] = useState(false);
   const [skipLlm, setSkipLlm] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('01_ONBOARDING');
   const [searchQuery, setSearchQuery] = useState('');
@@ -232,11 +235,16 @@ export default function App() {
     setScreen('progress');
     setCurrentProgress(5);
 
-    posthog.capture('excavation_started', { repo_url: repoUrl, branch });
+    posthog.capture('excavation_started', {
+      repo_url: repoUrl,
+      branch,
+      is_private: Boolean(githubToken.trim()),
+      is_incremental: isIncremental,
+    });
 
     // Step-by-step pipeline runner
     for (let step = 0; step < 7; step++) {
-      await new Promise((r) => setTimeout(r, 600));
+      await new Promise((r) => setTimeout(r, 500));
       setAgents((prev) =>
         prev.map((ag, idx) => {
           if (idx < step) return { ...ag, status: 'complete' };
@@ -247,7 +255,7 @@ export default function App() {
       setCurrentProgress(Math.round(((step + 1) / 7) * 95));
     }
 
-    await new Promise((r) => setTimeout(r, 700));
+    await new Promise((r) => setTimeout(r, 600));
     setAgents((prev) => prev.map((ag) => ({ ...ag, status: 'complete' })));
     setCurrentProgress(100);
 
@@ -350,7 +358,7 @@ The requested architectural mechanism is handled recursively in fastapi/dependen
               coord="GRID [00, 01]"
               showCorners={true}
             >
-              <div className="flex flex-col gap-4 p-2">
+              <div className="flex flex-col gap-3 p-2">
                 <div className="flex flex-col md:flex-row gap-3 items-stretch">
                   <div className="flex-1 flex items-center bg-[#0A0A0B] border border-[#26262A] px-3 py-2">
                     <span className="font-mono text-[11px] text-[#E8A33D] font-bold mr-2 select-none">
@@ -385,6 +393,32 @@ The requested architectural mechanism is handled recursively in fastapi/dependen
                   >
                     [EXCAVATE CODEBASE]
                   </TechButton>
+                </div>
+
+                {/* Authentication & PAT Configuration (Private Repositories) */}
+                <div className="flex flex-col md:flex-row gap-3 items-center bg-[#0F0F12] border border-[#26262A]/80 px-3 py-2">
+                  <div className="flex-1 flex items-center w-full">
+                    <span className="font-mono text-[10px] text-[#8A8A85] mr-2 shrink-0 select-none">
+                      GITHUB_PAT [OPTIONAL]:
+                    </span>
+                    <input
+                      type={showToken ? 'text' : 'password'}
+                      value={githubToken}
+                      onChange={(e) => setGithubToken(e.target.value)}
+                      placeholder="ghp_... (Personal Access Token for private repos)"
+                      className="bg-transparent border-none outline-none font-mono text-xs text-[#E8E8E6] w-full placeholder-[#55554F]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowToken(!showToken)}
+                      className="text-[10px] font-mono text-[#8A8A85] hover:text-[#E8A33D] px-2"
+                    >
+                      {showToken ? '[HIDE]' : '[SHOW]'}
+                    </button>
+                  </div>
+                  <span className="text-[10px] font-mono text-[#55554F] hidden md:inline">
+                    // AUTH FOR PRIVATE REPOS & 5000 REQ/HR
+                  </span>
                 </div>
 
                 {/* Mode Toggles & Sample Repositories */}
@@ -425,7 +459,19 @@ The requested architectural mechanism is handled recursively in fastapi/dependen
                     </TechButton>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isIncremental}
+                        onChange={(e) => setIsIncremental(e.target.checked)}
+                        className="accent-[#E8A33D] rounded-none"
+                      />
+                      <span className="font-mono text-[10px] text-[#8A8A85] uppercase">
+                        INCREMENTAL UPDATE (DIFF ONLY)
+                      </span>
+                    </label>
+
                     <label className="flex items-center gap-1.5 cursor-pointer select-none">
                       <input
                         type="checkbox"
