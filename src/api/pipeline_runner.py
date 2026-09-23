@@ -12,6 +12,7 @@ its delivery mechanism. The API runner duplicates the agent call
 sequence (7 lines) in exchange for the ability to interleave job
 store updates without touching the orchestrator.
 """
+import concurrent.futures
 import os
 import sys
 import traceback
@@ -56,8 +57,17 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
         github_token = options.get("github_token") or os.getenv("GITHUB_TOKEN")
         max_explanations = options.get("max_explanations", 20)
         skip_llm = options.get("skip_llm", False)
+        incremental = options.get("incremental", False)
 
         state = ArchaeonState(repo_url=repo_url, github_token=github_token, job_id=job_id)
+        if incremental:
+            state.is_incremental = True
+            from src.utils.diff_engine import load_cached_state
+            output_dir = options.get("output_dir", "./outputs")
+            cached = load_cached_state(output_dir)
+            if cached:
+                state.previous_state = cached
+
         owner, repo_name = parse_github_url(repo_url)
         state.owner     = owner
         state.repo_name = repo_name
@@ -85,26 +95,31 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
         log_phase_end("AST Parser", t_start, objects_cleaned=["Released temporary AST nodes", "Released tree-sitter syntax trees"])
         _end_phase(job_id, "ast_parser")
 
-        # ---- Phase 3: Dependency Graph -----------------------------
+        # ---- Concurrent Phases 3, 4, 5 ----------------------------
         _start_phase(job_id, "dependency_graph")
-        t_start = log_phase_start("Dependency Graph")
-        state = dependency_graph.run(state)
-        log_phase_end("Dependency Graph", t_start, objects_cleaned=["Released temporary graph structures", "Released topological sort tables"])
-        _end_phase(job_id, "dependency_graph")
+        t_parallel_start = log_phase_start("Parallel Agents (Graph, Complexity, Code RAG)")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+            future_graph = pool.submit(dependency_graph.run, state)
+            future_complexity = pool.submit(complexity_scorer.run, state)
+            future_rag = pool.submit(code_rag.run, state)
 
-        # ---- Phase 4: Complexity Scorer ----------------------------
-        _start_phase(job_id, "complexity_scorer")
-        t_start = log_phase_start("Complexity Scorer")
-        state = complexity_scorer.run(state)
-        log_phase_end("Complexity Scorer", t_start, objects_cleaned=["Released radon metrics", "Released complexity scores list"])
-        _end_phase(job_id, "complexity_scorer")
+            future_graph.result()
+            _end_phase(job_id, "dependency_graph")
 
-        # ---- Phase 5: Code RAG ------------------------------------
-        _start_phase(job_id, "code_rag")
-        t_start = log_phase_start("Code RAG")
-        state = code_rag.run(state)
-        log_phase_end("Code RAG", t_start, objects_cleaned=["Released embeddings", "Released chunk buffers"])
-        _end_phase(job_id, "code_rag")
+            _start_phase(job_id, "complexity_scorer")
+            future_complexity.result()
+            complexity_scorer.apply_graph_coupling(state)
+            _end_phase(job_id, "complexity_scorer")
+
+            _start_phase(job_id, "code_rag")
+            future_rag.result()
+            _end_phase(job_id, "code_rag")
+
+        log_phase_end(
+            "Parallel Agents (Graph, Complexity, Code RAG)",
+            t_parallel_start,
+            objects_cleaned=["Synchronized parallel API states"]
+        )
 
         # ---- Phase 6: Explainability (optional) -------------------
         _start_phase(job_id, "explainability")

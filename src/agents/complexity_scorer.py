@@ -57,63 +57,108 @@ RISK_THRESHOLDS = {
 }
 
 
+def apply_graph_coupling(state: ArchaeonState) -> None:
+    """
+    Re-evaluate coupling and circular dependency signals for all complexity scores
+    once Phase 3 (Dependency Graph) has finished.
+    Enables Phase 4 to run concurrently with Phase 3 and bind graph coupling at sync time.
+    """
+    for file_path, score in state.complexity_scores.items():
+        if file_path in state.graph_stats:
+            coupling = state.graph_stats[file_path].get('out_degree', score.coupling_score)
+        elif file_path in state.symbol_tables:
+            coupling = len(state.symbol_tables[file_path].internal_imports)
+        else:
+            coupling = score.coupling_score
+
+        is_circular = file_path in state.circular_nodes
+        score.coupling_score = coupling
+        score.is_in_circular_dep = is_circular
+
+        level, reasons = _compute_risk(
+            avg_complexity=score.avg_complexity,
+            max_complexity=score.max_complexity,
+            coupling_score=coupling,
+            undocumented_ratio=score.undocumented_ratio,
+            function_count=score.function_count,
+            parse_error=score.parse_error,
+            is_in_circular_dep=is_circular,
+            line_count=score.line_count
+        )
+        score.risk_level = level
+        score.risk_reasons = reasons
+
+
 def run(state: ArchaeonState) -> ArchaeonState:
+    import concurrent.futures
+    import os
+
     print(f"\n[Agent 4: Complexity Scorer]")
 
     # Build a line_count lookup from the manifest
-    # (symbol_tables do not store line_count — that lives on FileMetadata)
     line_counts = {f.path: f.line_count for f in state.file_manifest}
 
     total = len(state.symbol_tables)
     scored = 0
     skipped = 0
 
-    for idx, (file_path, symbol_table) in enumerate(state.symbol_tables.items()):
-        print(f"\r  Scoring files: {idx + 1}/{total}", end="", flush=True)
+    items_to_score = []
+    # Incremental update check
+    if state.is_incremental and state.previous_state and state.previous_state.complexity_scores:
+        unchanged_paths = state.manifest_diff.unchanged_paths if state.manifest_diff else set()
+        for file_path, symbol_table in state.symbol_tables.items():
+            if (state.analyzed_paths is not None and file_path not in state.analyzed_paths) or symbol_table.language not in SCORED_LANGUAGES:
+                skipped += 1
+                continue
 
-        if state.analyzed_paths is not None and file_path not in state.analyzed_paths:
-            skipped += 1
-            continue
+            if file_path in unchanged_paths and file_path in state.previous_state.complexity_scores:
+                state.complexity_scores[file_path] = state.previous_state.complexity_scores[file_path]
+                scored += 1
+            else:
+                items_to_score.append((file_path, symbol_table))
+        print(f"  [Incremental] Reused {scored} cached complexity scores. Scoring {len(items_to_score)} files...")
+    else:
+        for file_path, symbol_table in state.symbol_tables.items():
+            if (state.analyzed_paths is not None and file_path not in state.analyzed_paths) or symbol_table.language not in SCORED_LANGUAGES:
+                skipped += 1
+                continue
+            items_to_score.append((file_path, symbol_table))
 
-        lang = symbol_table.language
-
-        if lang not in SCORED_LANGUAGES:
-            skipped += 1
-            continue
-
+    def _score_worker(item):
+        file_path, symbol_table = item
         source = state.raw_contents.get(file_path, "")
-
-        # Coupling: use graph out_degree (unique files this file imports).
-        # WHY NOT COUNT ImportInfo OBJECTS:
-        # A file might have `from X import A` and `from X import B` as two
-        # separate ImportInfo objects both pointing to the same module X.
-        # Counting ImportInfo objects = 2. Graph out_degree = 1 (one edge to X).
-        # Graph out_degree is the correct coupling metric.
         if file_path in state.graph_stats:
             coupling_score = state.graph_stats[file_path]['out_degree']
         else:
-            # Fallback if graph didn't include this file (should not happen,
-            # but defensive programming is correct here)
             coupling_score = len(symbol_table.internal_imports)
-
         is_in_circular = file_path in state.circular_nodes
         line_count = line_counts.get(file_path, 0)
-
         score = _score_file(
             file_path=file_path,
-            language=lang,
+            language=symbol_table.language,
             symbol_table=symbol_table,
             source=source,
             line_count=line_count,
             coupling_score=coupling_score,
             is_in_circular_dep=is_in_circular
         )
+        return file_path, score
 
-        state.complexity_scores[file_path] = score
-        scored += 1
-
-        del source
-        del score
+    if items_to_score:
+        max_workers = min(12, max(1, os.cpu_count() or 4), len(items_to_score))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(_score_worker, it) for it in items_to_score]
+            done = 0
+            for future in concurrent.futures.as_completed(futures):
+                done += 1
+                if done % 10 == 0 or done == len(items_to_score):
+                    print(f"\r  Scoring files: {done}/{len(items_to_score)} (concurrent workers: {max_workers})", end="", flush=True)
+                try:
+                    f_path, score = future.result()
+                    state.complexity_scores[f_path] = score
+                    scored += 1
+                except Exception as exc:
+                    pass
 
     print()
     _print_summary(state, scored, skipped)

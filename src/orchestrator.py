@@ -23,18 +23,24 @@ def run_pipeline(
     github_token: str = None,
     max_explanations: int = 20,
     skip_llm: bool = False,
+    incremental: bool = False,
+    output_dir: str = "./outputs",
     on_agent_complete = None
 ) -> ArchaeonState:
     """
-    Run the full 7-agent pipeline.
+    Run the full 7-agent pipeline with parallel execution of independent agents.
 
     Args:
-        repo_url_or_state: Public GitHub repository URL or existing ArchaeonState
-        github_token:      Optional PAT for higher rate limits
+        repo_url_or_state: Public or private GitHub repository URL or existing ArchaeonState
+        github_token:      Optional PAT for private repositories & higher rate limits
         max_explanations:  Cap on LLM explanation calls (default 20)
         skip_llm:          If True, skip Phase 6 entirely
+        incremental:       If True, compute diff from previous run and update incrementally
+        output_dir:        Directory containing cached outputs for incremental updates
         on_agent_complete: Optional callback function triggered after each agent boundary
     """
+    import concurrent.futures
+
     if isinstance(repo_url_or_state, ArchaeonState):
         state = repo_url_or_state
         if not state.github_token:
@@ -42,6 +48,15 @@ def run_pipeline(
     else:
         token = github_token or os.getenv("GITHUB_TOKEN")
         state = ArchaeonState(repo_url=repo_url_or_state, github_token=token)
+
+    if incremental:
+        state.is_incremental = True
+        if not state.previous_state:
+            from src.utils.diff_engine import load_cached_state
+            cached = load_cached_state(output_dir)
+            if cached:
+                state.previous_state = cached
+                print(f"[Orchestrator] Loaded cached state from {output_dir} for incremental update.")
 
     if not state.owner or not state.repo_name:
         owner, repo_name = parse_github_url(state.repo_url)
@@ -51,6 +66,8 @@ def run_pipeline(
     print(f"\n{'=' * 55}")
     print(f"  Project Gnosis — Code Archaeology Agent")
     print(f"  Repository : {state.owner}/{state.repo_name}")
+    if state.is_incremental:
+        print(f"  Mode       : Incremental Update (Diff Engine Active)")
     print(f"{'=' * 55}")
 
     # --- Metadata Phase ---
@@ -79,26 +96,34 @@ def run_pipeline(
     if on_agent_complete:
         on_agent_complete(1)
 
-    # --- Phase 3: Dependency Graph ---
-    t_start = log_phase_start("Dependency Graph")
-    state = dependency_graph.run(state)
-    log_phase_end("Dependency Graph", t_start, objects_cleaned=["Released temporary graph structures", "Released topological sort tables"])
-    if on_agent_complete:
-        on_agent_complete(2)
+    # --- Concurrent Group: Phase 3 (Dep Graph), Phase 4 (Complexity), Phase 5 (Code RAG) ---
+    t_parallel_start = log_phase_start("Parallel Agents (Graph, Complexity, Code RAG)")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+        future_graph = pool.submit(dependency_graph.run, state)
+        future_complexity = pool.submit(complexity_scorer.run, state)
+        future_rag = pool.submit(code_rag.run, state)
 
-    # --- Phase 4: Complexity Scorer ---
-    t_start = log_phase_start("Complexity Scorer")
-    state = complexity_scorer.run(state)
-    log_phase_end("Complexity Scorer", t_start, objects_cleaned=["Released radon metrics", "Released complexity scores list"])
-    if on_agent_complete:
-        on_agent_complete(3)
+        # Wait for Dependency Graph
+        future_graph.result()
+        if on_agent_complete:
+            on_agent_complete(2)
 
-    # --- Phase 5: Code RAG ---
-    t_start = log_phase_start("Code RAG")
-    state = code_rag.run(state)
-    log_phase_end("Code RAG", t_start, objects_cleaned=["Released embeddings", "Released chunk buffers"])
-    if on_agent_complete:
-        on_agent_complete(4)
+        # Wait for Complexity Scorer and bind graph coupling
+        future_complexity.result()
+        complexity_scorer.apply_graph_coupling(state)
+        if on_agent_complete:
+            on_agent_complete(3)
+
+        # Wait for Code RAG
+        future_rag.result()
+        if on_agent_complete:
+            on_agent_complete(4)
+
+    log_phase_end(
+        "Parallel Agents (Graph, Complexity, Code RAG)",
+        t_parallel_start,
+        objects_cleaned=["Synchronized parallel agent states", "Released concurrent task futures"]
+    )
 
     # --- Phase 6: Explainability ---
     t_start = log_phase_start("Explainability")

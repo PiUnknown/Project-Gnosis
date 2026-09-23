@@ -61,7 +61,15 @@ Examples:
     )
     parser.add_argument(
         "--url", required=True,
-        help="GitHub repository URL (public repos only in v1)"
+        help="GitHub repository URL (public or private repos)"
+    )
+    parser.add_argument(
+        "--token", default=None,
+        help="GitHub Personal Access Token (PAT) for private repos or rate limit elevation"
+    )
+    parser.add_argument(
+        "--incremental", action="store_true",
+        help="Run incremental analysis: compute diff from previous run in --output and update changed files only"
     )
     parser.add_argument(
         "--output", default="./outputs",
@@ -86,13 +94,13 @@ Examples:
     args = parser.parse_args()
 
     # Environment validation
-    github_token = os.getenv("GITHUB_TOKEN")
+    github_token = args.token or os.getenv("GITHUB_TOKEN")
     nvidia_key   = os.getenv("NVIDIA_API_KEY")
 
     if not github_token:
-        print("[INFO] No GITHUB_TOKEN in .env. Using unauthenticated mode.")
+        print("[INFO] No GitHub token provided. Using unauthenticated mode.")
         print("       Limited to 60 GitHub API requests/hour.")
-        print("       Add GITHUB_TOKEN to .env for 5000/hour.\n")
+        print("       Pass --token <PAT> or add GITHUB_TOKEN to .env for private repos & 5000/hr.\n")
 
     if not nvidia_key and not args.skip_llm:
         print("[INFO] No NVIDIA_API_KEY in .env.")
@@ -130,7 +138,9 @@ Examples:
         args.url,
         github_token=github_token,
         max_explanations=args.max_explain,
-        skip_llm=args.skip_llm
+        skip_llm=args.skip_llm,
+        incremental=args.incremental,
+        output_dir=args.output
     )
 
     # Save all outputs

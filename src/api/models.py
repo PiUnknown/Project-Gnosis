@@ -21,6 +21,7 @@ class AnalyzeOptions(BaseModel):
     max_explanations: int = 20
     skip_llm: bool = False
     github_token: Optional[str] = None
+    incremental: bool = False
 
     @field_validator("max_explanations")
     @classmethod

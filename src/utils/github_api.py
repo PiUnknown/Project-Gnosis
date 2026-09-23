@@ -75,14 +75,17 @@ def fetch_repo_metadata(owner: str, repo: str, token: Optional[str] = None) -> d
         raise ConnectionError(f"Failed to connect to GitHub API: {exc}")
 
     if response.status_code == 404:
-        raise ValueError(f"Repository not found: {owner}/{repo}. Check the URL and make sure the repo is public.")
-    if response.status_code == 403:
-        raise PermissionError(
-            "GitHub API rate limit exceeded or access denied. "
-            "Add a GITHUB_TOKEN to your .env file to increase rate limits."
+        raise ValueError(
+            f"Repository not found: {owner}/{repo}. "
+            "Check the URL. If this is a private repository, please provide a valid "
+            "GitHub Personal Access Token (PAT) with 'repo' scope."
         )
-    if response.status_code == 401:
-        raise PermissionError("Invalid GITHUB_TOKEN. Check your token in .env.")
+    if response.status_code in (401, 403):
+        raise PermissionError(
+            f"Access denied or rate limit exceeded for {owner}/{repo}. "
+            "If accessing a private repository, ensure your GitHub Personal Access Token (PAT) "
+            "has 'repo' scope enabled."
+        )
 
     response.raise_for_status()
     return response.json()
@@ -107,6 +110,16 @@ def fetch_file_tree(
     except Exception as exc:
         raise ConnectionError(f"Failed to fetch file tree from GitHub: {exc}")
 
+    if response.status_code == 404:
+        raise ValueError(
+            f"Repository or branch not found: {owner}/{repo}@{branch}. "
+            "If this is a private repository, provide a valid GitHub PAT with 'repo' scope."
+        )
+    if response.status_code in (401, 403):
+        raise PermissionError(
+            f"Access denied fetching file tree for {owner}/{repo}. "
+            "Ensure your GitHub Personal Access Token has 'repo' scope."
+        )
     if response.status_code == 409:
         raise ValueError(f"Repository {owner}/{repo} is empty.")
 
@@ -128,32 +141,47 @@ def fetch_file_content_raw(
     repo: str,
     branch: str,
     path: str,
+    token: Optional[str] = None,
     session: Optional[requests.Session] = None,
     timeout: float = 15.0
 ) -> Optional[str]:
     """
-    Fetch a single file's content via raw.githubusercontent.com.
-
-    WHY RAW INSTEAD OF API:
-    The GitHub API /contents endpoint counts against your 60/hr unauthenticated
-    rate limit. raw.githubusercontent.com serves static files with a much more
-    generous limit and requires no authentication for public repos.
-    This means we can fetch 300 files without needing a token.
+    Fetch a single file's content.
+    First attempts raw.githubusercontent.com (fast, with optional auth token).
+    If that returns 404/403 and a token is provided (common for private repositories),
+    falls back to GitHub API /contents with 'application/vnd.github.raw+json'.
 
     Returns decoded string content, or None if the file is binary, not found, or fails.
     """
     url = f"{GITHUB_RAW_BASE}/{owner}/{repo}/{branch}/{path}"
     sess = session or _RAW_SESSION
+    headers = _get_headers(token) if token else {}
     try:
-        response = sess.get(url, timeout=timeout)
-        if response.status_code != 200:
+        response = sess.get(url, headers=headers, timeout=timeout)
+        if response.status_code == 200:
+            text = response.text
             response.close()
-            return None
-        text = response.text
+            return text
         response.close()
-        return text
+
+        # Fallback to GitHub REST API /contents for private repositories
+        if token and response.status_code in (404, 403):
+            api_url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{path}?ref={branch}"
+            api_headers = {
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github.raw+json",
+                "X-GitHub-Api-Version": "2022-11-28"
+            }
+            api_resp = sess.get(api_url, headers=api_headers, timeout=timeout)
+            if api_resp.status_code == 200:
+                text = api_resp.text
+                api_resp.close()
+                return text
+            api_resp.close()
+
+        return None
     except Exception as exc:
-        logger.warning("Transient failure fetching raw file '%s': %s", path, exc)
+        logger.warning("Transient failure fetching file '%s': %s", path, exc)
         return None
 
 
@@ -162,11 +190,12 @@ def fetch_file_contents_batch(
     repo: str,
     branch: str,
     paths: list[str],
+    token: Optional[str] = None,
     delay: float = 0.05
 ) -> dict[str, str]:
     """
     Fetch content for multiple files concurrently using a ThreadPoolExecutor.
-    Uses raw.githubusercontent.com for all fetches with pooled retries.
+    Uses raw.githubusercontent.com with persistent pooled sessions and API fallback.
 
     Returns dict: { path -> content_string }
     Binary files, 404s, and failed downloads are excluded from the result.
@@ -178,11 +207,11 @@ def fetch_file_contents_batch(
     if total == 0:
         return results
 
-    max_workers = min(12, total)
+    max_workers = min(16, total)
 
     def fetch_one(p):
         try:
-            return p, fetch_file_content_raw(owner, repo, branch, p, session=_RAW_SESSION)
+            return p, fetch_file_content_raw(owner, repo, branch, p, token=token, session=_RAW_SESSION)
         except Exception as exc:
             logger.warning("Error fetching %s in worker thread: %s", p, exc)
             return p, None

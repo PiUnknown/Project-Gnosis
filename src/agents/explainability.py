@@ -93,6 +93,14 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
     stats = cache_stats()
     print(f"  Cache           : {stats['entries']} entries ({stats['size_kb']} KB)")
 
+    # ---- Incremental state reuse ---------------------------------------
+    if state.is_incremental and state.previous_state and state.previous_state.explanations:
+        unchanged_paths = state.manifest_diff.unchanged_paths if state.manifest_diff else set()
+        for p, exp in state.previous_state.explanations.items():
+            if p in unchanged_paths:
+                state.explanations[p] = exp
+        print(f"  [Incremental] Reused {len(state.explanations)} explanations for unchanged files.")
+
     # ---- File selection ------------------------------------------------
     selected = _select_files_to_explain(state, max_count)
     print(f"  Files selected  : {len(selected)} (cap: {max_count})")

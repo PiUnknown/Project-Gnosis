@@ -85,6 +85,8 @@ class UnifiedAnalyzeRequest(BaseModel):
     repo_url: str
     max_explanations: int = 20
     skip_llm: bool = False
+    github_token: Optional[str] = None
+    incremental: bool = False
     options: Optional[dict] = None
 
     @field_validator("max_explanations")
@@ -156,7 +158,9 @@ def analyze(req: UnifiedAnalyzeRequest):
     # Extract options
     max_explanations = req.max_explanations
     skip_llm = req.skip_llm
-    github_token = None
+    github_token = req.github_token
+    incremental = req.incremental
+
     if req.options:
         opt_max = req.options.get("max_explanations")
         if opt_max is not None:
@@ -166,7 +170,10 @@ def analyze(req: UnifiedAnalyzeRequest):
         opt_skip = req.options.get("skip_llm")
         if opt_skip is not None:
             skip_llm = opt_skip
-        github_token = req.options.get("github_token")
+        if req.options.get("github_token"):
+            github_token = req.options.get("github_token")
+        if req.options.get("incremental") is not None:
+            incremental = bool(req.options.get("incremental"))
 
     # Deduplication check
     for job in store.list_all():
@@ -209,7 +216,8 @@ def analyze(req: UnifiedAnalyzeRequest):
     options = {
         "max_explanations": max_explanations,
         "skip_llm": skip_llm,
-        "github_token": github_token
+        "github_token": github_token,
+        "incremental": incremental
     }
     job_id = store.create(req.repo_url, options)
     enqueue_analysis_job(job_id, req.repo_url, options, executor=_executor)
