@@ -75,9 +75,9 @@ def run(state: ArchaeonState) -> ArchaeonState:
     )
 
     # If the embedding model/dimension changed since the last run (e.g.
-    # sentence-transformers 384-dim or nemotron 2048-dim -> nv-embed-v1
-    # 4096-dim), an incremental run cannot mix vector sizes in one
-    # collection. Recreate the collection and re-embed every file.
+    # sentence-transformers 384-dim or nv-embed-v1 4096-dim ->
+    # nemotron-3-embed-1b 2048-dim), an incremental run cannot mix vector
+    # sizes in one collection. Recreate the collection and re-embed.
     force_full_reembed = False
     if state.is_incremental and collection.count() > 0:
         try:

@@ -14,8 +14,8 @@ CONFIGURATION:
   NVIDIA_MODEL     (optional) — overrides NVIDIA_MODEL_DEFAULT at runtime
 
 MODEL CHOICE:
-  Default: meta/llama-3.1-8b-instruct
-  The 8B model responds in 5-15s on NVIDIA NIM free tier.
+  Default: meta/llama-3.2-11b-vision-instruct
+  The 11B vision-instruct model responds in 5-15s on NVIDIA NIM free tier.
   The 70B model responds in 60-270s on cold starts.
   For code explanation the quality difference is small — the 70B advantage
   is in nuanced multi-step reasoning, not in describing what a function does.

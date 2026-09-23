@@ -65,7 +65,7 @@ Frontend Visualization & Onboarding Reports
 | Queue & Store | Upstash Redis | Cloud-managed serverless Redis (TLS) |
 | Worker | Render / Container Service | Dedicated RQ Background Worker (`python -m src.api.worker`) |
 | CI/CD | GitHub Actions | Builds & deploys to Azure on push to master |
-| LLM Inference | NVIDIA NIM Serverless | meta/llama-3.1-8b-instruct |
+| LLM Inference | NVIDIA NIM Serverless | meta/llama-3.2-11b-vision-instruct |
 
 ### CORS Configuration
 Production CORS allows `https://gnosis.piunknown.dev`.
@@ -106,14 +106,14 @@ GitHub URL
     v
 [Agent 5: Code RAG Agent]
     - Chunk code at AST boundaries (not token boundaries)
-    - Embed chunks using NVIDIA NIM `nvidia/nv-embed-v1` (4096-dim, hosted API)
+    - Embed chunks using NVIDIA NIM `nvidia/nemotron-3-embed-1b` (2048-dim, hosted API)
     - Store in ChromaDB with metadata
     |
     v
 [Agent 6: Explainability Agent]
     - For each major component: retrieve context from ChromaDB
     - Build explanation prompt with dependency context
-    - Call NVIDIA NIM LLM (meta/llama-3.1-8b-instruct)
+    - Call NVIDIA NIM LLM (meta/llama-3.2-11b-vision-instruct)
     - Generate natural language explanation per component
     |
     v
@@ -278,7 +278,7 @@ class ArchaeonState:
 }
 ```
 
-**Embedding model:** `nvidia/nv-embed-v1` (4096-dim, NVIDIA NIM hosted API — `input_type="passage"` for indexing, `"query"` for retrieval)
+**Embedding model:** `nvidia/nemotron-3-embed-1b` (2048-dim, NVIDIA NIM hosted API — `input_type="passage"` for indexing, `"query"` for retrieval)
 **Vector store:** ChromaDB, persistent client, cosine similarity
 
 **Azure SQLite fix (required):**
@@ -303,7 +303,7 @@ This was resolved by processing chunks in streaming batches (`STREAM_BATCH_SIZE 
 **Output:** explanations dict written to state
 
 **LLM Provider:** NVIDIA NIM Serverless (migrated from Groq, August 2026)
-**Model:** `meta/llama-3.1-8b-instruct` (default)
+**Model:** `meta/llama-3.2-11b-vision-instruct` (default)
 **Client:** OpenAI-compatible client pointed at NVIDIA NIM endpoint
 **Temperature:** 0.1
 
@@ -445,8 +445,8 @@ Sticky download bar: three outlined-white buttons (onboarding.md, complexity_rep
 | Graph construction | NetworkX | Standard Python graph library, DiGraph + PageRank support |
 | Complexity analysis | radon (Python), custom AST walker (JS/TS) | radon is the standard for Python metrics |
 | Vector store | ChromaDB + pysqlite3-binary | Lightweight, local; pysqlite3-binary required on Azure |
-| Embeddings | NVIDIA NIM (`nvidia/nv-embed-v1`) | Hosted GPU inference; reuses NVIDIA_API_KEY; no local model load |
-| LLM inference | NVIDIA NIM (meta/llama-3.1-8b-instruct) | OpenAI-compatible API, responds faster on free tier than 70b |
+| Embeddings | NVIDIA NIM (`nvidia/nemotron-3-embed-1b`) | Hosted GPU inference; reuses NVIDIA_API_KEY; no local model load |
+| LLM inference | NVIDIA NIM (meta/llama-3.2-11b-vision-instruct) | OpenAI-compatible API, responds faster on free tier than 70b |
 | Backend | FastAPI + Azure App Service | Async, clean; Azure for production reliability |
 | CI/CD | GitHub Actions | Auto-deploys to Azure on push to master |
 | Frontend | React 18 + Tailwind + shadcn/ui | Production SPA; Figma Make designed |
@@ -513,7 +513,7 @@ Sticky download bar: three outlined-white buttons (onboarding.md, complexity_rep
 | Original | Groq | llama-3.3-70b-versatile | Free tier, OpenAI-compatible |
 | August 2026 | NVIDIA NIM | meta/llama-3.3-70b-instruct | Same OpenAI-compatible client, new endpoint + key |
 
-**Migration approach:** The utility client was updated to point the OpenAI client at the NVIDIA NIM endpoint, implemented as `nvidia_client.py`. The default model was set to `meta/llama-3.1-8b-instruct` to avoid cold-start delays. No other changes to the agent prompts, temperature, or retry logic were required.
+**Migration approach:** The utility client was updated to point the OpenAI client at the NVIDIA NIM endpoint, implemented as `nvidia_client.py`. The default model was set to `meta/llama-3.2-11b-vision-instruct` to avoid cold-start delays. No other changes to the agent prompts, temperature, or retry logic were required.
 
 ---
 

@@ -22,8 +22,8 @@ from typing import Optional
 
 from openai import OpenAI
 
-MODEL_NAME = "nvidia/nv-embed-v1"
-EMBEDDING_DIM = 4096
+MODEL_NAME = "nvidia/nemotron-3-embed-1b"
+EMBEDDING_DIM = 2048
 BATCH_SIZE = 50
 INTER_BATCH_DELAY = 0.5
 
@@ -53,7 +53,7 @@ def get_client() -> Optional[OpenAI]:
 
 def embed_texts(texts: list) -> list:
     """
-    Embed a list of strings (code chunks) using NVIDIA's nv-embed-v1 endpoint.
+    Embed a list of strings (code chunks) using NVIDIA's nemotron-3-embed-1b endpoint.
     Returns list[list[float]] of the same length and order as input.
     Uses input_type="passage" for storage/indexing.
     """
@@ -111,7 +111,7 @@ def embed_texts(texts: list) -> list:
 
 def embed_query(query: str) -> list:
     """
-    Embed a single query string for retrieval using NVIDIA's nv-embed-v1 endpoint.
+    Embed a single query string for retrieval using NVIDIA's nemotron-3-embed-1b endpoint.
 
     Uses input_type="query" (asymmetric model — must differ from passage).
     Returns [0.0] * EMBEDDING_DIM on empty input or API failure as a safe
