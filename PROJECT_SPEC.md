@@ -445,8 +445,8 @@ Sticky download bar: three outlined-white buttons (onboarding.md, complexity_rep
 | Graph construction | NetworkX | Standard Python graph library, DiGraph + PageRank support |
 | Complexity analysis | radon (Python), custom AST walker (JS/TS) | radon is the standard for Python metrics |
 | Vector store | ChromaDB + pysqlite3-binary | Lightweight, local; pysqlite3-binary required on Azure |
-| Embeddings | NVIDIA NIM (`nvidia/nemotron-3-embed-1b`) | Hosted GPU inference; reuses NVIDIA_API_KEY; no local model load |
-| LLM inference | NVIDIA NIM (meta/llama-3.2-11b-vision-instruct) | OpenAI-compatible API, responds faster on free tier than 70b |
+| Embeddings | NVIDIA NIM (`nvidia/nv-embed-v1`) | Hosted GPU inference; reuses NVIDIA_API_KEY; no local model load |
+| LLM inference | NVIDIA NIM (meta/llama-3.1-8b-instruct) | OpenAI-compatible API, responds faster on free tier than 70b |
 | Backend | FastAPI + Azure App Service | Async, clean; Azure for production reliability |
 | CI/CD | GitHub Actions | Auto-deploys to Azure on push to master |
 | Frontend | React 18 + Tailwind + shadcn/ui | Production SPA; Figma Make designed |
