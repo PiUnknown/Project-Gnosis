@@ -39,17 +39,21 @@ export interface JobSummary {
 }
 
 export interface GraphData {
-    nodes: string[];
+    nodes: {
+        id: string;
+        path: string;
+        file: string;
+        risk: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+        imported_by: number;
+        imports: number;
+    }[];
+    links: { source: string; target: string }[];
+    /** Compatibility fields for the older standalone ResultsPage component. */
     edges: [string, string][];
     in_degree: Record<string, number>;
     out_degree: Record<string, number>;
     circular_deps: string[][];
     topological_order: string[];
-    stats: {
-        num_nodes: number;
-        num_edges: number;
-        num_cycles: number;
-    };
 }
 
 export interface ComplexityEntry {

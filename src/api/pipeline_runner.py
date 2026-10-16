@@ -227,10 +227,20 @@ def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False)
             })
 
     dependency_rows = []
+    graph_nodes = []
+    graph_links = []
     if state.dependency_graph:
         for node in state.dependency_graph.nodes():
             complexity_score = state.complexity_scores.get(node)
             risk_level = complexity_score.risk_level if complexity_score else "LOW"
+            graph_nodes.append({
+                "id": node,
+                "path": node,
+                "file": PurePosixPath(node).name,
+                "risk": risk_level,
+                "imported_by": state.dependency_graph.in_degree(node),
+                "imports": state.dependency_graph.out_degree(node),
+            })
             dependency_rows.append({
                 "file": PurePosixPath(node).name,
                 "path": node,
@@ -239,6 +249,10 @@ def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False)
                 "risk": risk_level,
             })
         dependency_rows.sort(key=lambda r: r["imported_by"], reverse=True)
+        graph_links = [
+            {"source": source, "target": target}
+            for source, target in state.dependency_graph.edges()
+        ]
 
     complexity_rows = []
     for path, scores in state.complexity_scores.items():
@@ -304,6 +318,15 @@ def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False)
         "explanations": state.explanations,
         # frontend-required fields:
         "dependency_rows": dependency_rows[:10],
+        "graph_data": {
+            "nodes": graph_nodes,
+            "links": graph_links,
+            "edges": [[link["source"], link["target"]] for link in graph_links],
+            "in_degree": {node["id"]: node["imported_by"] for node in graph_nodes},
+            "out_degree": {node["id"]: node["imports"] for node in graph_nodes},
+            "circular_deps": state.circular_deps,
+            "topological_order": reading_order,
+        },
         "reading_order": reading_order[:10],
         "complexity_rows": complexity_rows,
         "complexity_report_json": state.complexity_report_json or "{}",

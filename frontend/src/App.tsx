@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, useReducedMotion } from 'motion/react'
 import posthog from 'posthog-js'
+import { type DependencyLink, type DependencyNode } from './components/DependencyGraph3D'
 const API_BASE = import.meta.env.VITE_API_URL || "";
-const APP_VERSION = "1.0.8";
+const APP_VERSION = "1.1.0";
+const DependencyGraph3D = lazy(() => import('./components/DependencyGraph3D'))
 
 function useWindowWidth() {
   const [width, setWidth] = useState(
@@ -73,6 +75,11 @@ interface AnalysisResult {
   agent_context?: string
   file_explanations_md?: string
   dependency_rows: DepRow[]
+  graph_data?: {
+    nodes: DependencyNode[]
+    links: DependencyLink[]
+    circular_deps: string[][]
+  }
   reading_order: string[]
   complexity_rows: ComplexityRow[]
   explanations: Record<string, string>
@@ -1291,6 +1298,14 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
           <div>
             {/* Risk Distribution Summary Bar */}
             <RiskDistributionBar riskDist={riskDist} />
+
+            <Suspense fallback={<div className="gnosis-graph-loading">INITIALIZING WEBGL STRUCTURAL MAP ···</div>}>
+              <DependencyGraph3D
+                nodes={result?.graph_data?.nodes || []}
+                links={result?.graph_data?.links || []}
+                cycles={result?.graph_data?.circular_deps || result?.circular_deps || []}
+              />
+            </Suspense>
 
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.16em', color: 'rgba(10,10,26,0.45)', marginBottom: 16 }}>MOST IMPORTED FILES</div>
             {depRows.length === 0

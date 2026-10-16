@@ -144,6 +144,7 @@ class AnalysisResult(BaseModel):
     complexity_report: dict
     explanations: dict
     graph_summary: dict
+    graph_data: Optional[dict] = None
     skip_llm: Optional[bool] = False
 
 
