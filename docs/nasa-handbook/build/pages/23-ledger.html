@@ -1,0 +1,95 @@
+<section class="para">
+  <div class="num">6.2.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>The repository carries three layers of description: the public README, the original specification, and the decision and change logs. They were written at different times and are not regenerated. Where they disagree with the code, this handbook follows the code and records the disagreement. The README is the most visible and the most stale; <i>agent.md</i> is the most current prose record; the decision log is the richest rationale but contains numbering faults (figure 6.2-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 50" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Record drift severity">
+    <rect class="panel" x="1.5" y="2" width="177" height="46"/>
+    <text class="lbl-s" x="3.4" y="5.2">RECORD DRIFT &mdash; DISTANCE FROM THE WORKING TREE</text>
+
+    <rect class="box" x="5" y="9" width="40" height="14"/>
+    <text class="lbl-s" x="25" y="14" text-anchor="middle">README.md</text>
+    <text class="lbl-s" x="25" y="17.6" text-anchor="middle">PUBLIC CLAIMS</text>
+    <text class="lbl-s" x="25" y="21.2" text-anchor="middle">HIGH DRIFT</text>
+
+    <rect class="box" x="49" y="9" width="40" height="14"/>
+    <text class="lbl-s" x="69" y="14" text-anchor="middle">PROJECT_SPEC</text>
+    <text class="lbl-s" x="69" y="17.6" text-anchor="middle">ORIGINAL PLAN</text>
+    <text class="lbl-s" x="69" y="21.2" text-anchor="middle">HIGH DRIFT</text>
+
+    <rect class="box" x="93" y="9" width="40" height="14"/>
+    <text class="lbl-s" x="113" y="14" text-anchor="middle">DECISIONS</text>
+    <text class="lbl-s" x="113" y="17.6" text-anchor="middle">RATIONALE LOG</text>
+    <text class="lbl-s" x="113" y="21.2" text-anchor="middle">MOSTLY CURRENT</text>
+
+    <rect class="box" x="137" y="9" width="38" height="14"/>
+    <text class="lbl-s" x="156" y="14" text-anchor="middle">agent.md</text>
+    <text class="lbl-s" x="156" y="17.6" text-anchor="middle">HANDOFF</text>
+    <text class="lbl-s" x="156" y="21.2" text-anchor="middle">LOW DRIFT</text>
+
+    <line class="t" x1="5" y1="27" x2="175" y2="27"/>
+    <text class="lbl-s" x="5" y="31">A CLAIM IS NOT EVIDENCE. THE VERDICT COLUMN IN TABLE 6.2-1 IS BASED ON FILES READ AT THE CHANGE DATE.</text>
+    <text class="lbl-s" x="5" y="35.4">WHERE A RECORD AND A TEST DISAGREE, THE TEST WINS; WHERE A TEST AND THE CODE DISAGREE, THE CODE WINS.</text>
+    <text class="lbl-s" x="5" y="39.8">IGNORED MEMORY FILES ARE ABSENT FROM ANY CLONE, SO A FRESH CHECKOUT CANNOT REPRODUCE THIS RATIONALE.</text>
+    <text class="code" x="176.6" y="46.0" text-anchor="end">DEC-621A</text>
+  </svg>
+  <figcaption><span class="n">Figure 6.2-1.</span>Description Layers Ordered by Distance from Code</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">6.2.2</div>
+  <div>
+    <h2>CLAIM-BY-CLAIM LEDGER.</h2>
+    <p>The left column quotes or paraphrases the record. The right column states what the tree actually contains. Only disagreements are listed; agreements are omitted rather than padded.</p>
+  </div>
+</section>
+
+<div class="tcap">Table 6.2-1. Documented Claims Checked Against the Working Tree</div>
+<table class="dense">
+  <thead><tr><th style="width:37%">Record claim</th><th style="width:12%">Source</th><th>Working tree</th></tr></thead>
+  <tbody>
+    <tr><td>“Sequential multi-agent pipeline”; parallel is “a v2 optimization”</td><td class="v">README 65, 567</td><td>Graph, complexity and retrieval run in a three-thread pool; coupling is deferred to a post-join fix-up</td></tr>
+    <tr><td>Ingestion uses “max 15 threads”</td><td class="v">README 198, 608</td><td>Pool size is <i>min(16, total files)</i>; delay 0.05 s; five retries per file</td></tr>
+    <tr><td>“407 tests” in CI</td><td class="v">README 220</td><td>476 cases collected and passing on the local interpreter</td></tr>
+    <tr><td>Frontend is “React 18 + … shadcn/ui”</td><td class="v">README 205, 346</td><td>Resolved React 19.2.8, Vite 8.2.0, Tailwind 4.3.3; no shadcn package or components</td></tr>
+    <tr><td>All job state is a module dict; Redis is a future upgrade</td><td class="v">README 584</td><td>Redis store, RQ queue and worker are implemented; memory mode is only the fallback</td></tr>
+    <tr><td>Workflow lives at <i>.github/workflows/azure-deploy.yml</i></td><td class="v">README 459</td><td>Two files: <i>master_project-gnosis-api.yml</i> and <i>master_project-gnosis-worker.yml</i></td></tr>
+    <tr><td>Test fixture repository at <i>tests/fixtures/sample_repo/</i></td><td class="v">README 364</td><td>The directory is empty and untracked; no test reads it, and tests build strings and fakes in memory</td></tr>
+    <tr><td>Seven phases run “in sequence” in the entry-point docstring</td><td class="v">run.py header</td><td>Entry point is sequential; the orchestrator is partially parallel</td></tr>
+    <tr><td>Public release is v1.0.0; version string in the client is 1.1.0</td><td class="v">ChangeLog / App.tsx</td><td>Two different <i>1.1.0</i> releases and an out-of-order <i>1.0.8</i>; no single source of version truth</td></tr>
+    <tr><td>“Deploys automatically on every push to master”</td><td class="v">README 455</td><td>Workflows exist, but trigger paths and branch filters are defined per workflow and were not executed here</td></tr>
+    <tr><td>Python 3.11 in the manual Azure command</td><td class="v">README 464</td><td>Container image uses 3.11-slim; both Azure workflows request 3.12; local interpreter is 3.11.15</td></tr>
+    <tr><td>Decision log identifiers are unique and ordered</td><td class="v">Decisions.md</td><td><i>DEC-008</i> appears twice with different subjects; entries are non-monotonic</td></tr>
+  </tbody>
+</table>
+
+<section class="para" style="margin-top:1.4mm">
+  <div class="num">6.2.3</div>
+  <div>
+    <h3>Records That Remain Useful.</h3>
+    <p class="flush"><i>agent.md</i> is the best starting point for a code-aware reader: it was written against the current pipeline and lists its own known drift. <i>Decisions.md</i> remains valuable for rationale even where identifiers are duplicated, because each entry names the problem it solved. <i>DESIGN.md</i> describes a visual system that is largely present in <i>index.css</i> and <i>App.tsx</i>, but it is ignored by git and therefore not part of a clone. <i>GLOSSARY.md</i> and <i>PROJECT_SPEC.md</i> describe the intended vocabulary and original scope; they should be read as history.</p>
+  </div>
+</section>
+
+<div class="lower">
+  <div>
+    <div class="notice">
+      <span class="tag">WARNING</span>
+      <p>The README's deployment section names a workflow file that does not exist. A reader following it will look for the wrong path and may conclude deployment is unconfigured. The actual workflows are present under different names; their live status was not tested and is not asserted here.</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="bar"><span>DRIFT CHECK</span><span>MAINTAINER</span></div>
+    <ol>
+      <li><span>1</span><span>PICK - one checkable claim</span></li>
+      <li><span>2</span><span>OPEN - the file that would prove it</span></li>
+      <li><span></span><span>&radic; RECORD - code, test, doc, or absent</span></li>
+      <li><span>3</span><span>FIX - the record, not the code, by default</span></li>
+      <li><span>4</span><span>DATE - every correction</span></li>
+    </ol>
+  </div>
+</div>

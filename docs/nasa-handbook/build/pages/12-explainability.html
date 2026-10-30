@@ -1,0 +1,98 @@
+<section class="para">
+  <div class="num">3.6.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>Explainability is the only stage that calls a language model. It selects a bounded set of files, assembles code context from the vector index, builds a per-file prompt with structural metadata, and requests a short architectural explanation over an OpenAI-compatible endpoint. The one idea the reader must leave with is that selection, not generation, determines quality: only twenty files are explained by default, chosen by risk and import centrality (figure 3.6-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 60" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="File selection tiers from critical to low">
+    <rect class="panel" x="1.5" y="2" width="86" height="56"/>
+    <text class="lbl-s" x="3.4" y="5.2">SELECTION ORDER &mdash; TIER 0 FIRST</text>
+    <rect class="box" x="7" y="8" width="72" height="7"/><text class="lbl-s" x="43" y="12.8" text-anchor="middle">0 &nbsp; CRITICAL RISK</text>
+    <rect class="box" x="7" y="17" width="72" height="7"/><text class="lbl-s" x="43" y="21.8" text-anchor="middle">1 &nbsp; IN-DEGREE &ge; 5</text>
+    <rect class="box" x="7" y="26" width="72" height="7"/><text class="lbl-s" x="43" y="30.8" text-anchor="middle">2 &nbsp; HIGH RISK</text>
+    <rect class="box" x="7" y="35" width="72" height="7"/><text class="lbl-s" x="43" y="39.8" text-anchor="middle">3 &nbsp; IN-DEGREE &ge; 2</text>
+    <rect class="box" x="7" y="44" width="72" height="7"/><text class="lbl-s" x="43" y="48.8" text-anchor="middle">4 &nbsp; MEDIUM</text>
+    <text class="lbl-s" x="7" y="55.4">5 &nbsp; EVERYTHING ELSE &mdash; ONLY IF CAP REMAINS</text>
+
+    <rect class="panel" x="92" y="2" width="86" height="56"/>
+    <text class="lbl-s" x="93.4" y="5.2">PER-FILE CALL</text>
+    <rect class="box" x="96" y="8" width="78" height="8"/><text class="lbl-s" x="135" y="13.4" text-anchor="middle">CACHE KEY: OWNER + REPO + PATH + SHA</text>
+    <line class="wa" x1="135" y1="16" x2="135" y2="21.4"/>
+    <rect class="box" x="96" y="22" width="78" height="8"/><text class="lbl-s" x="135" y="27.4" text-anchor="middle">CONTEXT: MODULE &rarr; FNS BY COMPLEXITY &rarr; CLASS</text>
+    <line class="wa" x1="135" y1="30" x2="135" y2="35.4"/>
+    <rect class="box" x="96" y="36" width="78" height="8"/><text class="lbl-s" x="135" y="41.4" text-anchor="middle">PROMPT: PATH, LANGUAGE, RISK, GRAPH, CODE</text>
+    <line class="wa" x1="135" y1="44" x2="135" y2="49.4"/>
+    <rect class="box" x="96" y="50" width="78" height="6"/><text class="lbl-s" x="135" y="54.4" text-anchor="middle">LLM &rarr; SANITIZE &rarr; STORE + CACHE</text>
+    <text class="code" x="176.6" y="5.2" text-anchor="end">EXP-501A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.6-1.</span>Selection Tiers and Per-File Call Sequence</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">3.6.2</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p><i>run</i> requires a collection name and an <i>NVIDIA_API_KEY</i>; without either it returns the state unchanged. It connects a <i>CodeRetriever</i>, reuses explanations for unchanged files in incremental mode, and sorts candidates by tier, then descending in-degree, then path. For each selected file it checks a SHA-keyed disk cache, assembles up to 8,000 characters of chunk text, builds the prompt, and calls the model with temperature 0.1 and an 800-token limit. Successful answers are stripped, stored in state and cached. A failure is counted and skipped; it does not abort the run.</p>
+  </div>
+</section>
+
+<section class="para">
+  <div class="num">3.6.2.1</div>
+  <div>
+    <h3>Context Budget.</h3>
+    <p class="flush">Context assembly orders the module chunk first, then function chunks by descending complexity, then class chunks. It accumulates until 8,000 characters. If fewer than 300 characters remain, it writes a count of omitted chunks instead of a fragment. Retrieved code is therefore always cut at a chunk boundary or marked as truncated, never silently.</p>
+  </div>
+</section>
+
+<div class="listing"><span class="c"># src/agents/explainability.py, _assemble_code_context (condensed)</span>
+chunks = retriever.get_file_chunks(file_path)          <span class="c"># one file, no semantic query</span>
+if not chunks: return raw_content[:8000] if raw_content else ""   <span class="c"># normally empty</span>
+ordered = module_chunks + sorted(fn_chunks, key=lambda c: -(c['complexity'] or 0)) + class_chunks
+for chunk in ordered:
+    if char_count + len(chunk['content']) > 8000:      <span class="c"># hard budget</span>
+        parts.append(chunk['content'][:remaining] + "\n... [truncated]")
+        break
+return "\n\n---\n\n".join(parts)                      <span class="c"># visible separator</span></div>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">3.6.3</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 3.6-1. Explanation Parameters</div>
+    <table class="dense">
+      <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Default file cap</td><td class="v">20</td></tr>
+        <tr><td>Allowed cap</td><td class="v">0 to 100</td></tr>
+        <tr><td>Context budget</td><td class="v">8,000 characters</td></tr>
+        <tr><td>High in-degree tier</td><td class="v">&ge; 5</td></tr>
+        <tr><td>Medium in-degree tier</td><td class="v">&ge; 2</td></tr>
+        <tr><td>Temperature</td><td class="v">0.1</td></tr>
+        <tr><td>Max output tokens</td><td class="v">800</td></tr>
+        <tr><td>Per-call timeout</td><td class="v">120 s</td></tr>
+        <tr><td>Retries / backoff</td><td class="v">2 attempts, 1 s base</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">CAUTION</span>
+      <p>The stage prints the first eight characters of the API key to its log at start-up. Treat logs as sensitive and remove that line before sharing output. The prompt also contains retrieved repository code; do not send private code to a hosted endpoint without authorisation.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>EXPLAIN CHECK</span><span>OPERATOR</span></div>
+      <ol>
+        <li><span>1</span><span>CONFIRM - NVIDIA_API_KEY set</span></li>
+        <li><span>2</span><span>READ - files selected count</span></li>
+        <li><span></span><span>&radic; CACHE - hit rate reported</span></li>
+        <li><span>3</span><span>OPEN - one explanation</span></li>
+        <li><span>4</span><span>CONFIRM - names real symbols</span></li>
+      </ol>
+    </div>
+  </div>
+</div>

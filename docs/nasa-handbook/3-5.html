@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GN1A-03-BLOCK I-(1) PROJECT GNOSIS OPERATIONS HANDBOOK, page 3.5-1</title>
+<style>
+  @font-face { font-family: "Routed Gothic"; src: url("fonts/routed-gothic.ttf"); unicode-range: U+0000-0030, U+0032-FFFF; }
+  @font-face { font-family: "Routed Gothic Narrow"; src: url("fonts/routed-gothic-narrow.ttf"); unicode-range: U+0000-0030, U+0032-FFFF; }
+  @font-face { font-family: "Routed Gothic"; src: local("Helvetica Neue"), local("HelveticaNeue"), local("Arial"); unicode-range: U+0031; }
+  @font-face { font-family: "Routed Gothic Narrow"; src: local("Helvetica Neue"), local("HelveticaNeue"), local("Arial"); unicode-range: U+0031; }
+  @font-face { font-family: "Letter Gothic"; src: url("fonts/LetterGothicCode-R.ttf"); font-weight: 400; }
+  @font-face { font-family: "Letter Gothic"; src: url("fonts/LetterGothicCode-B.ttf"); font-weight: 700; }
+
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #8a8a86; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @media print { html, body { background: none; } }
+
+  :root {
+    --ink: #000000;
+    --paper: #fbfaf5;
+    --type: "Iowan Old Style", "Iowan", Georgia, serif;
+    --leroy: "Routed Gothic Narrow", "Routed Gothic", sans-serif;
+    --selectric: "Letter Gothic", "Courier", monospace;
+  }
+  @media print { :root { --paper: #ffffff; } }
+
+  .page {
+    position: relative; width: 210mm; height: 297mm; margin: 0 auto;
+    padding: 9mm 15mm 0 16mm; background: var(--paper); color: var(--ink);
+    font-family: var(--type); font-size: 8pt; line-height: 1.33;
+    letter-spacing: 0.055em; overflow: hidden;
+  }
+
+  .head { text-align: center; line-height: 1.25; }
+  .head .doc { font-weight: 700; font-size: 8.6pt; letter-spacing: 0.06em; }
+  .head .title { font-weight: 700; font-size: 8.6pt; letter-spacing: 0.08em; }
+  .head .part { margin-top: 2.2mm; font-size: 8.2pt; letter-spacing: 0.1em; }
+  .rule { height: 0; border-top: 1.5pt solid var(--ink); margin: 1.4mm -2mm 0; }
+
+  .foot { position: absolute; left: 16mm; right: 15mm; bottom: 8mm; }
+  .foot .rule { margin: 0 -2mm 1.6mm; }
+  .foot .sub { text-align: center; letter-spacing: 0.1em; font-size: 8.2pt; }
+  .foot .line { display: flex; align-items: baseline; justify-content: space-between; margin-top: 2.2mm; font-size: 8.2pt; }
+  .foot .fill { display: inline-block; border-bottom: 0.6pt solid var(--ink); text-align: center; padding: 0 1mm; font-size: 8.8pt; letter-spacing: 0.03em; }
+
+  .opener { text-align: center; letter-spacing: 0.12em; margin: 3.4mm 0 2mm; line-height: 1.6; }
+
+  .para { display: grid; grid-template-columns: 19mm 1fr; position: relative; }
+  .para .num { letter-spacing: 0.08em; }
+  .para h2, .para h3 { margin: 0 0 0.8mm; font: inherit; font-weight: 400; letter-spacing: 0.08em; }
+  .para h3 { text-decoration: underline; text-underline-offset: 1.6pt; text-decoration-thickness: 0.5pt; letter-spacing: 0.06em; }
+  .para p { margin: 0 0 1mm; text-indent: 9mm; text-align: left; }
+  .para p.flush { text-indent: 0; }
+  .para p.tight { margin-bottom: 0.4mm; }
+  .changebar { position: absolute; left: -9mm; width: 1.3mm; background: var(--ink); }
+  .nowrap { white-space: nowrap; }
+
+  figure { margin: 1.6mm 0 0; }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption { text-align: center; margin-top: 0.6mm; letter-spacing: 0.07em; }
+  figcaption .n { margin-right: 3mm; }
+
+  svg text { font-family: var(--leroy); fill: var(--ink); letter-spacing: 0.04px; }
+  svg .o    { fill: none; stroke: var(--ink); stroke-width: 0.42; stroke-linejoin: round; stroke-linecap: round; }
+  svg .of   { fill: var(--paper); stroke: var(--ink); stroke-width: 0.42; stroke-linejoin: round; }
+  svg .t    { fill: none; stroke: var(--ink); stroke-width: 0.17; stroke-linecap: round; }
+  svg .hid  { fill: none; stroke: var(--ink); stroke-width: 0.22; stroke-dasharray: 1.3 0.7; }
+  svg .cl   { fill: none; stroke: var(--ink); stroke-width: 0.16; stroke-dasharray: 5 0.8 0.9 0.8; }
+  svg .cut  { fill: none; stroke: var(--ink); stroke-width: 0.5; stroke-dasharray: 5 1 1 1; }
+  svg .ld   { fill: none; stroke: var(--ink); stroke-width: 0.16; marker-end: url(#nh-leader); }
+  svg .dim  { fill: none; stroke: var(--ink); stroke-width: 0.16; marker-start: url(#nh-dim); }
+  svg .w    { fill: none; stroke: var(--ink); stroke-width: 0.3; stroke-linejoin: round; }
+  svg .wa   { fill: none; stroke: var(--ink); stroke-width: 0.3; stroke-linejoin: round; marker-end: url(#nh-arrow); }
+  svg .box  { fill: var(--paper); stroke: var(--ink); stroke-width: 0.45; }
+  svg .panel{ fill: none; stroke: var(--ink); stroke-width: 0.3; stroke-dasharray: 2 1; }
+  svg .ev   { fill: none; stroke: var(--ink); stroke-width: 0.18; stroke-dasharray: 1 0.7; }
+  svg .vid  { fill: url(#nh-hatch); stroke: var(--ink); stroke-width: 0.35; }
+  svg .aud  { fill: var(--paper); stroke: var(--ink); stroke-width: 0.35; }
+  svg .gap  { fill: var(--paper); stroke: var(--ink); stroke-width: 0.35; stroke-dasharray: 0.6 0.5; }
+  svg .grain{ fill: url(#nh-dots); stroke: var(--ink); stroke-width: 0.35; }
+  svg .dot  { fill: var(--ink); }
+  svg .lbl   { font-size: 2.35px; }
+  svg .lbl-s { font-size: 2.05px; }
+  svg .lbl-b { font-size: 2.5px; font-family: "Routed Gothic", sans-serif; }
+  svg .code  { font-size: 2.4px; font-family: "Routed Gothic", sans-serif; }
+
+  .lower { display: grid; grid-template-columns: 1fr 64mm; column-gap: 6mm; margin-top: 2.8mm; }
+  .tcap { text-align: center; letter-spacing: 0.07em; margin: 0 0 0.8mm; }
+  table { width: 100%; border-collapse: collapse; font-size: 7.3pt; line-height: 1.2; }
+  th, td { border: 0.6pt solid var(--ink); padding: 0.35mm 1.6mm; text-align: left; vertical-align: top; font-weight: 400; }
+  thead th { text-align: center; letter-spacing: 0.1em; padding: 0.5mm 1.6mm; }
+  td.v { white-space: nowrap; }
+  table.dense { font-size: 6.9pt; line-height: 1.16; }
+  table.dense th, table.dense td { padding: 0.24mm 1.2mm; }
+
+  .notice { text-align: left; margin-bottom: 1.8mm; }
+  .notice .tag { display: block; text-align: center; letter-spacing: 0.18em; font-weight: 700; text-decoration: underline; text-underline-offset: 1.6pt; text-decoration-thickness: 0.6pt; margin-bottom: 0.8mm; }
+  .notice p { margin: 0; font-size: 7.4pt; line-height: 1.28; }
+
+  .card { border: 0.8pt solid var(--ink); font-family: var(--selectric); font-size: 7.1pt; line-height: 1.3; letter-spacing: 0; }
+  .card .bar { background: var(--ink); color: var(--paper); font-weight: 700; padding: 0.5mm 1.8mm; display: flex; justify-content: space-between; }
+  .card ol { list-style: none; margin: 0; padding: 0.8mm 1.8mm 1mm; }
+  .card li { display: grid; grid-template-columns: 3.2mm 1fr; white-space: pre; }
+
+  .tab { position: absolute; right: 0; top: 112mm; width: 8.5mm; height: 17mm; background: var(--ink); color: var(--paper);
+    font-family: "Routed Gothic", sans-serif; font-size: 8pt; letter-spacing: 0.08em; display: flex; align-items: center; justify-content: center; }
+
+  /* ---------- additions for this handbook ---------- */
+  .cover-title { text-align: center; margin-top: 22mm; }
+  .cover-title .kicker { font-family: var(--leroy); font-size: 9pt; letter-spacing: 0.28em; }
+  .cover-title .main { font-family: var(--leroy); font-weight: 700; font-size: 27pt; letter-spacing: 0.10em; line-height: 1.15; margin-top: 5mm; }
+  .cover-title .sub { font-family: var(--leroy); font-size: 11pt; letter-spacing: 0.20em; margin-top: 4mm; }
+  .cover-rule { border-top: 2.2pt solid var(--ink); margin: 8mm 8mm 0; }
+  .cover-abstract { margin: 7mm 12mm 0; text-align: left; }
+  .cover-abstract p { text-indent: 0; margin: 0 0 2.2mm; font-size: 9pt; line-height: 1.4; }
+  .cover-meta { margin: 7mm 12mm 0; }
+  .cover-meta table { font-size: 7.8pt; }
+  .cover-meta td { padding: 0.8mm 2mm; }
+
+  .listing { font-family: var(--selectric); font-size: 6.8pt; line-height: 1.34; letter-spacing: 0;
+    border: 0.6pt solid var(--ink); padding: 1.4mm 2mm; margin: 1.2mm 0 1.6mm; white-space: pre; overflow: hidden; }
+  .listing .c { font-style: italic; }
+  .caption { text-align: center; letter-spacing: 0.07em; margin: 0.4mm 0 1.4mm; font-size: 7.6pt; }
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; column-gap: 6mm; }
+  .threecol { display: grid; grid-template-columns: 1fr 1fr 1fr; column-gap: 4mm; }
+  .kv { width: 100%; }
+  .note { font-size: 7.2pt; line-height: 1.28; }
+  ul.tight, ol.tight { margin: 0.4mm 0 1mm 0; padding-left: 4.5mm; }
+  ul.tight li, ol.tight li { margin-bottom: 0.5mm; }
+  .center { text-align: center; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="nh-leader" viewBox="0 0 6 4" refX="5.6" refY="2" markerWidth="2.1" markerHeight="1.05" markerUnits="userSpaceOnUse" orient="auto" preserveAspectRatio="none"><path d="M0,0 L6,2 L0,4 Z" fill="#000"/></marker>
+    <marker id="nh-arrow" viewBox="0 0 6 4" refX="5.6" refY="2" markerWidth="2.4" markerHeight="1.3" markerUnits="userSpaceOnUse" orient="auto" preserveAspectRatio="none"><path d="M0,0 L6,2 L0,4 Z" fill="#000"/></marker>
+    <marker id="nh-dim" viewBox="0 0 6 4" refX="0" refY="2" markerWidth="2.2" markerHeight="0.95" markerUnits="userSpaceOnUse" orient="auto" preserveAspectRatio="none"><path d="M6,0 L0,2 L6,4 Z" fill="#000"/></marker>
+    <pattern id="nh-hatch" width="1.1" height="1.1" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="1.1" stroke="#000" stroke-width="0.2"/></pattern>
+    <pattern id="nh-bp" width="1.4" height="1.4" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="0.7" height="1.4" fill="#000"/></pattern>
+    <pattern id="nh-dots" width="1.3" height="1.3" patternUnits="userSpaceOnUse"><circle cx="0.32" cy="0.32" r="0.15" fill="#000"/><circle cx="0.97" cy="0.97" r="0.15" fill="#000"/></pattern>
+  </defs>
+</svg>
+
+<div class="page">
+
+  <header class="head">
+    <div class="doc">GN1A-03-BLOCK I-(1)</div>
+    <div class="title">PROJECT GNOSIS OPERATIONS HANDBOOK</div>
+    <div class="part">SYSTEMS DATA</div>
+    <div class="rule"></div>
+  </header>
+
+  <div class="tab">RAG</div>
+
+  <div class="opener">SECTION 3 &nbsp;&nbsp;&middot;&nbsp;&nbsp; SUBSECTION 3.5<br>
+    CODE RETRIEVAL</div>
+
+<section class="para">
+  <div class="num">3.5.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>The retrieval stage builds a semantic index of the repository. It does not split text every N tokens; it emits one chunk for the module header, one for each function and one for each class, preserving code boundaries. Chunks are embedded by a hosted NVIDIA model and written to a ChromaDB collection scoped to the job. The one idea the reader must leave with is that stage 6 never reads whole files from GitHub; it reads these chunks (figure 3.5-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 60" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Semantic chunking, embedding and ChromaDB storage">
+    <rect class="panel" x="1.5" y="2" width="177" height="56"/>
+    <text class="lbl-s" x="3.4" y="5.2">CHUNK &rarr; EMBED &rarr; STORE</text>
+
+    <rect class="box" x="6" y="9" width="28" height="12"/>
+    <text class="lbl-s" x="20" y="14.4" text-anchor="middle">FILE TEXT</text>
+    <text class="lbl-s" x="20" y="17.6" text-anchor="middle">+ SYMBOLS</text>
+    <line class="wa" x1="34" y1="15" x2="43.4" y2="15"/>
+    <rect class="box" x="44" y="9" width="36" height="12"/>
+    <text class="lbl-s" x="62" y="14.4" text-anchor="middle">SEMANTIC CHUNKS</text>
+    <text class="lbl-s" x="62" y="17.6" text-anchor="middle">MODULE / FN / CLASS</text>
+    <line class="wa" x1="80" y1="15" x2="89.4" y2="15"/>
+    <rect class="box" x="90" y="9" width="34" height="12"/>
+    <text class="lbl-s" x="107" y="14.4" text-anchor="middle">EMBED 2048-D</text>
+    <text class="lbl-s" x="107" y="17.6" text-anchor="middle">50 PER REQUEST</text>
+    <line class="wa" x1="124" y1="15" x2="133.4" y2="15"/>
+    <rect class="box" x="134" y="9" width="39" height="12"/>
+    <text class="lbl-s" x="153.5" y="14.4" text-anchor="middle">CHROMADB</text>
+    <text class="lbl-s" x="153.5" y="17.6" text-anchor="middle">COSINE, PER JOB</text>
+
+    <rect class="panel" x="6" y="23" width="168" height="16"/>
+    <text class="lbl-s" x="8" y="26.2">BATCH BOUNDARIES</text>
+    <text class="lbl-s" x="8" y="30">STREAM 128 CHUNKS &rarr; EMBED INNER BATCHES OF 50 &rarr; ADD 128 &rarr; GC</text>
+    <text class="lbl-s" x="8" y="33.6">EMBED DELAY 0.5 S BETWEEN BATCHES; ADD ONCE PER 128-CHUNK FLUSH</text>
+    <text class="lbl-s" x="8" y="37.2">INPUT_TYPE = PASSAGE FOR INDEX, QUERY FOR SEARCH</text>
+
+    <rect class="panel" x="6" y="42" width="168" height="15"/>
+    <text class="lbl-s" x="8" y="45.2">RETRIEVAL INTERFACE &mdash; CODERETRIEVER</text>
+    <text class="lbl-s" x="8" y="48.8">QUERY(TEXT, N, FILTER) &middot; GET_FILE_CHUNKS(PATH) &middot; COUNT()</text>
+    <text class="lbl-s" x="8" y="52.4">FILTERS: FILE_PATH, LANGUAGE, SYMBOL_TYPE, RISK_LEVEL</text>
+    <text class="code" x="176.6" y="5.2" text-anchor="end">RAG-501A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.5-1.</span>Semantic Chunking, Embedding and Retrieval Interface</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">3.5.2</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p><i>run</i> names the collection <i>gnosis_{owner}_{repo}_{job_id}</i>, sanitised and length-capped, then gets or creates it with cosine distance. In a non-incremental run the collection is deleted first, so a re-run never mixes old vectors. For each file with chunks, it appends to a 128-chunk buffer; when the buffer fills, it requests embeddings, disambiguates duplicate identifiers, and adds documents with metadata. The final partial buffer follows the same path. Raw text is then released from state.</p>
+  </div>
+</section>
+
+<section class="para">
+  <div class="num">3.5.2.1</div>
+  <div>
+    <h3>Dimension Guard.</h3>
+    <p class="flush">On an incremental run, the stage peeks at one stored embedding. If its length differs from 2048, the collection is deleted and every file is re-embedded. This prevents a collection from mixing vectors produced by different models, which ChromaDB cannot query coherently. A changed embedding model therefore costs a full re-embed, not a partial one.</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Chunk metadata fields stored with each vector">
+    <rect class="panel" x="1.5" y="2" width="177" height="34"/>
+    <text class="lbl-s" x="3.4" y="5.2">METADATA WRITTEN WITH EVERY CHUNK</text>
+    <rect class="box" x="6" y="8" width="26" height="9"/><text class="lbl-s" x="19" y="13.6" text-anchor="middle">FILE_PATH</text>
+    <rect class="box" x="36" y="8" width="26" height="9"/><text class="lbl-s" x="49" y="13.6" text-anchor="middle">SYMBOL_NAME</text>
+    <rect class="box" x="66" y="8" width="26" height="9"/><text class="lbl-s" x="79" y="13.6" text-anchor="middle">SYMBOL_TYPE</text>
+    <rect class="box" x="96" y="8" width="22" height="9"/><text class="lbl-s" x="107" y="13.6" text-anchor="middle">LANGUAGE</text>
+    <rect class="box" x="122" y="8" width="24" height="9"/><text class="lbl-s" x="134" y="13.6" text-anchor="middle">LINE RANGE</text>
+    <rect class="box" x="150" y="8" width="24" height="9"/><text class="lbl-s" x="162" y="13.6" text-anchor="middle">COMPLEXITY</text>
+    <rect class="box" x="6" y="20" width="44" height="9"/><text class="lbl-s" x="28" y="25.6" text-anchor="middle">RISK_LEVEL</text>
+    <rect class="box" x="54" y="20" width="120" height="9"/><text class="lbl-s" x="114" y="25.6" text-anchor="middle">CHUNK_ID: SANITIZED_PATH :: SYMBOL :: LINE :: TYPE</text>
+    <text class="lbl-s" x="6" y="33" >NONE VALUES ARE CONVERTED TO SENTINELS BEFORE STORAGE; THEY ARE CONVERTED BACK ON READ.</text>
+    <text class="code" x="176.6" y="34.0" text-anchor="end">RAG-502A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.5-2.</span>Chunk Metadata Contract</figcaption>
+</figure>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">3.5.3</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 3.5-1. Retrieval Parameters</div>
+    <table class="dense">
+      <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Embedding model</td><td class="v">nvidia/nemotron-3-embed-1b</td></tr>
+        <tr><td>Dimensions</td><td class="v">2048</td></tr>
+        <tr><td>Embedding batch</td><td class="v">50 texts</td></tr>
+        <tr><td>Stream buffer</td><td class="v">128 chunks</td></tr>
+        <tr><td>Chroma add batch</td><td class="v">128-chunk flush (500 constant unused)</td></tr>
+        <tr><td>Distance</td><td class="v">cosine</td></tr>
+        <tr><td>Persistence</td><td class="v">./chroma_db</td></tr>
+        <tr><td>Collection scope</td><td class="v">owner + repo + job id</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">CAUTION</span>
+      <p>This stage clears <i>state.raw_contents</i> at the end. Stage 6's fallback therefore receives an empty string for every file, and explanation depends on retrieval succeeding. If the collection is empty or the retriever cannot connect, explanation degrades to a no-code prompt. See 8.1-1.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>INDEX CHECK</span><span>MAINTAINER</span></div>
+      <ol>
+        <li><span>1</span><span>READ - collection name in state</span></li>
+        <li><span>2</span><span>CALL - retriever.count()</span></li>
+        <li><span></span><span>&radic; COUNT - greater than zero</span></li>
+        <li><span>3</span><span>QUERY - a known function name</span></li>
+        <li><span>4</span><span>CONFIRM - file_path metadata matches</span></li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+
+  <footer class="foot">
+    <div class="rule"></div>
+    <div class="sub">SUBSYSTEM 5</div>
+    <div class="line">
+      <span>Mission <span class="fill" style="width:20mm">&nbsp;</span></span>
+      <span>Basic Date <span class="fill" style="width:30mm">25 JULY 2026</span></span>
+      <span>Change Date <span class="fill" style="width:30mm">16 OCTOBER 2026</span></span>
+      <span>Page <span class="fill" style="width:18mm">3.5-1</span></span>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  document.fonts.ready.then(() => {
+    const page = document.querySelector('.page')
+    const foot = page.querySelector('.foot')
+    let bottom = 0
+    for (const el of page.children) {
+      if (el === foot || el.classList.contains('tab')) continue
+      bottom = Math.max(bottom, el.getBoundingClientRect().bottom)
+    }
+    const free = (foot.getBoundingClientRect().top - bottom) * 25.4 / 96
+    document.documentElement.dataset.fit = free >= 0 ? `ok, ${free.toFixed(1)} mm free above the footer` : `OVERFLOW by ${(-free).toFixed(1)} mm`
+  })
+</script>
+
+</body>
+</html>

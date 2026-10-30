@@ -8,8 +8,8 @@ Project Gnosis (also called Archaeon) accepts a GitHub repository and builds an 
 
 ## Start here
 
-- **Current frontend and app flow:** `frontend/src/App.tsx`. It owns the landing, progress, and results screens; this is not currently a React Router application.
-- **Active interactive 3D dependency graph:** `frontend/src/components/DependencyGraph3D.tsx`. It is lazy-loaded from the dependency tab in `App.tsx`.
+- **Current frontend and app flow:** `frontend/src/App.tsx` owns landing and progress; the completed results view is a separate lazy-loaded page at `frontend/src/pages/AnalysisResultsPage.tsx`. This is not currently a React Router application.
+- **Active interactive 3D dependency graph:** `frontend/src/components/DependencyGraph3D.tsx`. It is lazy-loaded from the dependency tab in `AnalysisResultsPage.tsx`.
 - **Frontend styling:** `frontend/src/index.css`. The UI also contains inline styles in `App.tsx`.
 - **API and job lifecycle:** `src/api/main.py`, `src/api/queue.py`, `src/api/job_store.py`, `src/api/worker.py`.
 - **API pipeline execution and result serialization:** `src/api/pipeline_runner.py`.
@@ -34,7 +34,9 @@ src/
   utils/        GitHub API, filtering, graph helpers, embeddings, retrieval,
                 cache, diff engine, metrics, and NVIDIA client
 frontend/
-  src/App.tsx   active SPA screens and result tabs
+  src/App.tsx   landing, progress, and screen state controller
+  src/pages/AnalysisResultsPage.tsx  lazy result tabs and on-demand section downloads
+  src/components/AppChrome.tsx  shared navigation and hero artwork
   src/components/DependencyGraph3D.tsx
   src/pages/ResultsPage.tsx  older separate page; not imported by active App.tsx
   src/types/api.ts
@@ -126,14 +128,19 @@ flowchart LR
 
 - Submission request supports `repo_url`, `max_explanations`, `skip_llm`, `github_token`, `incremental`, and an optional `options` object. The frontend currently sends `repo_url`, `max_explanations`, and `skip_llm`.
 - Job statuses are `queued`, `running`, `complete`, and `failed`; phases are stored in the job store and surfaced to the progress screen.
-- The result includes report strings, summaries, explanations, compact `dependency_rows`, complexity rows, reading order, and `graph_data`.
+- The result includes report strings, summaries, explanations, compact `dependency_rows`, complexity rows, reading order, and `graph_data`. `/api/jobs/{id}/result?sections=summary,onboarding_doc` returns only named sections; omitting `sections` preserves the complete legacy response. The endpoint still returns 202 until the full pipeline is complete.
+- The summary includes `files_with_content`. When a GitHub content download is missing, the onboarding report and results header show the available-file count and warn that the report has partial input.
+- API responses above 1 KB are gzip-compressed. Request durations are exposed through `Server-Timing` and structured request logs; pipeline phases emit `pipeline_phase_elapsed` log records.
 - `graph_data.nodes` contains every file node with `id`, `path`, `file`, `risk`, `imported_by`, and `imports`. `graph_data.links` contains directed `{source, target}` edges. Compatibility fields (`edges`, `in_degree`, `out_degree`, `topological_order`) remain available for the older standalone results component.
 - The 3D graph requires the full graph payload; do not truncate `graph_data.nodes` or `graph_data.links` to the ten summary rows. Keep the compact `dependency_rows` separate for the “most imported files” table.
 - `src/api/models.py` defines the typed FastAPI result contract. Keep it in sync with the serializer and `frontend/src/types/api.ts` where that interface is used.
 
 ## Current frontend behavior and design rules
 
-- `App.tsx` contains the active landing, progress, and result screens. Results tabs include onboarding, agent context, file explanations, dependency graph, complexity report, and raw output.
+- `App.tsx` contains the active landing and progress screens. `pages/AnalysisResultsPage.tsx` is loaded after job completion. It initially loads the summary and complete onboarding document, then loads other complete report sections when a tab or download requests them. A download waits for its entire result section to arrive.
+- LLM explanations remain enabled by default and are part of the final report before a job becomes complete. `SKIP LLM` is the user's opt-out. Explainability uses bounded concurrency (`NVIDIA_LLM_MAX_CONCURRENCY`, default 2, maximum 4) and reports per-file progress; it does not produce a second post-completion report.
+- Embedding requests use bounded concurrency (`NVIDIA_EMBED_MAX_CONCURRENCY`, default 2, maximum 4). Public repositories with at least 80 selected files and metadata size up to 80 MiB use a streamed GitHub archive when available, then fall back to pooled individual file requests. `GITHUB_ARCHIVE_MIN_FILES` and `GITHUB_ARCHIVE_MAX_REPO_KB` tune that threshold.
+- PostHog and Vercel telemetry load after idle, Google Fonts load asynchronously, and the shared logo uses lossless WebP. Phase-level full garbage collection is opt-in with `GNOSIS_FORCE_PHASE_GC=1`; agents can still perform their own targeted cleanup.
 - `DependencyGraph3D.tsx` uses `3d-force-graph` / Three.js WebGL and is lazy-loaded. It supports orbit, pan, zoom, selecting a node, clustering by top-level directory, search by path, and filtering by risk.
 - The graph uses the Gnosis content-area colors (`#F0F0FF` ivory, electric blue `#1400FF`, darker blue `#0F00CC`), sharp square controls, and IBM Plex Mono instrumentation labels. Risk colors are shades within the blue palette. Keep graph chrome visually consistent with `App.tsx`; avoid generic dark Three.js defaults, rounded cards, gradients, or glass effects.
 - App version is the `APP_VERSION` constant in `frontend/src/App.tsx`. The current value is `1.1.0`.

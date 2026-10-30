@@ -788,4 +788,84 @@ class TestNvidiaEmbedder:
 
         with patch.dict("os.environ", {"NVIDIA_API_KEY": ""}, clear=False):
             with pytest.raises(EnvironmentError, match="NVIDIA_API_KEY is not set"):
-                embedder.get_client()
+                embedder.get_client()
+
+    def test_sanitize_for_embedding_strips_inline_image_data(self):
+        from src.utils.embedder import (
+            sanitize_for_embedding,
+            IMAGE_DATA_PLACEHOLDER,
+        )
+
+        code = (
+            'export const logo = "data:image/svg+xml;base64,'
+            'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4=";\n'
+            "export function add(a, b) { return a + b; }"
+        )
+        cleaned = sanitize_for_embedding(code)
+
+        assert "data:image/" not in cleaned
+        assert IMAGE_DATA_PLACEHOLDER in cleaned
+        assert "export function add(a, b)" in cleaned
+
+    def test_sanitize_for_embedding_leaves_normal_text_untouched(self):
+        from src.utils.embedder import sanitize_for_embedding
+
+        text = "![diagram](https://example.com/diagram.png)"
+        assert sanitize_for_embedding(text) == text
+
+    def test_embed_texts_sanitizes_before_sending(self):
+        from src.utils import embedder
+        from unittest.mock import MagicMock
+
+        embedder.reset_client()
+
+        mock_item = MagicMock()
+        mock_item.index = 0
+        mock_item.embedding = [0.1, 0.2]
+        mock_resp = MagicMock()
+        mock_resp.data = [mock_item]
+        mock_client = MagicMock()
+        mock_client.embeddings.create.return_value = mock_resp
+
+        with patch("src.utils.embedder.get_client", return_value=mock_client):
+            result = embedder.embed_texts(
+                ['const icon = "data:image/png;base64,iVBORw0KGgo=";']
+            )
+
+        sent = mock_client.embeddings.create.call_args.kwargs["input"]
+        assert "data:image/" not in sent[0]
+        assert embedder.IMAGE_DATA_PLACEHOLDER in sent[0]
+        assert result == [[0.1, 0.2]]
+
+    def test_embed_texts_falls_back_to_per_item_on_persistent_400(self):
+        from src.utils import embedder
+        from unittest.mock import MagicMock
+
+        embedder.reset_client()
+
+        calls = {"count": 0}
+
+        def fake_create(**kwargs):
+            calls["count"] += 1
+            if calls["count"] <= 2:
+                raise Exception(
+                    "Error code: 400 - {'message': 'image inputs require VLM "
+                    "serving to be enabled on this server'}"
+                )
+            item = MagicMock()
+            item.index = 0
+            item.embedding = [0.5, 0.5]
+            resp = MagicMock()
+            resp.data = [item]
+            return resp
+
+        mock_client = MagicMock()
+        mock_client.embeddings.create.side_effect = fake_create
+
+        with patch("src.utils.embedder.get_client", return_value=mock_client), \
+                patch("src.utils.embedder.time.sleep"):
+            result = embedder.embed_texts(["first chunk", "second chunk"])
+
+        assert result == [[0.5, 0.5], [0.5, 0.5]]
+        # two batch attempts, then one request per item
+        assert calls["count"] == 4

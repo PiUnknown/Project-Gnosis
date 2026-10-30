@@ -1,0 +1,99 @@
+<section class="para">
+  <div class="num">5.1.3</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>The repository's second half is evidence: 5,244 lines of tests and roughly 2,200 lines of tracked records and configuration. The test suite is the strongest description of intended behaviour in the tree, and it is more current than the README. It runs entirely offline: HTTP, Redis, Chroma and the hosted model are replaced by fakes, <i>TestClient</i>, <i>fakeredis</i> and monkeypatching. No test contacts GitHub, NVIDIA or a live Redis instance. The design and memory files marked <i>local, ignored</i> exist in this working tree but in no clone (figure 5.1-2).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Test verification boundary">
+    <rect class="panel" x="1.5" y="2" width="177" height="34"/>
+    <text class="lbl-s" x="3.4" y="5.2">VERIFICATION BOUNDARY &mdash; WHAT THE SUITE ACTUALLY TOUCHES</text>
+
+    <rect class="box" x="6" y="8" width="30" height="12"/>
+    <text class="lbl-s" x="21" y="13" text-anchor="middle">PYTEST</text>
+    <text class="lbl-s" x="21" y="16.2" text-anchor="middle">476 CASES</text>
+    <text class="lbl-s" x="21" y="19" text-anchor="middle">15 FILES</text>
+
+    <rect class="box" x="47" y="8" width="38" height="12"/>
+    <text class="lbl-s" x="66" y="13" text-anchor="middle">FASTAPI TESTCLIENT</text>
+    <text class="lbl-s" x="66" y="16.2" text-anchor="middle">IN-PROCESS ROUTES</text>
+    <text class="lbl-s" x="66" y="19" text-anchor="middle">RUNNER MONKEYPATCHED</text>
+
+    <rect class="box" x="96" y="8" width="34" height="12"/>
+    <text class="lbl-s" x="113" y="13" text-anchor="middle">FAKEREDIS</text>
+    <text class="lbl-s" x="113" y="16.2" text-anchor="middle">WATCH / MULTI</text>
+    <text class="lbl-s" x="113" y="19" text-anchor="middle">INDEX DRIFT CASES</text>
+
+    <rect class="box" x="141" y="8" width="34" height="12"/>
+    <text class="lbl-s" x="158" y="13" text-anchor="middle">STUBS</text>
+    <text class="lbl-s" x="158" y="16.2" text-anchor="middle">EMBED / CHAT / TREE</text>
+    <text class="lbl-s" x="158" y="19" text-anchor="middle">NO SOCKETS</text>
+
+    <line class="t" x1="6" y1="23.5" x2="175" y2="23.5"/>
+    <text class="lbl-s" x="6" y="27.4">NOT EXERCISED: LIVE GITHUB RATE LIMITS, REAL REDIS FAILOVER, CHROMA PERSISTENCE ACROSS VERSIONS,</text>
+    <text class="lbl-s" x="6" y="31">MODEL LATENCY AND QUOTA, BROWSER RENDERING, THE rq WORKER LOOP, AND THE MIGRATION COMMAND.</text>
+    <text class="code" x="176.6" y="34.0" text-anchor="end">CAT-512A</text>
+  </svg>
+  <figcaption><span class="n">Figure 5.1-2.</span>Offline Test Boundary and Uncovered Surfaces</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1mm">
+  <div class="num">5.1.4</div>
+  <div>
+    <h2>TEST FILES.</h2>
+    <p class="flush">Counts are collected cases, not assertions. The four heaviest files cover document rendering, HTTP contracts, retrieval and explanations.</p>
+  </div>
+</section>
+
+<div class="tcap">Table 5.1-2. Test Inventory, 476 Collected Cases (empty lines excluded)</div>
+<table class="dense">
+  <thead><tr><th style="width:27%">File</th><th style="width:8%">Cases</th><th style="width:7%">Lines</th><th>Focus</th></tr></thead>
+  <tbody>
+    <tr><td>test_doc_generator.py</td><td class="v">78</td><td class="v">641</td><td>Section presence, ordering, empty-state robustness, heading hierarchy</td></tr>
+    <tr><td>test_api.py</td><td class="v">75</td><td class="v">738</td><td>Routes, status codes, store lifecycle, health, validation, 409 duplicate</td></tr>
+    <tr><td>test_code_rag.py</td><td class="v">56</td><td class="v">653</td><td>Chunk identity, collection names, filters, embedder batching, results</td></tr>
+    <tr><td>test_complexity_scorer.py</td><td class="v">50</td><td class="v">377</td><td>Branch counting per language, thresholds, precedence, coupling</td></tr>
+    <tr><td>test_explainability.py</td><td class="v">47</td><td class="v">523</td><td>Selection order, context budget, prompt fields, sanitisation, failures</td></tr>
+    <tr><td>test_dependency_graph.py</td><td class="v">38</td><td class="v">421</td><td>Python/JS/Rust/C/Go resolution, cycles, order, PageRank fallback</td></tr>
+    <tr><td>test_ast_parser.py</td><td class="v">34</td><td class="v">291</td><td>Python and JS symbols, docstrings, relative imports, parse errors</td></tr>
+    <tr><td>test_active_index.py</td><td class="v">31</td><td class="v">519</td><td>Membership, contention, drift, reconciliation, migration refusal (untracked)</td></tr>
+    <tr><td>test_ingestion.py</td><td class="v">22</td><td class="v">61</td><td>URL forms, extension and directory rules, size ceiling, language labels</td></tr>
+    <tr><td>test_multi_language.py</td><td class="v">15</td><td class="v">430</td><td>Go, Rust, Java and C++ symbols and complexity; alias resolution</td></tr>
+    <tr><td>test_queue_and_store.py</td><td class="v">15</td><td class="v">192</td><td>Job round-trip, memory store, fakeredis store, enqueue, worker health</td></tr>
+    <tr><td>test_tiers.py</td><td class="v">7</td><td class="v">164</td><td>Full, warning and sampled modes; API rejection above 3,000</td></tr>
+    <tr><td>test_github_api_pat.py</td><td class="v">3</td><td class="v">47</td><td>Bearer header, private-repository message, raw-to-API fallback</td></tr>
+    <tr><td>test_incremental.py</td><td class="v">3</td><td class="v">125</td><td>Manifest diff classes and rehydration of symbols and scores</td></tr>
+    <tr><td>test_parallel_execution.py</td><td class="v">2</td><td class="v">62</td><td>Concurrent parse and score calls produce the same state</td></tr>
+  </tbody>
+</table>
+
+<div class="tcap" style="margin-top:1.6mm">Table 5.1-3. Records and Repository Configuration (empty lines excluded)</div>
+<table class="dense">
+  <thead><tr><th style="width:24%">File</th><th style="width:7%">Lines</th><th style="width:13%">Status</th><th>Content</th></tr></thead>
+  <tbody>
+    <tr><td>README.md</td><td class="v">498</td><td class="v">tracked</td><td>User-facing overview; several claims now stale</td></tr>
+    <tr><td>PROJECT_SPEC.md</td><td class="v">424</td><td class="v">tracked</td><td>Original specification and phase plan</td></tr>
+    <tr><td>GLOSSARY.md</td><td class="v">169</td><td class="v">tracked</td><td>Domain and pipeline vocabulary</td></tr>
+    <tr><td>agent.md</td><td class="v">166</td><td class="v">tracked</td><td>Code-verified handoff; most reliable prose record</td></tr>
+    <tr><td>LICENSE</td><td class="v">544</td><td class="v">tracked</td><td>AGPL-3.0 with commercial option</td></tr>
+    <tr><td>DESIGN.md</td><td class="v">1,244</td><td class="v">local, ignored</td><td>Design system: colour, type, components, motion</td></tr>
+    <tr><td>Decisions.md</td><td class="v">437</td><td class="v">local, ignored</td><td>Numbered decision log; duplicate identifiers exist</td></tr>
+    <tr><td>ChangeLog.md</td><td class="v">348</td><td class="v">local, ignored</td><td>Release history; version order is not monotonic</td></tr>
+    <tr><td>Flow.md</td><td class="v">105</td><td class="v">local, ignored</td><td>Agent-oriented flow summary</td></tr>
+    <tr><td>ROADMAP.md</td><td class="v">41</td><td class="v">local, ignored</td><td>Candidate work, not commitments</td></tr>
+    <tr><td>SCRATCHPAD.md</td><td class="v">46</td><td class="v">local, ignored</td><td>Working notes and obstacles</td></tr>
+    <tr><td>GEMINI.md</td><td class="v">16</td><td class="v">local, ignored</td><td>Workspace rules for AI assistants</td></tr>
+    <tr><td>.env.example</td><td class="v">37</td><td class="v">tracked</td><td>Variable names only; no values</td></tr>
+    <tr><td>requirements.txt</td><td class="v">26</td><td class="v">tracked</td><td>Unpinned lower bounds; no hash lock</td></tr>
+    <tr><td>Dockerfile</td><td class="v">17</td><td class="v">tracked</td><td>Python 3.11-slim image</td></tr>
+    <tr><td>docker-compose.yml</td><td class="v">45</td><td class="v">tracked</td><td>API, worker and Redis services</td></tr>
+    <tr><td>.dockerignore</td><td class="v">26</td><td class="v">tracked</td><td>Build-context exclusions</td></tr>
+    <tr><td>.gitignore</td><td class="v">38</td><td class="v">tracked</td><td>Runtime, memory and secret exclusions</td></tr>
+    <tr><td>vercel.json</td><td class="v">52</td><td class="v">tracked</td><td>Root redirect and proxy rules</td></tr>
+    <tr><td>workflows/…-api.yml</td><td class="v">76</td><td class="v">tracked</td><td>Azure App Service deployment for the API</td></tr>
+    <tr><td>workflows/…-worker.yml</td><td class="v">66</td><td class="v">tracked</td><td>Azure deployment for the worker</td></tr>
+  </tbody>
+</table>
+

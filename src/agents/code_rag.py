@@ -15,11 +15,14 @@ Steps:
 """
 import os
 import threading
+import logging
+import time
 
 from src.state import ArchaeonState
 from src.utils.chunker import make_chunks
 from src.utils.embedder import embed_texts, EMBEDDING_DIM
 from src.utils.retriever import make_collection_name, DEFAULT_CHROMA_DB_PATH
+from src.utils.chroma_retention import CHROMA_MANAGED_MARKER, cleanup_expired_collections
 
 CHUNKABLE_LANGUAGES = frozenset({
     'Python',
@@ -39,6 +42,7 @@ CHUNKABLE_LANGUAGES = frozenset({
 CHROMA_BATCH_SIZE = 500   # chunks per ChromaDB add() call
 
 _chroma_lock = threading.Lock()
+logger = logging.getLogger(__name__)
 
 
 def run(state: ArchaeonState) -> ArchaeonState:
@@ -60,6 +64,7 @@ def run(state: ArchaeonState) -> ArchaeonState:
     os.makedirs(chroma_path, exist_ok=True)
     with _chroma_lock:
         client = chromadb.PersistentClient(path=chroma_path)
+        cleanup_expired_collections(client)
 
     # In non-incremental runs, delete and recreate on re-runs.
     if not state.is_incremental:
@@ -71,7 +76,11 @@ def run(state: ArchaeonState) -> ArchaeonState:
 
     collection = client.get_or_create_collection(
         name=collection_name,
-        metadata={"hnsw:space": "cosine"}
+        metadata={
+            "hnsw:space": "cosine",
+            "gnosis_managed": CHROMA_MANAGED_MARKER,
+            "gnosis_created_at": int(time.time()),
+        }
     )
 
     # If the embedding model/dimension changed since the last run (e.g.
@@ -88,7 +97,11 @@ def run(state: ArchaeonState) -> ArchaeonState:
                 client.delete_collection(name=collection_name)
                 collection = client.get_or_create_collection(
                     name=collection_name,
-                    metadata={"hnsw:space": "cosine"}
+                    metadata={
+                        "hnsw:space": "cosine",
+                        "gnosis_managed": CHROMA_MANAGED_MARKER,
+                        "gnosis_created_at": int(time.time()),
+                    }
                 )
                 print(
                     f"  [RAG] Embedding dim changed "
@@ -197,8 +210,6 @@ def run(state: ArchaeonState) -> ArchaeonState:
             del documents
             del metadatas
             del batch_to_process
-            import gc
-            gc.collect()
 
     print()  # newline after progress prints
 
@@ -224,8 +235,6 @@ def run(state: ArchaeonState) -> ArchaeonState:
         del documents
         del metadatas
         del current_batch
-        import gc
-        gc.collect()
 
     print(f"  Files processed  : {total_files - skipped}")
     print(f"  Files skipped    : {skipped}")

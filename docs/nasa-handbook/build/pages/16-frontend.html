@@ -1,0 +1,148 @@
+<section class="para">
+  <div class="num">3.9.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>The operator display is a single-page React application in <i>frontend/</i>. It has one job: submit a repository address, show which of the seven stages is running, then present the returned documents in six tabs. Navigation is a local state variable, not a URL router. The bundle is built by Vite and served as static files; every dynamic request goes to the FastAPI origin named by <i>VITE_API_URL</i> (figure 3.9-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 44" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Frontend screen state machine">
+    <rect class="panel" x="1.5" y="2" width="177" height="40"/>
+    <text class="lbl-s" x="3.4" y="5.2">SCREEN STATE &mdash; ONE STATE VARIABLE, NO ROUTER</text>
+
+    <rect class="box" x="4" y="8" width="26" height="11"/>
+    <text class="lbl" x="17" y="12.6" text-anchor="middle">LANDING</text>
+    <text class="lbl-s" x="17" y="15.7" text-anchor="middle">URL + OPTIONS</text>
+    <text class="lbl-s" x="17" y="18.3" text-anchor="middle">CLIENT VALIDATION</text>
+
+    <line class="wa" x1="30" y1="13.5" x2="36.4" y2="13.5"/>
+    <text class="lbl-s" x="33" y="11.4" text-anchor="middle">POST</text>
+
+    <rect class="box" x="37" y="8" width="28" height="11"/>
+    <text class="lbl" x="51" y="12.6" text-anchor="middle">PROGRESS</text>
+    <text class="lbl-s" x="51" y="15.7" text-anchor="middle">POLL 1,500 MS</text>
+    <text class="lbl-s" x="51" y="18.3" text-anchor="middle">SEVEN AGENTS</text>
+
+    <line class="wa" x1="65" y1="9.5" x2="72.4" y2="9.5"/>
+    <text class="lbl-s" x="68.7" y="7.7" text-anchor="middle">DONE</text>
+
+    <rect class="box" x="73" y="5" width="28" height="8"/>
+    <text class="lbl-s" x="87" y="10.2" text-anchor="middle">RESULTS &mdash; SIX TABS</text>
+
+    <text class="lbl-s" x="6" y="22.6">THE ERROR SCREEN IS DECLARED IN THE STATE UNION BUT NEVER SET.</text>
+    <text class="lbl-s" x="6" y="25.4">A FAILED JOB RENDERS ITS ERROR INSIDE PROGRESS INSTEAD.</text>
+
+    <text class="lbl-s" x="105" y="5.2">RESULTS TAB SET</text>
+    <rect class="of" x="105" y="6.2" width="30" height="4.4"/><text class="lbl-s" x="120" y="9.1" text-anchor="middle">ONBOARDING</text>
+    <rect class="of" x="105" y="11.4" width="30" height="4.4"/><text class="lbl-s" x="120" y="14.3" text-anchor="middle">EXPLANATIONS</text>
+    <rect class="of" x="105" y="16.6" width="30" height="4.4"/><text class="lbl-s" x="120" y="19.5" text-anchor="middle">DEPENDENCY</text>
+    <rect class="of" x="138" y="6.2" width="36" height="4.4"/><text class="lbl-s" x="156" y="9.1" text-anchor="middle">AGENT CONTEXT</text>
+    <rect class="of" x="138" y="11.4" width="36" height="4.4"/><text class="lbl-s" x="156" y="14.3" text-anchor="middle">COMPLEXITY</text>
+    <rect class="of" x="138" y="16.6" width="36" height="4.4"/><text class="lbl-s" x="156" y="19.5" text-anchor="middle">RAW JSON</text>
+    <text class="lbl-s" x="138" y="24.6" text-anchor="middle">LAZY WEBGL GRAPH</text>
+
+    <line class="t" x1="5" y1="27.6" x2="173" y2="27.6"/>
+    <text class="lbl-s" x="6" y="30.8">ON 409 WITH job_id THE CLIENT ATTACHES TO THE EXISTING JOB INSTEAD OF FAILING.</text>
+    <text class="lbl-s" x="6" y="33.8">AN EMPTY job_id ENTERS A TIMED DEMONSTRATION THAT ADVANCES ONE AGENT EVERY 2,200 MS.</text>
+    <text class="lbl-s" x="6" y="36.8">THE DISPLAYED PHASE COMES FROM THE SERVER, BUT PHASES 3&ndash;5 ARE MARKED ONE AT A TIME.</text>
+    <text class="code" x="176.6" y="40.0" text-anchor="end">WEB-901A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.9-1.</span>Client Screen Transitions and Result Tabs</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">3.9.2</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p>The landing screen accepts a repository address and two options: an explanation cap and a skip-LLM switch. It rejects anything that does not begin with <i>http(s)://github.com/owner/repo</i> before calling the API. A successful submission returns a job identifier; the client switches to the progress screen and requests <i>/api/jobs/{id}</i> immediately, then every 1,500 ms. A non-OK response is ignored and polling continues, which makes the display tolerant of a restarting server. Terminal status stops the timer; unmounting clears it.</p>
+    <p>Progress is computed on the client: completed agents plus half credit for the running agent, divided by seven. The agent names and statuses themselves come from the API. When the job completes, the results screen fetches <i>/api/jobs/{id}/result</i> once and renders the Markdown, the JSON and the graph payload. The 3D graph module is split into a lazy chunk so the first paint does not pay for <i>three</i> and <i>3d-force-graph</i>.</p>
+  </div>
+</section>
+
+<section class="para">
+  <div class="num">3.9.2.1</div>
+  <div>
+    <h3>Document Presentation.</h3>
+    <p class="flush">Markdown is rendered with a GitHub-flavoured parser and a table extension. Downloads are produced in the browser from the strings already in memory, so the API has no download endpoint. Raw JSON exposes the serialised result for inspection. The dependency tab builds a force-directed graph from nodes and links; node colour is the risk level, and the circular-dependency flag is shown in the side panel.</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Results tab data sources">
+    <rect class="panel" x="1.5" y="2" width="177" height="36"/>
+    <text class="lbl-s" x="3.4" y="5.2">RESULT PAYLOAD &rarr; TAB</text>
+    <rect class="box" x="6" y="7" width="44" height="27"/>
+    <text class="lbl-s" x="28" y="11.4" text-anchor="middle">ONE JSON RESPONSE</text>
+    <text class="lbl-s" x="28" y="14.8" text-anchor="middle">onboarding_doc</text>
+    <text class="lbl-s" x="28" y="18.2" text-anchor="middle">agent_context</text>
+    <text class="lbl-s" x="28" y="21.6" text-anchor="middle">file_explanations_md</text>
+    <text class="lbl-s" x="28" y="25" text-anchor="middle">explanations</text>
+    <text class="lbl-s" x="28" y="28.4" text-anchor="middle">graph_data</text>
+    <text class="lbl-s" x="28" y="31.8" text-anchor="middle">complexity_report_json</text>
+
+    <line class="wa" x1="50" y1="20" x2="62.4" y2="20"/>
+    <text class="lbl-s" x="56" y="17.6" text-anchor="middle">RENDER</text>
+
+    <rect class="of" x="63" y="7" width="30" height="5.5"/><text class="lbl-s" x="78" y="10.9" text-anchor="middle">ONBOARDING TAB</text>
+    <rect class="of" x="63" y="15" width="30" height="5.5"/><text class="lbl-s" x="78" y="18.9" text-anchor="middle">AGENT CTX TAB</text>
+    <rect class="of" x="63" y="23" width="30" height="5.5"/><text class="lbl-s" x="78" y="26.9" text-anchor="middle">EXPLANATIONS</text>
+    <rect class="of" x="63" y="31" width="30" height="5.5"/><text class="lbl-s" x="78" y="34.9" text-anchor="middle">COMPLEXITY / GRAPH</text>
+    <rect class="of" x="99" y="7" width="30" height="29.5"/>
+    <text class="lbl-s" x="101" y="12.5">DOWNLOADS ARE</text>
+    <text class="lbl-s" x="101" y="16.5">BUILT IN THE</text>
+    <text class="lbl-s" x="101" y="20.5">BROWSER FROM A</text>
+    <text class="lbl-s" x="101" y="24.5">BLOB URL, THEN</text>
+    <text class="lbl-s" x="101" y="28.5">REVOKED. NO SERVER</text>
+    <text class="lbl-s" x="101" y="32.5">ROUND TRIP IS MADE.</text>
+
+    <line class="t" x1="135" y1="8" x2="135" y2="35"/>
+    <text class="lbl-s" x="138" y="12">THE CLIENT IS A</text>
+    <text class="lbl-s" x="138" y="16">PROJECTION OF THE</text>
+    <text class="lbl-s" x="138" y="20">SERVER RECORD. NO</text>
+    <text class="lbl-s" x="138" y="24">ANALYSIS RUNS IN</text>
+    <text class="lbl-s" x="138" y="28">THE BROWSER; IT</text>
+    <text class="lbl-s" x="138" y="32">ONLY FORMATS TEXT.</text>
+    <text class="code" x="176.6" y="5.2" text-anchor="end">WEB-902A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.9-2.</span>Single Payload, Client-Side Rendering and Download</figcaption>
+</figure>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">3.9.3</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 3.9-1. Client Runtime Constants</div>
+    <table class="dense">
+      <thead><tr><th>Item</th><th>Value</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>API origin</td><td class="v">VITE_API_URL or same origin</td><td class="v">App.tsx</td></tr>
+        <tr><td>Poll interval</td><td class="v">1,500 ms</td><td class="v">App.tsx</td></tr>
+        <tr><td>Demo tick</td><td class="v">2,200 ms</td><td class="v">App.tsx</td></tr>
+        <tr><td>Agents displayed</td><td class="v">7, server supplied</td><td class="v">/api/jobs/{id}</td></tr>
+        <tr><td>Result tabs</td><td class="v">6</td><td class="v">App.tsx</td></tr>
+        <tr><td>App version string</td><td class="v">1.1.0</td><td class="v">App.tsx</td></tr>
+        <tr><td>3D graph bundle</td><td class="v">lazy chunk</td><td class="v">React.lazy</td></tr>
+        <tr><td>Router dependency</td><td class="v">installed, unused</td><td class="v">package.json</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">CAUTION</span>
+      <p>The client trusts the server's agent list to describe concurrency. The API marks graph, complexity and retrieval as separate sequential phases even while their futures overlap, so the display understates parallelism. The progress percentage is therefore a presentation estimate, not a measured completion fraction.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>DISPLAY CHECK</span><span>OPERATOR</span></div>
+      <ol>
+        <li><span>1</span><span>SUBMIT - bad URL rejected</span></li>
+        <li><span>2</span><span>SUBMIT - duplicate job attaches via 409</span></li>
+        <li><span></span><span>&radic; POLL - seven agent rows update</span></li>
+        <li><span>3</span><span>OPEN - all six result tabs</span></li>
+        <li><span>4</span><span>VERIFY - downloads open offline</span></li>
+      </ol>
+    </div>
+  </div>
+</div>

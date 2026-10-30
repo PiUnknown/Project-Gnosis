@@ -1,0 +1,122 @@
+<section class="para">
+  <div class="num">5.2.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>The frontend is a Vite project nested inside the backend repository. Eight files under <i>src/</i> matter; one of them, <i>pages/ResultsPage.tsx</i>, is a complete earlier implementation that nothing imports. The rest is build configuration, brand imagery and an <i>imports</i> folder preserving the Figma hand-off; those archives are not compiled into the application but are retained as design provenance (figure 5.2-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 41.5" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Frontend module graph">
+    <rect class="panel" x="1.5" y="2" width="177" height="38"/>
+    <text class="lbl-s" x="3.4" y="5.2">FRONTEND MODULE GRAPH</text>
+
+    <rect class="box" x="6" y="8" width="26" height="8"/>
+    <text class="lbl-s" x="19" y="12" text-anchor="middle">index.html</text>
+    <text class="lbl-s" x="19" y="14.8" text-anchor="middle">META + ICONS</text>
+    <line class="wa" x1="19" y1="16" x2="19" y2="19.4"/>
+
+    <rect class="box" x="6" y="20" width="26" height="8"/>
+    <text class="lbl-s" x="19" y="24" text-anchor="middle">main.tsx</text>
+    <text class="lbl-s" x="19" y="26.8" text-anchor="middle">PROVIDERS</text>
+    <line class="wa" x1="32" y1="24" x2="41.4" y2="24"/>
+
+    <rect class="box" x="42" y="12" width="38" height="18"/>
+    <text class="lbl" x="61" y="16.8" text-anchor="middle">App.tsx</text>
+    <text class="lbl-s" x="61" y="20.4" text-anchor="middle">1,560 LINES</text>
+    <text class="lbl-s" x="61" y="23.8" text-anchor="middle">LANDING / PROGRESS</text>
+    <text class="lbl-s" x="61" y="27.2" text-anchor="middle">RESULTS / SIX TABS</text>
+
+    <line class="wa" x1="80" y1="15.5" x2="90.4" y2="15.5"/>
+    <line class="wa" x1="80" y1="28.5" x2="90.4" y2="28.5"/>
+
+    <rect class="of" x="91" y="10" width="38" height="11"/>
+    <text class="lbl-s" x="110" y="13.8" text-anchor="middle">DependencyGraph3D</text>
+    <text class="lbl-s" x="110" y="16.8" text-anchor="middle">LAZY WEBGL CHUNK</text>
+    <text class="lbl-s" x="110" y="19.8" text-anchor="middle">3d-force-graph</text>
+    <rect class="of" x="91" y="24" width="38" height="9"/>
+    <text class="lbl-s" x="110" y="27.8" text-anchor="middle">lib/download.ts</text>
+    <text class="lbl-s" x="110" y="31.2" text-anchor="middle">BLOB EXPORT</text>
+
+    <rect class="box" x="135" y="8" width="40" height="10"/>
+    <text class="lbl-s" x="155" y="11.6" text-anchor="middle">API ORIGIN (APP.TSX)</text>
+    <text class="lbl-s" x="155" y="14.4" text-anchor="middle">VITE_API_URL</text>
+    <text class="lbl-s" x="155" y="17.2" text-anchor="middle">/api/analyze + /api/jobs</text>
+    <rect class="box" x="135" y="21" width="40" height="10"/>
+    <text class="lbl-s" x="155" y="24.6" text-anchor="middle">TELEMETRY (MAIN.TSX)</text>
+    <text class="lbl-s" x="155" y="27.4" text-anchor="middle">POSTHOG / SENTRY</text>
+    <text class="lbl-s" x="155" y="30.2" text-anchor="middle">VERCEL ANALYTICS</text>
+    <rect class="gap" x="132" y="33.2" width="43" height="5.4"/>
+    <text class="lbl-s" x="153.5" y="37" text-anchor="middle">ResultsPage.tsx UNUSED</text>
+
+    <text class="lbl-s" x="6" y="37">index.css CARRIES THE WHOLE DESIGN SYSTEM; NO COMPONENT LIBRARY IS INSTALLED.</text>
+    <text class="code" x="176.6" y="5.2" text-anchor="end">CAT-521A</text>
+  </svg>
+  <figcaption><span class="n">Figure 5.2-1.</span>Compiled Frontend Modules and External Endpoints</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1mm">
+  <div class="num">5.2.2</div>
+  <div>
+    <h2>APPLICATION SOURCE AND CONFIGURATION.</h2>
+  </div>
+</section>
+
+<div class="tcap">Table 5.2-1. Frontend Source, Build and Deployment Files (empty lines excluded)</div>
+<table class="dense">
+  <thead><tr><th style="width:28%">File</th><th style="width:7%">Lines</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td>src/App.tsx</td><td class="v">1,560</td><td>All four screens, polling, six result tabs, inline design components</td></tr>
+    <tr><td>src/components/DependencyGraph3D.tsx</td><td class="v">203</td><td>WebGL force graph; nodes coloured by risk; resize handling</td></tr>
+    <tr><td>src/pages/ResultsPage.tsx</td><td class="v">762</td><td>Earlier results implementation; imported by nothing</td></tr>
+    <tr><td>src/index.css</td><td class="v">378</td><td>Design tokens, typography, layout, Markdown and scrollbar styling</td></tr>
+    <tr><td>src/types/api.ts</td><td class="v">87</td><td>Hand-written mirror of the Pydantic result contract</td></tr>
+    <tr><td>src/lib/download.ts</td><td class="v">37</td><td>Create, click and revoke a Blob download link</td></tr>
+    <tr><td>src/main.tsx</td><td class="v">32</td><td>Root render, Sentry initialisation, PostHog provider, analytics</td></tr>
+    <tr><td>src/vite-env.d.ts</td><td class="v">1</td><td>Vite client type reference</td></tr>
+    <tr><td>index.html</td><td class="v">43</td><td>Canonical URL, Open Graph and Twitter metadata, icons</td></tr>
+    <tr><td>vite.config.ts</td><td class="v">335</td><td>React and Tailwind plugins, aliases, dev proxy, Figma host shim</td></tr>
+    <tr><td>package.json</td><td class="v">38</td><td>Dependencies and four scripts; package name still <i>figma-make-app</i></td></tr>
+    <tr><td>package-lock.json</td><td class="v">lock</td><td>Resolved dependency tree; the only frontend lockfile</td></tr>
+    <tr><td>tsconfig.json</td><td class="v">23</td><td>Bundler resolution, strictness, JSX settings</td></tr>
+    <tr><td>vercel.json</td><td class="v">52</td><td>PostHog reverse proxy and security headers</td></tr>
+    <tr><td>.env.development / .env.production</td><td class="v">3 each</td><td>Analytics project key and ingest host; values not reproduced here</td></tr>
+    <tr><td>.figma/make/site.json</td><td class="v">3</td><td>Figma Make site descriptor</td></tr>
+  </tbody>
+</table>
+
+<div class="tcap" style="margin-top:1.4mm">Table 5.2-2. Public Assets (Size in KB)</div>
+<table class="dense">
+  <thead><tr><th>Asset</th><th style="width:7%">KB</th><th>Asset</th><th style="width:7%">KB</th></tr></thead>
+  <tbody>
+    <tr><td>favicon-16x16.png</td><td class="v">1</td><td>logo.png</td><td class="v">598</td></tr>
+    <tr><td>favicon-32x32.png</td><td class="v">1</td><td>logo_transparent.png</td><td class="v">696</td></tr>
+    <tr><td>favicon.ico</td><td class="v">2</td><td>logo_black.png</td><td class="v">69</td></tr>
+    <tr><td>apple-touch-icon.png</td><td class="v">14</td><td>logo_blue.png</td><td class="v">69</td></tr>
+    <tr><td>android-chrome-192x192.png</td><td class="v">15</td><td>logo_white.png</td><td class="v">69</td></tr>
+    <tr><td>android-chrome-512x512.png</td><td class="v">53</td><td>og-image.png</td><td class="v">148</td></tr>
+    <tr><td>og-image.jpg</td><td class="v">84</td><td>pitch_deck_logo.png</td><td class="v">69</td></tr>
+    <tr><td>"pitch deck logo.png"</td><td class="v">69</td><td>pitch_deck_logo_navy.png</td><td class="v">69</td></tr>
+    <tr><td>pitch_deck_logo_white.png</td><td class="v">69</td><td>pitch_deck_logo_navy_card.png</td><td class="v">99</td></tr>
+    <tr><td>pitch_deck_logo_paper.png</td><td class="v">98</td><td>&mdash;</td><td class="v">&mdash;</td></tr>
+  </tbody>
+</table>
+
+<div class="tcap" style="margin-top:1.4mm">Table 5.2-3. Import Archives and Vendored Browser Assets (empty lines excluded)</div>
+<table class="dense">
+  <thead><tr><th style="width:30%">Path</th><th style="width:8%">Lines</th><th style="width:12%">Size</th><th>Content</th></tr></thead>
+  <tbody>
+    <tr><td>src/imports/README.md</td><td class="v">405</td><td class="v">text</td><td>Earlier project readme preserved with the design hand-off</td></tr>
+    <tr><td>src/imports/PROJECT_SPEC.md</td><td class="v">369</td><td class="v">text</td><td>Earlier specification; differs from the root copy</td></tr>
+    <tr><td>src/imports/backend/api_main.py</td><td class="v">198</td><td class="v">text</td><td>Earlier API sketch; not imported by any runtime path</td></tr>
+    <tr><td>src/imports/backend/orchestrator_patch.py</td><td class="v">65</td><td class="v">text</td><td>Patch fragment from the initial build</td></tr>
+    <tr><td>src/imports/pasted_text/*.md</td><td class="v">754 ea.</td><td class="v">text</td><td>Two identical UI design transcripts</td></tr>
+    <tr><td>src/imports/image.png</td><td class="v">&mdash;</td><td class="v">1,913 KB</td><td>Large reference screenshot</td></tr>
+    <tr><td>src/imports/image-1.png</td><td class="v">&mdash;</td><td class="v">26 KB</td><td>Second reference screenshot</td></tr>
+    <tr><td>lib/vis-9.1.2/vis-network.min.js</td><td class="v">27</td><td class="v">458 KB</td><td>Graph engine used by generated pyvis HTML</td></tr>
+    <tr><td>lib/vis-9.1.2/vis-network.css</td><td class="v">1</td><td class="v">215 KB</td><td>Matching stylesheet</td></tr>
+    <tr><td>lib/tom-select/ (.js + .css)</td><td class="v">655</td><td class="v">53 KB</td><td>Select control required by pyvis templates</td></tr>
+    <tr><td>lib/bindings/utils.js</td><td class="v">175</td><td class="v">6 KB</td><td>pyvis browser helpers</td></tr>
+  </tbody>
+</table>
+

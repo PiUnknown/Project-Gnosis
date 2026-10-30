@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GN1A-03-BLOCK I-(1) PROJECT GNOSIS OPERATIONS HANDBOOK, page 3.8-1</title>
+<style>
+  @font-face { font-family: "Routed Gothic"; src: url("fonts/routed-gothic.ttf"); unicode-range: U+0000-0030, U+0032-FFFF; }
+  @font-face { font-family: "Routed Gothic Narrow"; src: url("fonts/routed-gothic-narrow.ttf"); unicode-range: U+0000-0030, U+0032-FFFF; }
+  @font-face { font-family: "Routed Gothic"; src: local("Helvetica Neue"), local("HelveticaNeue"), local("Arial"); unicode-range: U+0031; }
+  @font-face { font-family: "Routed Gothic Narrow"; src: local("Helvetica Neue"), local("HelveticaNeue"), local("Arial"); unicode-range: U+0031; }
+  @font-face { font-family: "Letter Gothic"; src: url("fonts/LetterGothicCode-R.ttf"); font-weight: 400; }
+  @font-face { font-family: "Letter Gothic"; src: url("fonts/LetterGothicCode-B.ttf"); font-weight: 700; }
+
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #8a8a86; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @media print { html, body { background: none; } }
+
+  :root {
+    --ink: #000000;
+    --paper: #fbfaf5;
+    --type: "Iowan Old Style", "Iowan", Georgia, serif;
+    --leroy: "Routed Gothic Narrow", "Routed Gothic", sans-serif;
+    --selectric: "Letter Gothic", "Courier", monospace;
+  }
+  @media print { :root { --paper: #ffffff; } }
+
+  .page {
+    position: relative; width: 210mm; height: 297mm; margin: 0 auto;
+    padding: 9mm 15mm 0 16mm; background: var(--paper); color: var(--ink);
+    font-family: var(--type); font-size: 8pt; line-height: 1.33;
+    letter-spacing: 0.055em; overflow: hidden;
+  }
+
+  .head { text-align: center; line-height: 1.25; }
+  .head .doc { font-weight: 700; font-size: 8.6pt; letter-spacing: 0.06em; }
+  .head .title { font-weight: 700; font-size: 8.6pt; letter-spacing: 0.08em; }
+  .head .part { margin-top: 2.2mm; font-size: 8.2pt; letter-spacing: 0.1em; }
+  .rule { height: 0; border-top: 1.5pt solid var(--ink); margin: 1.4mm -2mm 0; }
+
+  .foot { position: absolute; left: 16mm; right: 15mm; bottom: 8mm; }
+  .foot .rule { margin: 0 -2mm 1.6mm; }
+  .foot .sub { text-align: center; letter-spacing: 0.1em; font-size: 8.2pt; }
+  .foot .line { display: flex; align-items: baseline; justify-content: space-between; margin-top: 2.2mm; font-size: 8.2pt; }
+  .foot .fill { display: inline-block; border-bottom: 0.6pt solid var(--ink); text-align: center; padding: 0 1mm; font-size: 8.8pt; letter-spacing: 0.03em; }
+
+  .opener { text-align: center; letter-spacing: 0.12em; margin: 3.4mm 0 2mm; line-height: 1.6; }
+
+  .para { display: grid; grid-template-columns: 19mm 1fr; position: relative; }
+  .para .num { letter-spacing: 0.08em; }
+  .para h2, .para h3 { margin: 0 0 0.8mm; font: inherit; font-weight: 400; letter-spacing: 0.08em; }
+  .para h3 { text-decoration: underline; text-underline-offset: 1.6pt; text-decoration-thickness: 0.5pt; letter-spacing: 0.06em; }
+  .para p { margin: 0 0 1mm; text-indent: 9mm; text-align: left; }
+  .para p.flush { text-indent: 0; }
+  .para p.tight { margin-bottom: 0.4mm; }
+  .changebar { position: absolute; left: -9mm; width: 1.3mm; background: var(--ink); }
+  .nowrap { white-space: nowrap; }
+
+  figure { margin: 1.6mm 0 0; }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption { text-align: center; margin-top: 0.6mm; letter-spacing: 0.07em; }
+  figcaption .n { margin-right: 3mm; }
+
+  svg text { font-family: var(--leroy); fill: var(--ink); letter-spacing: 0.04px; }
+  svg .o    { fill: none; stroke: var(--ink); stroke-width: 0.42; stroke-linejoin: round; stroke-linecap: round; }
+  svg .of   { fill: var(--paper); stroke: var(--ink); stroke-width: 0.42; stroke-linejoin: round; }
+  svg .t    { fill: none; stroke: var(--ink); stroke-width: 0.17; stroke-linecap: round; }
+  svg .hid  { fill: none; stroke: var(--ink); stroke-width: 0.22; stroke-dasharray: 1.3 0.7; }
+  svg .cl   { fill: none; stroke: var(--ink); stroke-width: 0.16; stroke-dasharray: 5 0.8 0.9 0.8; }
+  svg .cut  { fill: none; stroke: var(--ink); stroke-width: 0.5; stroke-dasharray: 5 1 1 1; }
+  svg .ld   { fill: none; stroke: var(--ink); stroke-width: 0.16; marker-end: url(#nh-leader); }
+  svg .dim  { fill: none; stroke: var(--ink); stroke-width: 0.16; marker-start: url(#nh-dim); }
+  svg .w    { fill: none; stroke: var(--ink); stroke-width: 0.3; stroke-linejoin: round; }
+  svg .wa   { fill: none; stroke: var(--ink); stroke-width: 0.3; stroke-linejoin: round; marker-end: url(#nh-arrow); }
+  svg .box  { fill: var(--paper); stroke: var(--ink); stroke-width: 0.45; }
+  svg .panel{ fill: none; stroke: var(--ink); stroke-width: 0.3; stroke-dasharray: 2 1; }
+  svg .ev   { fill: none; stroke: var(--ink); stroke-width: 0.18; stroke-dasharray: 1 0.7; }
+  svg .vid  { fill: url(#nh-hatch); stroke: var(--ink); stroke-width: 0.35; }
+  svg .aud  { fill: var(--paper); stroke: var(--ink); stroke-width: 0.35; }
+  svg .gap  { fill: var(--paper); stroke: var(--ink); stroke-width: 0.35; stroke-dasharray: 0.6 0.5; }
+  svg .grain{ fill: url(#nh-dots); stroke: var(--ink); stroke-width: 0.35; }
+  svg .dot  { fill: var(--ink); }
+  svg .lbl   { font-size: 2.35px; }
+  svg .lbl-s { font-size: 2.05px; }
+  svg .lbl-b { font-size: 2.5px; font-family: "Routed Gothic", sans-serif; }
+  svg .code  { font-size: 2.4px; font-family: "Routed Gothic", sans-serif; }
+
+  .lower { display: grid; grid-template-columns: 1fr 64mm; column-gap: 6mm; margin-top: 2.8mm; }
+  .tcap { text-align: center; letter-spacing: 0.07em; margin: 0 0 0.8mm; }
+  table { width: 100%; border-collapse: collapse; font-size: 7.3pt; line-height: 1.2; }
+  th, td { border: 0.6pt solid var(--ink); padding: 0.35mm 1.6mm; text-align: left; vertical-align: top; font-weight: 400; }
+  thead th { text-align: center; letter-spacing: 0.1em; padding: 0.5mm 1.6mm; }
+  td.v { white-space: nowrap; }
+  table.dense { font-size: 6.9pt; line-height: 1.16; }
+  table.dense th, table.dense td { padding: 0.24mm 1.2mm; }
+
+  .notice { text-align: left; margin-bottom: 1.8mm; }
+  .notice .tag { display: block; text-align: center; letter-spacing: 0.18em; font-weight: 700; text-decoration: underline; text-underline-offset: 1.6pt; text-decoration-thickness: 0.6pt; margin-bottom: 0.8mm; }
+  .notice p { margin: 0; font-size: 7.4pt; line-height: 1.28; }
+
+  .card { border: 0.8pt solid var(--ink); font-family: var(--selectric); font-size: 7.1pt; line-height: 1.3; letter-spacing: 0; }
+  .card .bar { background: var(--ink); color: var(--paper); font-weight: 700; padding: 0.5mm 1.8mm; display: flex; justify-content: space-between; }
+  .card ol { list-style: none; margin: 0; padding: 0.8mm 1.8mm 1mm; }
+  .card li { display: grid; grid-template-columns: 3.2mm 1fr; white-space: pre; }
+
+  .tab { position: absolute; right: 0; top: 112mm; width: 8.5mm; height: 17mm; background: var(--ink); color: var(--paper);
+    font-family: "Routed Gothic", sans-serif; font-size: 8pt; letter-spacing: 0.08em; display: flex; align-items: center; justify-content: center; }
+
+  /* ---------- additions for this handbook ---------- */
+  .cover-title { text-align: center; margin-top: 22mm; }
+  .cover-title .kicker { font-family: var(--leroy); font-size: 9pt; letter-spacing: 0.28em; }
+  .cover-title .main { font-family: var(--leroy); font-weight: 700; font-size: 27pt; letter-spacing: 0.10em; line-height: 1.15; margin-top: 5mm; }
+  .cover-title .sub { font-family: var(--leroy); font-size: 11pt; letter-spacing: 0.20em; margin-top: 4mm; }
+  .cover-rule { border-top: 2.2pt solid var(--ink); margin: 8mm 8mm 0; }
+  .cover-abstract { margin: 7mm 12mm 0; text-align: left; }
+  .cover-abstract p { text-indent: 0; margin: 0 0 2.2mm; font-size: 9pt; line-height: 1.4; }
+  .cover-meta { margin: 7mm 12mm 0; }
+  .cover-meta table { font-size: 7.8pt; }
+  .cover-meta td { padding: 0.8mm 2mm; }
+
+  .listing { font-family: var(--selectric); font-size: 6.8pt; line-height: 1.34; letter-spacing: 0;
+    border: 0.6pt solid var(--ink); padding: 1.4mm 2mm; margin: 1.2mm 0 1.6mm; white-space: pre; overflow: hidden; }
+  .listing .c { font-style: italic; }
+  .caption { text-align: center; letter-spacing: 0.07em; margin: 0.4mm 0 1.4mm; font-size: 7.6pt; }
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; column-gap: 6mm; }
+  .threecol { display: grid; grid-template-columns: 1fr 1fr 1fr; column-gap: 4mm; }
+  .kv { width: 100%; }
+  .note { font-size: 7.2pt; line-height: 1.28; }
+  ul.tight, ol.tight { margin: 0.4mm 0 1mm 0; padding-left: 4.5mm; }
+  ul.tight li, ol.tight li { margin-bottom: 0.5mm; }
+  .center { text-align: center; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="nh-leader" viewBox="0 0 6 4" refX="5.6" refY="2" markerWidth="2.1" markerHeight="1.05" markerUnits="userSpaceOnUse" orient="auto" preserveAspectRatio="none"><path d="M0,0 L6,2 L0,4 Z" fill="#000"/></marker>
+    <marker id="nh-arrow" viewBox="0 0 6 4" refX="5.6" refY="2" markerWidth="2.4" markerHeight="1.3" markerUnits="userSpaceOnUse" orient="auto" preserveAspectRatio="none"><path d="M0,0 L6,2 L0,4 Z" fill="#000"/></marker>
+    <marker id="nh-dim" viewBox="0 0 6 4" refX="0" refY="2" markerWidth="2.2" markerHeight="0.95" markerUnits="userSpaceOnUse" orient="auto" preserveAspectRatio="none"><path d="M6,0 L0,2 L6,4 Z" fill="#000"/></marker>
+    <pattern id="nh-hatch" width="1.1" height="1.1" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="1.1" stroke="#000" stroke-width="0.2"/></pattern>
+    <pattern id="nh-bp" width="1.4" height="1.4" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="0.7" height="1.4" fill="#000"/></pattern>
+    <pattern id="nh-dots" width="1.3" height="1.3" patternUnits="userSpaceOnUse"><circle cx="0.32" cy="0.32" r="0.15" fill="#000"/><circle cx="0.97" cy="0.97" r="0.15" fill="#000"/></pattern>
+  </defs>
+</svg>
+
+<div class="page">
+
+  <header class="head">
+    <div class="doc">GN1A-03-BLOCK I-(1)</div>
+    <div class="title">PROJECT GNOSIS OPERATIONS HANDBOOK</div>
+    <div class="part">SYSTEMS DATA</div>
+    <div class="rule"></div>
+  </header>
+
+  <div class="tab">API</div>
+
+  <div class="opener">SECTION 3 &nbsp;&nbsp;&middot;&nbsp;&nbsp; SUBSECTION 3.8<br>
+    WEB API AND JOB CONTROL</div>
+
+<section class="para">
+  <div class="num">3.8.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>The web API is a thin scheduling and status surface. It validates a submission, refuses duplicate active work, measures the repository before accepting it, creates a job record, and hands the job to either Redis Queue or a local thread pool. Every response is derived from the job store; the API holds no analysis result in memory of its own. The one idea the reader must leave with is that acceptance and execution are separate, so a 202 means scheduled, not finished (figure 3.8-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 61.5" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Request validation and dispatch sequence">
+    <rect class="panel" x="1.5" y="2" width="177" height="57.5"/>
+    <text class="lbl-s" x="3.4" y="5.2">SUBMISSION GAUNTLET &mdash; POST /ANALYZE</text>
+
+    <rect class="box" x="5" y="10" width="25" height="14"/>
+    <text class="lbl-s" x="17.5" y="15.4" text-anchor="middle">BODY</text>
+    <text class="lbl-s" x="17.5" y="18.6" text-anchor="middle">PYDANTIC</text>
+    <text class="lbl-s" x="17.5" y="21.6" text-anchor="middle">422 ON FAIL</text>
+    <line class="wa" x1="30" y1="17" x2="38.4" y2="17"/>
+
+    <rect class="box" x="39" y="10" width="25" height="14"/>
+    <text class="lbl-s" x="51.5" y="15.4" text-anchor="middle">DEDUPE</text>
+    <text class="lbl-s" x="51.5" y="18.6" text-anchor="middle">SAME URL</text>
+    <text class="lbl-s" x="51.5" y="21.6" text-anchor="middle">409 IF ACTIVE</text>
+    <line class="wa" x1="64" y1="17" x2="72.4" y2="17"/>
+
+    <rect class="box" x="73" y="10" width="29" height="14"/>
+    <text class="lbl-s" x="87.5" y="15.4" text-anchor="middle">SIZE PROBE</text>
+    <text class="lbl-s" x="87.5" y="18.6" text-anchor="middle">TREE + FILTER</text>
+    <text class="lbl-s" x="87.5" y="21.6" text-anchor="middle">400 OVER 3,000</text>
+    <line class="wa" x1="102" y1="17" x2="110.4" y2="17"/>
+
+    <rect class="box" x="111" y="10" width="25" height="14"/>
+    <text class="lbl-s" x="123.5" y="15.4" text-anchor="middle">CREATE</text>
+    <text class="lbl-s" x="123.5" y="18.6" text-anchor="middle">JOB ID</text>
+    <text class="lbl-s" x="123.5" y="21.6" text-anchor="middle">QUEUED</text>
+    <line class="wa" x1="136" y1="17" x2="144.4" y2="17"/>
+
+    <rect class="box" x="145" y="10" width="28" height="14"/>
+    <text class="lbl-s" x="159" y="15.4" text-anchor="middle">DISPATCH</text>
+    <text class="lbl-s" x="159" y="18.6" text-anchor="middle">RQ OR THREAD</text>
+    <text class="lbl-s" x="159" y="21.6" text-anchor="middle">202 RETURN</text>
+
+    <rect class="panel" x="5" y="29" width="168" height="14"/>
+    <text class="lbl-s" x="7" y="32.2">DEDUPLICATION IS A LINEAR SCAN OF EVERY STORED JOB; THERE IS NO UNIQUE-URL INDEX.</text>
+    <text class="lbl-s" x="7" y="35.8">THE SIZE PROBE REPEATS WORK THAT INGESTION WILL DO AGAIN IN THE WORKER.</text>
+    <text class="lbl-s" x="7" y="39.4">THE PROBE USES THE SAME 3,000-FILE CEILING AS INGESTION BUT DOES NOT CACHE ITS TREE.</text>
+
+    <rect class="panel" x="5" y="45" width="168" height="12.5"/>
+    <text class="lbl-s" x="7" y="48.2">TWO ROUTE FAMILIES EXIST: /JOBS/... AND /API/JOBS/...</text>
+    <text class="lbl-s" x="7" y="51.8">STATUS: /JOBS/{ID} 404 IF UNKNOWN; /API/JOBS/{ID} 200 WITH ERROR BODY.</text>
+    <text class="lbl-s" x="7" y="55.4">RESULT: /JOBS/{ID}/RESULT 409 IF NOT READY; /API/.../RESULT 202.</text>
+    <text class="code" x="176.6" y="5.2" text-anchor="end">API-501A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.8-1.</span>Submission Validation and Dual Route Behaviour</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">3.8.2</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p>The request model accepts <i>repo_url</i>, <i>max_explanations</i> (0 to 100), <i>skip_llm</i>, <i>github_token</i>, <i>incremental</i> and an optional <i>options</i> dictionary that can override the four execution fields. The URL validator requires the substring <i>github.com</i> and at least three path segments; it does not reject a non-GitHub host that contains the string. After deduplication, the route fetches repository metadata and the full tree to count filtered files, rejecting more than 3,000. It then creates the record and dispatches it. Status routes read the record; result routes return it or an error.</p>
+  </div>
+</section>
+
+<section class="para">
+  <div class="num">3.8.2.1</div>
+  <div>
+    <h3>Synchronous Size Probe.</h3>
+    <p class="flush">The probe runs inside the request, not in the worker. A large repository therefore delays the 202 response by the duration of two GitHub calls plus filtering, and a GitHub outage becomes a 400 with the text "Failed to validate repository size". The probe is a guard against wasting a worker slot, not a security boundary.</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Job status transitions">
+    <rect class="panel" x="1.5" y="2" width="177" height="34"/>
+    <text class="lbl-s" x="3.4" y="5.2">JOB STATUS TRANSITIONS</text>
+    <rect class="box" x="8" y="10" width="24" height="9"/><text class="lbl-s" x="20" y="15.6" text-anchor="middle">QUEUED</text>
+    <line class="wa" x1="32" y1="14.5" x2="42.4" y2="14.5"/>
+    <text class="lbl-s" x="32.6" y="12.9">START</text>
+    <rect class="box" x="43" y="10" width="24" height="9"/><text class="lbl-s" x="55" y="15.6" text-anchor="middle">RUNNING</text>
+    <line class="wa" x1="67" y1="14.5" x2="77.4" y2="14.5"/>
+    <text class="lbl-s" x="67.6" y="12.9">FINISH</text>
+    <rect class="box" x="78" y="10" width="24" height="9"/><text class="lbl-s" x="90" y="15.6" text-anchor="middle">COMPLETE</text>
+    <line class="wa" x1="55" y1="19" x2="55" y2="26.4"/>
+    <text class="lbl-s" x="56.4" y="23">EXCEPTION</text>
+    <rect class="box" x="43" y="27" width="24" height="7"/><text class="lbl-s" x="55" y="31.8" text-anchor="middle">FAILED</text>
+    <line class="wa" x1="102" y1="14.5" x2="112.4" y2="14.5"/>
+    <text class="lbl-s" x="102.6" y="12.9">DELETE</text>
+    <rect class="box" x="113" y="10" width="22" height="9"/><text class="lbl-s" x="124" y="15.6" text-anchor="middle">GONE</text>
+    <text class="lbl-s" x="139" y="14.5">404 AFTER DELETE</text>
+    <text class="lbl-s" x="8" y="24">TERMINAL STATES DO NOT RE-ENTER RUNNING.</text>
+    <text class="lbl-s" x="100" y="24">DELETE ACCEPTED FROM ANY STATE</text>
+    <text class="lbl-s" x="70.5" y="31">FAILURE STORES TYPE + MESSAGE, NOT A TRACEBACK.</text>
+    <text class="code" x="176.6" y="34.0" text-anchor="end">API-502A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.8-2.</span>Stored Job Status Transitions</figcaption>
+</figure>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">3.8.3</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 3.8-1. HTTP Surface</div>
+    <table class="dense">
+      <thead><tr><th>Route</th><th>Success</th><th>Failure</th></tr></thead>
+      <tbody>
+        <tr><td>POST /analyze</td><td class="v">202 + job id</td><td class="v">400, 409, 422</td></tr>
+        <tr><td>GET /jobs/{id}</td><td class="v">200 record</td><td class="v">404</td></tr>
+        <tr><td>GET /api/jobs/{id}</td><td class="v">200 record</td><td class="v">200 error body</td></tr>
+        <tr><td>GET /jobs/{id}/result</td><td class="v">200 result</td><td class="v">404, 409, 500</td></tr>
+        <tr><td>GET /api/jobs/{id}/result</td><td class="v">200 result</td><td class="v">202, 404, 500</td></tr>
+        <tr><td>GET /jobs</td><td class="v">200 list</td><td class="v">&mdash;</td></tr>
+        <tr><td>DELETE /jobs/{id}</td><td class="v">204</td><td class="v">404</td></tr>
+        <tr><td>GET /health</td><td class="v">200 status</td><td class="v">&mdash;</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">CAUTION</span>
+      <p>CORS allows every origin with credentials enabled, while the frontend also defines a strict content policy. The two settings serve different layers and do not cancel each other. Any site can call this API from a browser; do not place it behind assumptions of origin isolation.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>API CHECK</span><span>OPERATOR</span></div>
+      <ol>
+        <li><span>1</span><span>GET - /health, read queue mode</span></li>
+        <li><span>2</span><span>POST - a small public repository</span></li>
+        <li><span></span><span>&radic; 202 - job id returned</span></li>
+        <li><span>3</span><span>POLL - /api/jobs/{id} advances</span></li>
+        <li><span>4</span><span>FETCH - result after complete</span></li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+
+  <footer class="foot">
+    <div class="rule"></div>
+    <div class="sub">SUBSYSTEM 8</div>
+    <div class="line">
+      <span>Mission <span class="fill" style="width:20mm">&nbsp;</span></span>
+      <span>Basic Date <span class="fill" style="width:30mm">25 JULY 2026</span></span>
+      <span>Change Date <span class="fill" style="width:30mm">16 OCTOBER 2026</span></span>
+      <span>Page <span class="fill" style="width:18mm">3.8-1</span></span>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  document.fonts.ready.then(() => {
+    const page = document.querySelector('.page')
+    const foot = page.querySelector('.foot')
+    let bottom = 0
+    for (const el of page.children) {
+      if (el === foot || el.classList.contains('tab')) continue
+      bottom = Math.max(bottom, el.getBoundingClientRect().bottom)
+    }
+    const free = (foot.getBoundingClientRect().top - bottom) * 25.4 / 96
+    document.documentElement.dataset.fit = free >= 0 ? `ok, ${free.toFixed(1)} mm free above the footer` : `OVERFLOW by ${(-free).toFixed(1)} mm`
+  })
+</script>
+
+</body>
+</html>

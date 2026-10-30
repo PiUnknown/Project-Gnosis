@@ -1,0 +1,116 @@
+<section class="para">
+  <div class="num">3.8.4</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>Job state lives in one of two backends behind a single <i>JobStore</i> interface. When <i>REDIS_URL</i> is set and reachable, records are JSON strings in Redis, the job list is a sorted set, and an indexed set tracks active jobs. Otherwise the same interface uses a module-level dictionary and a lock. The one idea the reader must leave with is that Redis mode is not merely persistence: it adds a concurrency protocol that memory mode does not need (figure 3.8-3).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 58" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Redis key layout and active index protocol">
+    <rect class="panel" x="1.5" y="2" width="86" height="54"/>
+    <text class="lbl-s" x="3.4" y="5.2">REDIS KEYS</text>
+    <rect class="box" x="6" y="8" width="74" height="8"/><text class="lbl-s" x="43" y="13.4" text-anchor="middle">GNOSIS:JOB:{ID} &mdash; JSON RECORD</text>
+    <rect class="box" x="6" y="18.5" width="74" height="8"/><text class="lbl-s" x="43" y="23.9" text-anchor="middle">GNOSIS:JOBS &mdash; SORTED SET BY TIME</text>
+    <rect class="box" x="6" y="29" width="74" height="8"/><text class="lbl-s" x="43" y="34.4" text-anchor="middle">GNOSIS:JOBS:ACTIVE &mdash; SET OF IDS</text>
+    <rect class="box" x="6" y="39.5" width="74" height="8"/><text class="lbl-s" x="43" y="44.9" text-anchor="middle">SENTINEL MEMBER ARMS THE INDEX</text>
+    <text class="lbl-s" x="6" y="52.6">MEMORY MODE: DICT + RLock, NO KEYS</text>
+
+    <rect class="panel" x="92" y="2" width="86" height="54"/>
+    <text class="lbl-s" x="93.4" y="5.2">WRITE PROTOCOL</text>
+    <rect class="box" x="95" y="8" width="80" height="7.5"/><text class="lbl-s" x="135" y="13" text-anchor="middle">WATCH RECORD + ACTIVE SET</text>
+    <line class="wa" x1="135" y1="15.5" x2="135" y2="18.3"/>
+    <rect class="box" x="95" y="18.5" width="80" height="7.5"/><text class="lbl-s" x="135" y="23.5" text-anchor="middle">READ, VERIFY, MUTATE</text>
+    <line class="wa" x1="135" y1="26" x2="135" y2="28.8"/>
+    <rect class="box" x="95" y="29" width="80" height="7.5"/><text class="lbl-s" x="135" y="34" text-anchor="middle">MULTI / EXEC &mdash; ATOMIC</text>
+    <text class="lbl-s" x="95" y="41.4">ON WATCH FAILURE, RETRY FROM THE TOP;</text>
+    <text class="lbl-s" x="95" y="44.8">MAX 5 ATTEMPTS, THEN LOG AND LEAVE UNCHANGED.</text>
+    <text class="code" x="176.6" y="54.0" text-anchor="end">API-503A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.8-3.</span>Redis Key Layout and Optimistic Write Loop</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">3.8.5</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p><i>create</i> builds a queued record, writes it, adds its identifier to the list and, in Redis mode, to the active set. <i>start</i> and every phase update re-read the record inside a WATCH transaction, refuse to modify a terminal record, update fields, and remove the identifier from the active set on finish, fail or delete. If a competing writer changes the watched keys, the loop retries up to five times and then logs an error without partial writes. <i>active_count</i> reads the set cardinality, excluding the sentinel, and falls back to scanning records when the index is unarmed.</p>
+  </div>
+</section>
+
+<section class="para">
+  <div class="num">3.8.5.1</div>
+  <div>
+    <h3>Index Reconciliation.</h3>
+    <p class="flush">The active index can drift if a record expires, a process dies between two writes, or an operator clears a key. <i>rebuild_active_index</i> scans job records, rewrites the set, and arms it only after a complete pass. The migration command <i>job_store_migrate.py</i> refuses to arm unless the operator passes <i>--arm --confirm-all-writers-updated</i>; this prevents an old writer that does not maintain the set from corrupting the count.</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Worker process responsibilities">
+    <rect class="panel" x="1.5" y="2" width="177" height="36"/>
+    <text class="lbl-s" x="3.4" y="5.2">WORKER PROCESS &mdash; SEPARATE FROM API</text>
+    <rect class="box" x="7" y="8" width="40" height="13"/>
+    <text class="lbl-s" x="27" y="13.4" text-anchor="middle">HEALTH SERVER</text>
+    <text class="lbl-s" x="27" y="16.6" text-anchor="middle">PORT, DEFAULT 8000</text>
+    <text class="lbl-s" x="27" y="19.6" text-anchor="middle">ALWAYS RETURNS OK</text>
+    <line class="wa" x1="47" y1="14.5" x2="56.4" y2="14.5"/>
+    <rect class="box" x="57" y="8" width="38" height="13"/>
+    <text class="lbl-s" x="76" y="13.4" text-anchor="middle">REDIS PING</text>
+    <text class="lbl-s" x="76" y="16.6" text-anchor="middle">EXIT 1 IF DOWN</text>
+    <text class="lbl-s" x="76" y="19.6" text-anchor="middle">LOUD FAILURE</text>
+    <line class="wa" x1="95" y1="14.5" x2="104.4" y2="14.5"/>
+    <rect class="box" x="105" y="8" width="38" height="13"/>
+    <text class="lbl-s" x="124" y="13.4" text-anchor="middle">RQ WORKER</text>
+    <text class="lbl-s" x="124" y="16.6" text-anchor="middle">QUEUE GNOSIS_JOBS</text>
+    <text class="lbl-s" x="124" y="19.6" text-anchor="middle">FOREGROUND LOOP</text>
+    <line class="wa" x1="143" y1="14.5" x2="152.4" y2="14.5"/>
+    <rect class="box" x="153" y="8" width="20" height="13"/>
+    <text class="lbl-s" x="163" y="13.4" text-anchor="middle">PIPELINE</text>
+    <text class="lbl-s" x="163" y="16.6" text-anchor="middle">RUNNER</text>
+    <text class="lbl-s" x="163" y="19.6" text-anchor="middle">7 STAGES</text>
+    <text class="lbl-s" x="7" y="28.6">THE HEALTH ENDPOINT DOES NOT TEST REDIS, THE QUEUE OR THE PIPELINE.</text>
+    <text class="lbl-s" x="7" y="33">A LIVE WORKER CAN STILL BE IDLE; INSPECT QUEUE DEPTH, NOT ONLY HEALTH.</text>
+    <text class="code" x="176.6" y="36.0" text-anchor="end">API-504A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.8-4.</span>Worker Process and Its Health Surface</figcaption>
+</figure>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">3.8.6</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 3.8-2. Store, Queue and Worker Settings</div>
+    <table class="dense">
+      <thead><tr><th>Setting</th><th>Default</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td>REDIS_URL</td><td class="v">unset</td><td>Selects memory mode when absent</td></tr>
+        <tr><td>RQ_QUEUE_NAME</td><td class="v">gnosis_jobs</td><td>Queue consumed by worker</td></tr>
+        <tr><td>JOB_TIMEOUT_SECONDS</td><td class="v">1800</td><td>RQ execution limit</td></tr>
+        <tr><td>JOB_TTL_SECONDS</td><td class="v">86400 / 0</td><td>RQ result TTL; store record TTL is 0</td></tr>
+        <tr><td>WATCH_MAX_ATTEMPTS</td><td class="v">5</td><td>Optimistic write retries</td></tr>
+        <tr><td>ACTIVE_INDEX_SENTINEL</td><td class="v">fixed string</td><td>Marks an armed index</td></tr>
+        <tr><td>Worker PORT</td><td class="v">8000</td><td>Health listener</td></tr>
+        <tr><td>Local executor</td><td class="v">2 threads</td><td>Fallback concurrency</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">CAUTION</span>
+      <p>Queue results expire after 86,400 seconds, but completed job records have no expiry unless <i>JOB_TTL_SECONDS</i> is also set in the API process. With the documented default the two layers diverge: the record survives while the RQ result is gone. Choose one retention policy.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>STORE CHECK</span><span>OPERATOR</span></div>
+      <ol>
+        <li><span>1</span><span>READ - /health queue_mode</span></li>
+        <li><span>2</span><span>CONFIRM - redis_connected true</span></li>
+        <li><span></span><span>&radic; DEPTH - worker draining</span></li>
+        <li><span>3</span><span>CREATE - job reaches running</span></li>
+        <li><span>4</span><span>VERIFY - active count returns to zero</span></li>
+      </ol>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,136 @@
+<section class="para">
+  <div class="num">1.2.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>Project Gnosis converts an unfamiliar public GitHub repository into a reading aid. A user submits a repository address; the system fetches a filtered copy of its text files, parses them into symbols, measures their structural weight, and returns a document that names the entry points, the risky files and a safe reading order. The system never executes the target repository (figure 1.2-1).</p>
+    <p>The boundary is deliberately narrow. Gnosis reads source text and repository metadata. It does not build, run, test, patch or deploy the analysed project, and it cannot see a private repository unless the caller supplies a token through the API. Its output is a snapshot of one branch at one commit; it does not update when the repository changes.</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 44" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Repository text enters a seven-stage pipeline and leaves as documents">
+    <rect class="panel" x="1.5" y="2" width="177" height="40"/>
+    <text class="lbl-s" x="3.4" y="5.2">INFORMATION FLOW &mdash; READ ONLY</text>
+
+    <rect class="box" x="5" y="9" width="30" height="25"/>
+    <text class="lbl" x="20" y="15.6" text-anchor="middle">GITHUB</text>
+    <text class="lbl-s" x="20" y="19" text-anchor="middle">TREE + RAW</text>
+    <text class="lbl-s" x="20" y="22" text-anchor="middle">TEXT FILES</text>
+    <text class="lbl-s" x="20" y="25" text-anchor="middle">NO EXECUTION</text>
+    <line class="wa" x1="35" y1="21.5" x2="44.4" y2="21.5"/>
+    <text class="lbl-s" x="36.2" y="19.9">HTTP</text>
+
+    <rect class="box" x="45" y="9" width="52" height="25"/>
+    <text class="lbl" x="71" y="15.4" text-anchor="middle">SEVEN STAGES</text>
+    <text class="lbl-s" x="71" y="18.8" text-anchor="middle">1 INGEST &rarr; 2 PARSE</text>
+    <text class="lbl-s" x="71" y="21.8" text-anchor="middle">3 GRAPH / 4 SCORE / 5 RAG</text>
+    <text class="lbl-s" x="71" y="24.8" text-anchor="middle">IN PARALLEL, THEN</text>
+    <text class="lbl-s" x="71" y="27.8" text-anchor="middle">6 EXPLAIN &rarr; 7 DOCUMENT</text>
+    <line class="wa" x1="97" y1="21.5" x2="106.4" y2="21.5"/>
+    <text class="lbl-s" x="98" y="19.9">STATE</text>
+
+    <rect class="box" x="107" y="9" width="30" height="25"/>
+    <text class="lbl" x="122" y="15.6" text-anchor="middle">DOCUMENTS</text>
+    <text class="lbl-s" x="122" y="19" text-anchor="middle">ONBOARDING.MD</text>
+    <text class="lbl-s" x="122" y="22" text-anchor="middle">AGENT_CONTEXT.MD</text>
+    <text class="lbl-s" x="122" y="25" text-anchor="middle">JSON + HTML</text>
+    <line class="wa" x1="137" y1="21.5" x2="146.4" y2="21.5"/>
+    <text class="lbl-s" x="138" y="19.9">RETURN</text>
+
+    <rect class="box" x="147" y="9" width="26" height="25"/>
+    <text class="lbl" x="160" y="15.8" text-anchor="middle">READER</text>
+    <text class="lbl-s" x="160" y="19.2" text-anchor="middle">WEB SPA</text>
+    <text class="lbl-s" x="160" y="22.2" text-anchor="middle">CLI OUTPUT</text>
+    <text class="lbl-s" x="160" y="25.2" text-anchor="middle">LLM CONTEXT</text>
+
+    <line class="t" x1="5" y1="36" x2="173" y2="36"/>
+    <text class="lbl-s" x="7" y="39.6">BOUNDARY:</text>
+    <text class="lbl-s" x="26" y="39.6">READS TEXT AND METADATA ONLY</text>
+    <text class="lbl-s" x="94" y="39.6">NEVER BUILDS OR RUNS THE TARGET</text>
+    <text class="code" x="176.6" y="40.0" text-anchor="end">GEN-502A</text>
+  </svg>
+  <figcaption><span class="n">Figure 1.2-1.</span>Input, Seven-Stage Transformation and Output</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.4mm">
+  <div class="num">1.2.2</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p>Stage 1 lists every path on the default branch, keeps recognised source and configuration extensions, then fetches the raw text of each file. Stage 2 parses each file with a tree-sitter grammar and records functions, classes, imports and docstrings. Stages 3, 4 and 5 run concurrently: the graph resolves internal imports, the scorer computes cyclomatic complexity, and the retrieval stage chunks and embeds the code. Stage 6 selects the most important files and asks a hosted model to explain them; stage 7 assembles the results into Markdown and JSON (figure 1.2-2).</p>
+  </div>
+</section>
+
+<section class="para">
+  <div class="num">1.2.2.1</div>
+  <div>
+    <h3>Repository Sizing.</h3>
+    <p class="flush">A repository is classified by the number of files that survive filtering. At most <span class="nowrap">300</span> files is FULL; up to <span class="nowrap">1,000</span> is FULL (WARNING); up to <span class="nowrap">3,000</span> is SAMPLED. The API rejects anything above 3,000 before a job is created; the CLI caps the manifest at 3,000 and continues. Sorting is by path depth, then alphabetically, so shallow files survive a cap first.</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Four repository size tiers with file counts">
+    <rect class="panel" x="1.5" y="2" width="177" height="34"/>
+    <text class="lbl-s" x="3.4" y="5.2">SIZE TIERS &mdash; FILES AFTER FILTERING</text>
+    <line class="w" x1="14" y1="19" x2="168" y2="19"/>
+    <line class="t" x1="14" y1="16" x2="14" y2="22"/><line class="t" x1="62" y1="16" x2="62" y2="22"/>
+    <line class="t" x1="114" y1="16" x2="114" y2="22"/><line class="t" x1="160" y1="16" x2="160" y2="22"/>
+    <text class="lbl-s" x="14" y="14.8" text-anchor="middle">0</text>
+    <text class="lbl-s" x="62" y="14.8" text-anchor="middle">300</text>
+    <text class="lbl-s" x="114" y="14.8" text-anchor="middle">1,000</text>
+    <text class="lbl-s" x="160" y="14.8" text-anchor="middle">3,000</text>
+
+    <rect class="aud" x="14" y="22.2" width="48" height="4.6"/>
+    <rect class="vid" x="62" y="22.2" width="52" height="4.6"/>
+    <rect class="gap" x="114" y="22.2" width="46" height="4.6"/>
+    <rect class="grain" x="160" y="22.2" width="10" height="4.6"/>
+
+    <text class="lbl-s" x="38" y="32" text-anchor="middle">FULL</text>
+    <text class="lbl-s" x="88" y="32" text-anchor="middle">FULL (WARNING)</text>
+    <text class="lbl-s" x="137" y="32" text-anchor="middle">SAMPLED / CAPPED</text>
+    <text class="lbl-s" x="165" y="32" text-anchor="middle">REJECT</text>
+    <text class="lbl-s" x="14" y="9">CLI: ALL FOUR PATHS RUN</text>
+    <text class="lbl-s" x="90" y="9">API: &gt;3,000 RETURNS HTTP 400</text>
+    <text class="code" x="176.6" y="5.2" text-anchor="end">GEN-503A</text>
+  </svg>
+  <figcaption><span class="n">Figure 1.2-2.</span>Repository Size Tiers and Enforcement Point (band widths not to scale)</figcaption>
+</figure>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">1.2.3</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 1.2-1. Boundary and Sizing Parameters</div>
+    <table class="dense">
+      <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Full-analysis ceiling</td><td class="v">300 files (env MAX_FULL_ANALYSIS_FILES)</td></tr>
+        <tr><td>Warning ceiling</td><td class="v">1,000 files (MAX_WARNING_ANALYSIS_FILES)</td></tr>
+        <tr><td>Sampled / ingestion cap</td><td class="v">3,000 files (MAX_SAMPLED_ANALYSIS_FILES)</td></tr>
+        <tr><td>Per-file size ceiling</td><td class="v">150,000 bytes</td></tr>
+        <tr><td>Accepted extensions</td><td class="v">18, from .py to .md</td></tr>
+        <tr><td>Explanation cap</td><td class="v">20 files default; 0&ndash;100 allowed</td></tr>
+        <tr><td>Output languages</td><td class="v">8 parsed; 8 scored</td></tr>
+        <tr><td>Repository write access</td><td class="v">None</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">CAUTION</span>
+      <p>A sampled run is not a whole-repository verdict. Only the first 3,000 filtered paths, sorted by depth, are read. Files that are not ingested cannot appear in the graph, the scores or the document. The header records the mode; the reader must not generalise from a sample.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>SCOPE CHECK</span><span>REVIEWER</span></div>
+      <ol>
+        <li><span>1</span><span>CONFIRM - public URL, one branch</span></li>
+        <li><span>2</span><span>CONFIRM - text only, no target build</span></li>
+        <li><span>3</span><span>CONFIRM - no private repo without token</span></li>
+        <li><span></span><span>&radic; MODE - Full, Warning or Sampled</span></li>
+        <li><span>4</span><span>CONFIRM - output is a snapshot</span></li>
+      </ol>
+    </div>
+  </div>
+</div>

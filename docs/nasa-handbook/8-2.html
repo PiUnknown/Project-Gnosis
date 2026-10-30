@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GN1A-03-BLOCK I-(1) PROJECT GNOSIS OPERATIONS HANDBOOK, page 8.2-1</title>
+<style>
+  @font-face { font-family: "Routed Gothic"; src: url("fonts/routed-gothic.ttf"); unicode-range: U+0000-0030, U+0032-FFFF; }
+  @font-face { font-family: "Routed Gothic Narrow"; src: url("fonts/routed-gothic-narrow.ttf"); unicode-range: U+0000-0030, U+0032-FFFF; }
+  @font-face { font-family: "Routed Gothic"; src: local("Helvetica Neue"), local("HelveticaNeue"), local("Arial"); unicode-range: U+0031; }
+  @font-face { font-family: "Routed Gothic Narrow"; src: local("Helvetica Neue"), local("HelveticaNeue"), local("Arial"); unicode-range: U+0031; }
+  @font-face { font-family: "Letter Gothic"; src: url("fonts/LetterGothicCode-R.ttf"); font-weight: 400; }
+  @font-face { font-family: "Letter Gothic"; src: url("fonts/LetterGothicCode-B.ttf"); font-weight: 700; }
+
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #8a8a86; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @media print { html, body { background: none; } }
+
+  :root {
+    --ink: #000000;
+    --paper: #fbfaf5;
+    --type: "Iowan Old Style", "Iowan", Georgia, serif;
+    --leroy: "Routed Gothic Narrow", "Routed Gothic", sans-serif;
+    --selectric: "Letter Gothic", "Courier", monospace;
+  }
+  @media print { :root { --paper: #ffffff; } }
+
+  .page {
+    position: relative; width: 210mm; height: 297mm; margin: 0 auto;
+    padding: 9mm 15mm 0 16mm; background: var(--paper); color: var(--ink);
+    font-family: var(--type); font-size: 8pt; line-height: 1.33;
+    letter-spacing: 0.055em; overflow: hidden;
+  }
+
+  .head { text-align: center; line-height: 1.25; }
+  .head .doc { font-weight: 700; font-size: 8.6pt; letter-spacing: 0.06em; }
+  .head .title { font-weight: 700; font-size: 8.6pt; letter-spacing: 0.08em; }
+  .head .part { margin-top: 2.2mm; font-size: 8.2pt; letter-spacing: 0.1em; }
+  .rule { height: 0; border-top: 1.5pt solid var(--ink); margin: 1.4mm -2mm 0; }
+
+  .foot { position: absolute; left: 16mm; right: 15mm; bottom: 8mm; }
+  .foot .rule { margin: 0 -2mm 1.6mm; }
+  .foot .sub { text-align: center; letter-spacing: 0.1em; font-size: 8.2pt; }
+  .foot .line { display: flex; align-items: baseline; justify-content: space-between; margin-top: 2.2mm; font-size: 8.2pt; }
+  .foot .fill { display: inline-block; border-bottom: 0.6pt solid var(--ink); text-align: center; padding: 0 1mm; font-size: 8.8pt; letter-spacing: 0.03em; }
+
+  .opener { text-align: center; letter-spacing: 0.12em; margin: 3.4mm 0 2mm; line-height: 1.6; }
+
+  .para { display: grid; grid-template-columns: 19mm 1fr; position: relative; }
+  .para .num { letter-spacing: 0.08em; }
+  .para h2, .para h3 { margin: 0 0 0.8mm; font: inherit; font-weight: 400; letter-spacing: 0.08em; }
+  .para h3 { text-decoration: underline; text-underline-offset: 1.6pt; text-decoration-thickness: 0.5pt; letter-spacing: 0.06em; }
+  .para p { margin: 0 0 1mm; text-indent: 9mm; text-align: left; }
+  .para p.flush { text-indent: 0; }
+  .para p.tight { margin-bottom: 0.4mm; }
+  .changebar { position: absolute; left: -9mm; width: 1.3mm; background: var(--ink); }
+  .nowrap { white-space: nowrap; }
+
+  figure { margin: 1.6mm 0 0; }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption { text-align: center; margin-top: 0.6mm; letter-spacing: 0.07em; }
+  figcaption .n { margin-right: 3mm; }
+
+  svg text { font-family: var(--leroy); fill: var(--ink); letter-spacing: 0.04px; }
+  svg .o    { fill: none; stroke: var(--ink); stroke-width: 0.42; stroke-linejoin: round; stroke-linecap: round; }
+  svg .of   { fill: var(--paper); stroke: var(--ink); stroke-width: 0.42; stroke-linejoin: round; }
+  svg .t    { fill: none; stroke: var(--ink); stroke-width: 0.17; stroke-linecap: round; }
+  svg .hid  { fill: none; stroke: var(--ink); stroke-width: 0.22; stroke-dasharray: 1.3 0.7; }
+  svg .cl   { fill: none; stroke: var(--ink); stroke-width: 0.16; stroke-dasharray: 5 0.8 0.9 0.8; }
+  svg .cut  { fill: none; stroke: var(--ink); stroke-width: 0.5; stroke-dasharray: 5 1 1 1; }
+  svg .ld   { fill: none; stroke: var(--ink); stroke-width: 0.16; marker-end: url(#nh-leader); }
+  svg .dim  { fill: none; stroke: var(--ink); stroke-width: 0.16; marker-start: url(#nh-dim); }
+  svg .w    { fill: none; stroke: var(--ink); stroke-width: 0.3; stroke-linejoin: round; }
+  svg .wa   { fill: none; stroke: var(--ink); stroke-width: 0.3; stroke-linejoin: round; marker-end: url(#nh-arrow); }
+  svg .box  { fill: var(--paper); stroke: var(--ink); stroke-width: 0.45; }
+  svg .panel{ fill: none; stroke: var(--ink); stroke-width: 0.3; stroke-dasharray: 2 1; }
+  svg .ev   { fill: none; stroke: var(--ink); stroke-width: 0.18; stroke-dasharray: 1 0.7; }
+  svg .vid  { fill: url(#nh-hatch); stroke: var(--ink); stroke-width: 0.35; }
+  svg .aud  { fill: var(--paper); stroke: var(--ink); stroke-width: 0.35; }
+  svg .gap  { fill: var(--paper); stroke: var(--ink); stroke-width: 0.35; stroke-dasharray: 0.6 0.5; }
+  svg .grain{ fill: url(#nh-dots); stroke: var(--ink); stroke-width: 0.35; }
+  svg .dot  { fill: var(--ink); }
+  svg .lbl   { font-size: 2.35px; }
+  svg .lbl-s { font-size: 2.05px; }
+  svg .lbl-b { font-size: 2.5px; font-family: "Routed Gothic", sans-serif; }
+  svg .code  { font-size: 2.4px; font-family: "Routed Gothic", sans-serif; }
+
+  .lower { display: grid; grid-template-columns: 1fr 64mm; column-gap: 6mm; margin-top: 2.8mm; }
+  .tcap { text-align: center; letter-spacing: 0.07em; margin: 0 0 0.8mm; }
+  table { width: 100%; border-collapse: collapse; font-size: 7.3pt; line-height: 1.2; }
+  th, td { border: 0.6pt solid var(--ink); padding: 0.35mm 1.6mm; text-align: left; vertical-align: top; font-weight: 400; }
+  thead th { text-align: center; letter-spacing: 0.1em; padding: 0.5mm 1.6mm; }
+  td.v { white-space: nowrap; }
+  table.dense { font-size: 6.9pt; line-height: 1.16; }
+  table.dense th, table.dense td { padding: 0.24mm 1.2mm; }
+
+  .notice { text-align: left; margin-bottom: 1.8mm; }
+  .notice .tag { display: block; text-align: center; letter-spacing: 0.18em; font-weight: 700; text-decoration: underline; text-underline-offset: 1.6pt; text-decoration-thickness: 0.6pt; margin-bottom: 0.8mm; }
+  .notice p { margin: 0; font-size: 7.4pt; line-height: 1.28; }
+
+  .card { border: 0.8pt solid var(--ink); font-family: var(--selectric); font-size: 7.1pt; line-height: 1.3; letter-spacing: 0; }
+  .card .bar { background: var(--ink); color: var(--paper); font-weight: 700; padding: 0.5mm 1.8mm; display: flex; justify-content: space-between; }
+  .card ol { list-style: none; margin: 0; padding: 0.8mm 1.8mm 1mm; }
+  .card li { display: grid; grid-template-columns: 3.2mm 1fr; white-space: pre; }
+
+  .tab { position: absolute; right: 0; top: 112mm; width: 8.5mm; height: 17mm; background: var(--ink); color: var(--paper);
+    font-family: "Routed Gothic", sans-serif; font-size: 8pt; letter-spacing: 0.08em; display: flex; align-items: center; justify-content: center; }
+
+  /* ---------- additions for this handbook ---------- */
+  .cover-title { text-align: center; margin-top: 22mm; }
+  .cover-title .kicker { font-family: var(--leroy); font-size: 9pt; letter-spacing: 0.28em; }
+  .cover-title .main { font-family: var(--leroy); font-weight: 700; font-size: 27pt; letter-spacing: 0.10em; line-height: 1.15; margin-top: 5mm; }
+  .cover-title .sub { font-family: var(--leroy); font-size: 11pt; letter-spacing: 0.20em; margin-top: 4mm; }
+  .cover-rule { border-top: 2.2pt solid var(--ink); margin: 8mm 8mm 0; }
+  .cover-abstract { margin: 7mm 12mm 0; text-align: left; }
+  .cover-abstract p { text-indent: 0; margin: 0 0 2.2mm; font-size: 9pt; line-height: 1.4; }
+  .cover-meta { margin: 7mm 12mm 0; }
+  .cover-meta table { font-size: 7.8pt; }
+  .cover-meta td { padding: 0.8mm 2mm; }
+
+  .listing { font-family: var(--selectric); font-size: 6.8pt; line-height: 1.34; letter-spacing: 0;
+    border: 0.6pt solid var(--ink); padding: 1.4mm 2mm; margin: 1.2mm 0 1.6mm; white-space: pre; overflow: hidden; }
+  .listing .c { font-style: italic; }
+  .caption { text-align: center; letter-spacing: 0.07em; margin: 0.4mm 0 1.4mm; font-size: 7.6pt; }
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; column-gap: 6mm; }
+  .threecol { display: grid; grid-template-columns: 1fr 1fr 1fr; column-gap: 4mm; }
+  .kv { width: 100%; }
+  .note { font-size: 7.2pt; line-height: 1.28; }
+  ul.tight, ol.tight { margin: 0.4mm 0 1mm 0; padding-left: 4.5mm; }
+  ul.tight li, ol.tight li { margin-bottom: 0.5mm; }
+  .center { text-align: center; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="nh-leader" viewBox="0 0 6 4" refX="5.6" refY="2" markerWidth="2.1" markerHeight="1.05" markerUnits="userSpaceOnUse" orient="auto" preserveAspectRatio="none"><path d="M0,0 L6,2 L0,4 Z" fill="#000"/></marker>
+    <marker id="nh-arrow" viewBox="0 0 6 4" refX="5.6" refY="2" markerWidth="2.4" markerHeight="1.3" markerUnits="userSpaceOnUse" orient="auto" preserveAspectRatio="none"><path d="M0,0 L6,2 L0,4 Z" fill="#000"/></marker>
+    <marker id="nh-dim" viewBox="0 0 6 4" refX="0" refY="2" markerWidth="2.2" markerHeight="0.95" markerUnits="userSpaceOnUse" orient="auto" preserveAspectRatio="none"><path d="M6,0 L0,2 L6,4 Z" fill="#000"/></marker>
+    <pattern id="nh-hatch" width="1.1" height="1.1" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="1.1" stroke="#000" stroke-width="0.2"/></pattern>
+    <pattern id="nh-bp" width="1.4" height="1.4" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="0.7" height="1.4" fill="#000"/></pattern>
+    <pattern id="nh-dots" width="1.3" height="1.3" patternUnits="userSpaceOnUse"><circle cx="0.32" cy="0.32" r="0.15" fill="#000"/><circle cx="0.97" cy="0.97" r="0.15" fill="#000"/></pattern>
+  </defs>
+</svg>
+
+<div class="page">
+
+  <header class="head">
+    <div class="doc">GN1A-03-BLOCK I-(1)</div>
+    <div class="title">PROJECT GNOSIS OPERATIONS HANDBOOK</div>
+    <div class="part">SYSTEMS DATA</div>
+    <div class="rule"></div>
+  </header>
+
+  <div class="tab">VER</div>
+
+  <div class="opener">SECTION 8 &nbsp;&nbsp;&middot;&nbsp;&nbsp; SUBSECTION 8.2<br>
+    SOURCE VERIFICATION AND OPEN ITEMS</div>
+
+<section class="para">
+  <div class="num">8.2.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>This appendix closes the evidence trail. Every substantive claim in the handbook can be traced to a file, a test result or a named absence. No live deployment, remote repository, paid model call or production database was inspected. Where the tree cannot answer a question, the question is recorded rather than guessed (figure 8.2-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 37" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Verification procedure">
+    <rect class="panel" x="1.5" y="2" width="177" height="34.5"/>
+    <text class="lbl-s" x="3.4" y="5.2">VERIFICATION PROCEDURE APPLIED TO EVERY CLAIM</text>
+
+    <rect class="box" x="5" y="9" width="28" height="13"/>
+    <text class="lbl-s" x="19" y="14" text-anchor="middle">CLAIM</text>
+    <text class="lbl-s" x="19" y="17.6" text-anchor="middle">FROM RECORD</text>
+    <text class="lbl-s" x="19" y="21.2" text-anchor="middle">OR QUESTION</text>
+    <line class="wa" x1="33" y1="15.5" x2="42.4" y2="15.5"/>
+
+    <rect class="box" x="43" y="9" width="34" height="13"/>
+    <text class="lbl-s" x="60" y="14" text-anchor="middle">LOCATE</text>
+    <text class="lbl-s" x="60" y="17.6" text-anchor="middle">FILE AND LINE</text>
+    <text class="lbl-s" x="60" y="21.2" text-anchor="middle">OR TEST RESULT</text>
+    <line class="wa" x1="77" y1="15.5" x2="86.4" y2="15.5"/>
+
+    <rect class="box" x="87" y="9" width="34" height="13"/>
+    <text class="lbl-s" x="104" y="14" text-anchor="middle">READ</text>
+    <text class="lbl-s" x="104" y="17.6" text-anchor="middle">EXECUTABLE PATH</text>
+    <text class="lbl-s" x="104" y="21.2" text-anchor="middle">NOT COMMENT</text>
+    <line class="wa" x1="121" y1="15.5" x2="130.4" y2="15.5"/>
+
+    <rect class="box" x="131" y="9" width="44" height="13"/>
+    <text class="lbl-s" x="153" y="14" text-anchor="middle">MARK VERDICT</text>
+    <text class="lbl-s" x="153" y="17.6" text-anchor="middle">OBSERVED / DOCUMENTED</text>
+    <text class="lbl-s" x="153" y="21.2" text-anchor="middle">INFERRED / UNKNOWN</text>
+
+    <line class="t" x1="5" y1="25.4" x2="175" y2="25.4"/>
+    <text class="lbl-s" x="6" y="29.2">IF CODE AND RECORD DISAGREE: CODE WINS, RECORD IS QUOTED IN 6.2. IF CODE IS ABSENT: UNKNOWN, LISTED BELOW.</text>
+    <text class="lbl-s" x="6" y="32.6">NO INFERENCE IS PRESENTED AS A MEASUREMENT; NO SECRET VALUE IS REPRODUCED ANYWHERE IN THIS DOCUMENT.</text>
+    <text class="code" x="176.6" y="34.5" text-anchor="end">VER-821A</text>
+  </svg>
+  <figcaption><span class="n">Figure 8.2-1.</span>Claim-to-Evidence Procedure Used Throughout</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1mm">
+  <div class="num">8.2.2</div>
+  <div>
+    <h2>SOURCE-VERIFICATION INDEX.</h2>
+    <p class="flush">Line ranges refer to the working tree at the change date. They are starting points, not exhaustive citations.</p>
+  </div>
+</section>
+
+<div class="tcap">Table 8.2-1. Principal Claims and Their Evidence</div>
+<table class="dense">
+  <thead><tr><th style="width:31%">Claim</th><th style="width:35%">Evidence</th><th>Mark</th></tr></thead>
+  <tbody>
+    <tr><td>Seven stages; middle three concurrent</td><td>src/orchestrator.py:85–145; src/api/pipeline_runner.py:86–122</td><td class="v">OBSERVED</td></tr>
+    <tr><td>State is the only cross-agent contract</td><td>src/state.py:8–61; agent module imports</td><td class="v">OBSERVED</td></tr>
+    <tr><td>Tier thresholds 300 / 1,000 / 3,000</td><td>src/agents/ingestion.py:9–73</td><td class="v">OBSERVED</td></tr>
+    <tr><td>18 extensions, 24 excluded dirs, 150 KB</td><td>src/utils/filters.py:7–94</td><td class="v">OBSERVED</td></tr>
+    <tr><td>Embedding model, 2,048 dimensions, batch 50</td><td>src/utils/embedder.py:25–28</td><td class="v">OBSERVED</td></tr>
+    <tr><td>Chat model, two attempts, 120 s, 2 s pause</td><td>src/utils/nvidia_client.py:40–51, 245</td><td class="v">OBSERVED</td></tr>
+    <tr><td>Risk thresholds 21/11, 10/6, 8/4, 0.80/0.60</td><td>src/agents/complexity_scorer.py:31–52</td><td class="v">OBSERVED</td></tr>
+    <tr><td>Redis keys, sentinel, five WATCH attempts</td><td>src/api/job_store.py:31–35, 127–129</td><td class="v">OBSERVED</td></tr>
+    <tr><td>Record TTL defaults to none; RQ TTL 86,400</td><td>src/api/job_store.py:344–351; src/api/queue.py</td><td class="v">OBSERVED</td></tr>
+    <tr><td>Dual route families and status codes</td><td>src/api/main.py:155–343</td><td class="v">OBSERVED</td></tr>
+    <tr><td>Client polls 1,500 ms, six tabs, no router</td><td>frontend/src/App.tsx:559–625, 921, 1601</td><td class="v">OBSERVED</td></tr>
+    <tr><td>476 tests pass in 20.40 s</td><td><i>pytest</i> and <i>--collect-only</i> runs, 27 October 2026</td><td class="v">OBSERVED</td></tr>
+    <tr><td>Local API starts and /health answers</td><td>uvicorn on port 8011; response recorded on 7.1-1</td><td class="v">OBSERVED</td></tr>
+    <tr><td>Azure deployment is live and current</td><td>Workflows exist; no deployment or run was inspected</td><td class="v">UNKNOWN</td></tr>
+    <tr><td>Model and embedding services are available</td><td>No network call was made with a key</td><td class="v">UNKNOWN</td></tr>
+  </tbody>
+</table>
+
+<section class="para" style="margin-top:1.4mm">
+  <div class="num">8.2.3</div>
+  <div>
+    <h3>Deliberate Simplifications.</h3>
+    <p class="flush">Figures are redrawn as single-colour line art; no product screenshots are included. The catalogue gives non-empty line counts and one-line responsibilities, not a function-by-function inventory. Pipeline examples are structural: no real repository was analysed, so no timing, cost or output-quality measurement is offered. Secret values and the contents of <i>.env</i> are excluded; only variable names appear. Commands not listed on 7.1-1 are described from code and marked as unexecuted.</p>
+  </div>
+</section>
+
+<section class="para">
+  <div class="num">8.2.4</div>
+  <div>
+    <h3>Open Items.</h3>
+    <ol class="tight">
+      <li>Which version string is authoritative: API 1.0.0, client 1.1.0, package 1.0.0, or the change log's two 1.1.0 entries?</li>
+      <li>Is <i>Decisions.md</i> canonical? It is gitignored, yet <i>agent.md</i> depends on its rationale and identifiers.</li>
+      <li>Should per-job Chroma collections be deleted, retained, or consolidated per repository? The tree has an on-demand delete endpoint but no retention rule.</li>
+      <li>Does production run Redis and a worker, or the local thread pool? The README describes Azure; no live check was performed.</li>
+      <li>Is <i>pages/ResultsPage.tsx</i> awaiting deletion or revival? It is compiled by nothing and duplicates live code.</li>
+      <li>Are the tier environment overrides used in deployment, or are the defaults the effective policy?</li>
+      <li>Is <i>agent_context.md</i> expected on disk from the CLI, as the README implies, or only through the API?</li>
+    </ol>
+  </div>
+</section>
+
+<p class="note center" style="margin-top:2.6mm">END OF VOLUME &mdash; 27 SHEETS, SECTIONS 1&ndash;8 &middot; 476 TESTS OBSERVED PASSING &middot; 16 DEFECTS RECORDED &middot; 7 OPEN ITEMS &middot; NO SECRETS REPRODUCED &middot; NO LIVE SYSTEM ASSERTED</p>
+
+
+  <footer class="foot">
+    <div class="rule"></div>
+    <div class="sub">APPENDIX</div>
+    <div class="line">
+      <span>Mission <span class="fill" style="width:20mm">&nbsp;</span></span>
+      <span>Basic Date <span class="fill" style="width:30mm">25 JULY 2026</span></span>
+      <span>Change Date <span class="fill" style="width:30mm">16 OCTOBER 2026</span></span>
+      <span>Page <span class="fill" style="width:18mm">8.2-1</span></span>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  document.fonts.ready.then(() => {
+    const page = document.querySelector('.page')
+    const foot = page.querySelector('.foot')
+    let bottom = 0
+    for (const el of page.children) {
+      if (el === foot || el.classList.contains('tab')) continue
+      bottom = Math.max(bottom, el.getBoundingClientRect().bottom)
+    }
+    const free = (foot.getBoundingClientRect().top - bottom) * 25.4 / 96
+    document.documentElement.dataset.fit = free >= 0 ? `ok, ${free.toFixed(1)} mm free above the footer` : `OVERFLOW by ${(-free).toFixed(1)} mm`
+  })
+</script>
+
+</body>
+</html>

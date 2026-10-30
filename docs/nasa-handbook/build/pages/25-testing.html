@@ -1,0 +1,106 @@
+<section class="para">
+  <div class="num">7.2.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>The suite is broad, offline and fast: 476 cases in roughly twenty seconds. It is strongest on pure transformations and HTTP contracts, and weakest on the seams between stages. That shape is typical of a system built stage by stage: each agent has detailed unit tests, while the orchestration that connects them is covered only indirectly. Read a green run as evidence that the parts behave, not that the whole path has been exercised (figure 7.2-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 50" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Test cases by subsystem">
+    <rect class="panel" x="1.5" y="2" width="177" height="46"/>
+    <text class="lbl-s" x="3.4" y="5.2">476 CASES BY SUBSYSTEM &mdash; COLLECTED, NOT ASSERTIONS</text>
+    <line class="t" x1="40" y1="8" x2="40" y2="40"/>
+    <text class="lbl-s" x="4" y="12.4">PIPELINE CORE</text>
+    <rect class="aud" x="40" y="9.8" width="43.2" height="3.6"/>
+    <text class="lbl-s" x="84.6" y="12.4">144</text>
+    <text class="lbl-s" x="4" y="17.6">DOCUMENTS</text>
+    <rect class="vid" x="40" y="15" width="23.4" height="3.6"/>
+    <text class="lbl-s" x="64.8" y="17.6">78</text>
+    <text class="lbl-s" x="4" y="22.8">API + STATE</text>
+    <rect class="grain" x="40" y="20.2" width="36.3" height="3.6"/>
+    <text class="lbl-s" x="77.7" y="22.8">121</text>
+    <text class="lbl-s" x="4" y="28">RETRIEVAL</text>
+    <rect class="of" x="40" y="25.4" width="16.8" height="3.6"/>
+    <text class="lbl-s" x="58.2" y="28">56</text>
+    <text class="lbl-s" x="4" y="33.2">EXPLANATIONS</text>
+    <rect class="vid" x="40" y="30.6" width="14.1" height="3.6"/>
+    <text class="lbl-s" x="55.5" y="33.2">47</text>
+    <text class="lbl-s" x="4" y="38.4">CROSS-CUTTING</text>
+    <rect class="aud" x="40" y="35.8" width="9" height="3.6"/>
+    <text class="lbl-s" x="50.4" y="38.4">30</text>
+    <text class="lbl-s" x="100" y="12.4">PIPELINE CORE = INGESTION, AST, GRAPH, COMPLEXITY</text>
+    <text class="lbl-s" x="100" y="17.6">API + STATE = HTTP CONTRACTS, STORE, ACTIVE INDEX</text>
+    <text class="lbl-s" x="100" y="22.8">CROSS-CUTTING = TIERS, LANGUAGES, PARALLEL, DIFF, PAT</text>
+    <text class="lbl-s" x="100" y="28">SCALE: 1 UNIT = 3.33 CASES</text>
+    <line class="t" x1="6" y1="42" x2="175" y2="42"/>
+    <text class="lbl-s" x="6" y="46">NO FRONTEND TEST RUNNER IS CONFIGURED; THE 476 CASES ARE ALL PYTHON.</text>
+    <text class="code" x="176.6" y="46.0" text-anchor="end">OPS-721A</text>
+  </svg>
+  <figcaption><span class="n">Figure 7.2-1.</span>Case Distribution Across Subsystems</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1mm">
+  <div class="num">7.2.2</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p>Unit tests build source strings, parse them and assert on dataclasses; they do not need a repository. API tests import the FastAPI application, replace the pipeline submission with a fake, and drive routes through <i>TestClient</i>. Store tests run the same lifecycle twice, once against the memory backend and once against <i>fakeredis</i> with WATCH semantics. The active-index tests simulate contention by mutating keys between a read and a write, and cover lost sentinels, external members and interrupted reconciliation.</p>
+    <p>The resilience tests are the most informative for an operator: partial model failure, missing collection, missing key, terminal-record protection and retry exhaustion all have explicit cases. Multi-language tests cover symbol extraction and complexity for Go, Rust, Java and C++, plus alias and layout resolution. Two cases assert that concurrent parsing and scoring return the same state as sequential execution.</p>
+  </div>
+</section>
+
+<div class="tcap">Table 7.2-1. Test Layers and What They Establish</div>
+<table class="dense">
+  <thead><tr><th style="width:23%">Layer</th><th style="width:8%">Cases</th><th>What a pass establishes</th></tr></thead>
+  <tbody>
+    <tr><td>Ingestion and filters</td><td class="v">22</td><td>URL forms, extension and directory rules, size ceiling, language labels</td></tr>
+    <tr><td>Parsing and symbols</td><td class="v">34</td><td>Python and JS declarations, docstrings, imports and parse-error capture</td></tr>
+    <tr><td>Graph resolution</td><td class="v">38</td><td>Internal versus external imports, cycles, order, stats, PageRank fallback</td></tr>
+    <tr><td>Complexity and risk</td><td class="v">50</td><td>Branch counts, threshold boundaries, precedence, coupling from graph stats</td></tr>
+    <tr><td>Retrieval</td><td class="v">56</td><td>Chunk identity, collection naming, metadata filters, batch embedding</td></tr>
+    <tr><td>Explanations</td><td class="v">47</td><td>Selection priority, context budget, prompt content, sanitisation, partial failure</td></tr>
+    <tr><td>Documents</td><td class="v">78</td><td>Section presence, order, tables, empty-state safety, heading hierarchy</td></tr>
+    <tr><td>HTTP and state</td><td class="v">121</td><td>Status codes, validation, lifecycle, health, duplicate submission, index drift</td></tr>
+    <tr><td>Cross-cutting</td><td class="v">30</td><td>Tiers, four extra languages, parallel equivalence, diff, private-repo headers</td></tr>
+  </tbody>
+</table>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">7.2.3</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 7.2-2. Observed Run and Uncovered Paths</div>
+    <table class="dense">
+      <thead><tr><th>Item</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Result</td><td class="v">476 passed</td></tr>
+        <tr><td>Wall time</td><td class="v">20.40 s</td></tr>
+        <tr><td>Files</td><td class="v">15</td></tr>
+        <tr><td>Failures / skips</td><td class="v">0 / 0</td></tr>
+        <tr><td>Network calls</td><td class="v">none observed</td></tr>
+        <tr><td>Frontend tests</td><td class="v">none configured</td></tr>
+        <tr><td>Worker loop</td><td class="v">handler only</td></tr>
+        <tr><td>CLI savers</td><td class="v">not end-to-end</td></tr>
+        <tr><td>Incremental delete path</td><td class="v">not covered</td></tr>
+        <tr><td>Real Chroma persistence</td><td class="v">not covered</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">WARNING</span>
+      <p>A green suite does not cover the undefined <i>logger</i> in incremental chunk deletion, the missing on-disk <i>agent_context.md</i>, the method-count defect in the agent context, or the cleared <i>raw_contents</i>. Each sits on a seam between tested units.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>TEST CHECK</span><span>ENGINEER</span></div>
+      <ol>
+        <li><span>1</span><span>RUN - full suite, record time</span></li>
+        <li><span>2</span><span>READ - first failure, not the count</span></li>
+        <li><span></span><span>&radic; KNOW - what is not tested</span></li>
+        <li><span>3</span><span>ADD - a seam test before a fix</span></li>
+      </ol>
+    </div>
+  </div>
+</div>

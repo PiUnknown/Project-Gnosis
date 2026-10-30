@@ -1,0 +1,122 @@
+<section class="para">
+  <div class="num">4.1.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>A run is one traversal of the shared state object. The orchestrator resolves the repository address, asks GitHub for the default branch, then hands the same <i>ArchaeonState</i> to each agent in turn. Agents never import one another; they only read fields and write new ones. The only departure from sequence is the middle group: graph, complexity and retrieval are submitted to a three-thread pool, then joined in a fixed order so that graph statistics can be bound into the complexity scores before they are consumed (figure 4.1-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 86" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pipeline timeline with parallel middle group">
+    <rect class="panel" x="1.5" y="2" width="177" height="82"/>
+    <text class="lbl-s" x="3.4" y="5.2">RUN TIMELINE &mdash; ONE STATE OBJECT, SEVEN AGENTS</text>
+
+    <rect class="box" x="6" y="10" width="22" height="11"/>
+    <text class="lbl-s" x="17" y="14.4" text-anchor="middle">METADATA</text>
+    <text class="lbl-s" x="17" y="18" text-anchor="middle">BRANCH</text>
+    <line class="wa" x1="28" y1="15.5" x2="33.4" y2="15.5"/>
+
+    <rect class="box" x="34" y="10" width="24" height="11"/>
+    <text class="lbl-s" x="46" y="14.4" text-anchor="middle">1 INGEST</text>
+    <text class="lbl-s" x="46" y="18" text-anchor="middle">TREE + RAW</text>
+    <line class="wa" x1="58" y1="15.5" x2="63.4" y2="15.5"/>
+
+    <rect class="box" x="64" y="10" width="24" height="11"/>
+    <text class="lbl-s" x="76" y="14.4" text-anchor="middle">2 PARSE</text>
+    <text class="lbl-s" x="76" y="18" text-anchor="middle">SYMBOLS</text>
+    <line class="w" x1="88" y1="15.5" x2="92" y2="15.5"/>
+
+    <line class="w" x1="92" y1="11" x2="92" y2="29"/>
+    <line class="wa" x1="92" y1="11" x2="97.4" y2="11"/>
+    <line class="wa" x1="92" y1="20" x2="97.4" y2="20"/>
+    <line class="wa" x1="92" y1="29" x2="97.4" y2="29"/>
+    <rect class="box" x="98" y="7" width="32" height="8"/>
+    <text class="lbl-s" x="114" y="12.4" text-anchor="middle">3 GRAPH</text>
+    <rect class="box" x="98" y="16" width="32" height="8"/>
+    <text class="lbl-s" x="114" y="21.4" text-anchor="middle">4 COMPLEXITY</text>
+    <rect class="box" x="98" y="25" width="32" height="8"/>
+    <text class="lbl-s" x="114" y="30.4" text-anchor="middle">5 RETRIEVAL</text>
+    <text class="lbl-s" x="114" y="37" text-anchor="middle">THREE THREADS</text>
+    <line class="wa" x1="130" y1="19" x2="133.4" y2="19"/>
+
+    <rect class="box" x="134" y="10" width="18" height="11"/>
+    <text class="lbl-s" x="143" y="14.4" text-anchor="middle">COUPLING</text>
+    <text class="lbl-s" x="143" y="18" text-anchor="middle">REBIND</text>
+    <line class="wa" x1="152" y1="15.5" x2="157.4" y2="15.5"/>
+
+    <rect class="box" x="158" y="10" width="17" height="11"/>
+    <text class="lbl-s" x="166.5" y="14.4" text-anchor="middle">6 EXPLAIN</text>
+    <text class="lbl-s" x="166.5" y="18" text-anchor="middle">LLM</text>
+
+    <line class="t" x1="6" y1="42" x2="175" y2="42"/>
+    <text class="lbl-s" x="6" y="46">ARTIFACTS</text>
+    <text class="lbl-s" x="6" y="50.4">default_branch &middot; file_manifest &middot; raw_contents</text>
+    <text class="lbl-s" x="6" y="54.8">symbol_tables &middot; dependency_graph &middot; graph_stats</text>
+    <text class="lbl-s" x="6" y="59.2">complexity_scores &middot; chroma_collection_name</text>
+    <text class="lbl-s" x="6" y="63.6">explanations &middot; final_doc &middot; agent_context_md</text>
+    <text class="lbl-s" x="6" y="68">complexity_report_json &middot; file_explanations_*</text>
+
+    <line class="t" x1="6" y1="72" x2="175" y2="72"/>
+    <text class="lbl-s" x="6" y="76">JOIN ORDER IS FIXED: GRAPH FIRST, THEN COMPLEXITY + COUPLING, THEN RETRIEVAL.</text>
+    <text class="lbl-s" x="6" y="80.4">RETRIEVAL CLEARS raw_contents BEFORE EXPLAINABILITY RUNS.</text>
+    <text class="code" x="176.6" y="82.0" text-anchor="end">FLW-411A</text>
+  </svg>
+  <figcaption><span class="n">Figure 4.1-1.</span>Phase Order, Fan-Out and State Artifacts</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">4.1.2</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p>Metadata resolution is a single <i>GET /repos/{owner}/{repo}</i>. Ingestion then lists the default branch recursively, filters paths by extension, excluded directory and size, and fetches raw text from <i>raw.githubusercontent.com</i>. The manifest is sorted by depth then path before any cap is applied. Parsing builds one symbol table per file, recording functions, classes, imports, docstrings and parse errors; a parse failure is data, not an abort.</p>
+    <p>The middle group starts with all three futures alive. The orchestrator waits for the graph, then for complexity, immediately calls <i>apply_graph_coupling</i> to replace placeholder coupling values with real in-degree and out-degree, and only then waits for retrieval. Retrieval chunks each parsed symbol, embeds the chunks in request batches and writes them to a per-job Chroma collection. After the join, explainability ranks files and asks the hosted model for prose; the document generator assembles four outputs and returns control.</p>
+  </div>
+</section>
+
+<section class="para">
+  <div class="num">4.1.2.1</div>
+  <div>
+    <h3>CLI and API Divergence.</h3>
+    <p class="flush">The CLI calls <i>run_pipeline</i> and then writes ten files itself, one save function at a time. The API calls the same function inside <i>pipeline_runner</i>, serialises a subset of state into one JSON record, and never writes files. The API result therefore omits nothing the browser needs but does omit <i>symbol_tables</i> details, and the CLI writes <i>file_explanations</i> artifacts that the API returns only inside the aggregate result.</p>
+  </div>
+</section>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">4.1.3</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 4.1-1. Phase Inputs, Outputs and Limits</div>
+    <table class="dense">
+      <thead><tr><th>Phase</th><th>Reads</th><th>Writes</th></tr></thead>
+      <tbody>
+        <tr><td>Metadata</td><td class="v">owner, repo, token</td><td class="v">default_branch</td></tr>
+        <tr><td>1 Ingestion</td><td class="v">URL, branch</td><td class="v">manifest, raw text</td></tr>
+        <tr><td>2 Parse</td><td class="v">raw text, paths</td><td class="v">symbol tables</td></tr>
+        <tr><td>3 Graph</td><td class="v">imports, manifest</td><td class="v">graph, cycles, order</td></tr>
+        <tr><td>4 Complexity</td><td class="v">raw text, symbols</td><td class="v">scores, risk</td></tr>
+        <tr><td>5 Retrieval</td><td class="v">raw text, symbols</td><td class="v">collection, chunks</td></tr>
+        <tr><td>Coupling</td><td class="v">graph stats</td><td class="v">coupling, final risk</td></tr>
+        <tr><td>6 Explain</td><td class="v">scores, graph, Chroma</td><td class="v">explanations</td></tr>
+        <tr><td>7 Document</td><td class="v">all of the above</td><td class="v">four documents</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">NOTE</span>
+      <p>Retrieval empties <i>raw_contents</i> on success to release memory. Explainability's fallback path then finds no raw text and must rely on Chroma chunks, which exist. If retrieval stored zero chunks it returns before clearing, so the fallback still has text but the collection is empty.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>FLOW CHECK</span><span>REVIEWER</span></div>
+      <ol>
+        <li><span>1</span><span>TRACE - manifest count to parse count</span></li>
+        <li><span>2</span><span>CONFIRM - graph waited before coupling</span></li>
+        <li><span></span><span>&radic; JOIN - retrieval after coupling</span></li>
+        <li><span>3</span><span>CHECK - explanations reference real files</span></li>
+        <li><span>4</span><span>VERIFY - document headings not empty</span></li>
+      </ol>
+    </div>
+  </div>
+</div>

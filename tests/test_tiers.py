@@ -172,21 +172,15 @@ class TestRepositoryTiers:
         assert "1500" in summary
         assert "300" in summary
 
-    @patch("src.api.main.fetch_file_tree")
-    @patch("src.api.main.fetch_repo_metadata")
-    def test_api_rejection_over_limit(self, mock_metadata, mock_tree):
-        """Verify that API rejects repos exceeding MAX_SAMPLED_ANALYSIS_FILES limit with 400 Bad Request."""
-        mock_metadata.return_value = {"default_branch": "main"}
-        # 35 files (> 30 limit)
-        mock_tree.return_value = [
-            {"path": f"src/file_{i}.py", "size": 100, "sha": f"sha_{i}", "type": "blob"}
-            for i in range(35)
-        ]
+    def test_api_queues_before_repository_size_validation(self):
+        """Repository metadata and tree checks run in the worker after fast submission."""
+        with patch("src.api.main._executor") as executor:
+            executor.submit.return_value = None
+            response = client.post(
+                "/api/analyze",
+                json={"repo_url": "https://github.com/owner/large-repo"}
+            )
 
-        response = client.post(
-            "/api/analyze",
-            json={"repo_url": "https://github.com/owner/large-repo"}
-        )
-
-        assert response.status_code == 400
-        assert "exceeds the maximum file limit" in response.json()["detail"]
+        assert response.status_code == 202
+        assert response.json()["status"] == "queued"
+        executor.submit.assert_called_once()

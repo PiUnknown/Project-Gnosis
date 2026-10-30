@@ -1,0 +1,142 @@
+<section class="para">
+  <div class="num">4.2.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>Failure handling is not uniform. Some faults abort the whole job, some degrade one file, and some are retried inside a client. The dividing line is whether the remaining stages can still produce a truthful document. A missing repository tree cannot be worked around; a single unparsable file can be reported as such; a failed model call can leave one file unexplained. The operator must know which class a given error belongs to before interpreting an incomplete result (figure 4.2-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Job lifecycle state machine">
+    <rect class="panel" x="1.5" y="2" width="177" height="44"/>
+    <text class="lbl-s" x="3.4" y="5.2">JOB RECORD LIFECYCLE</text>
+
+    <rect class="box" x="9" y="9" width="28" height="11"/>
+    <text class="lbl" x="23" y="14.4" text-anchor="middle">QUEUED</text>
+    <text class="lbl-s" x="23" y="17.8" text-anchor="middle">created_at</text>
+
+    <line class="wa" x1="37" y1="14.5" x2="57.4" y2="14.5"/>
+    <text class="lbl-s" x="47" y="11.9" text-anchor="middle">START</text>
+
+    <rect class="box" x="58" y="9" width="34" height="11"/>
+    <text class="lbl" x="75" y="14.4" text-anchor="middle">RUNNING</text>
+    <text class="lbl-s" x="75" y="17.8" text-anchor="middle">current_phase</text>
+
+    <line class="wa" x1="92" y1="9.5" x2="112.4" y2="9.5"/>
+    <text class="lbl-s" x="102" y="7.1" text-anchor="middle">FINISH</text>
+    <line class="wa" x1="92" y1="22.5" x2="112.4" y2="22.5"/>
+    <text class="lbl-s" x="102" y="25.9" text-anchor="middle">FAIL</text>
+
+    <rect class="box" x="113" y="4" width="32" height="11"/>
+    <text class="lbl" x="129" y="9.4" text-anchor="middle">COMPLETE</text>
+    <text class="lbl-s" x="129" y="12.8" text-anchor="middle">result payload</text>
+
+    <rect class="box" x="113" y="17" width="32" height="11"/>
+    <text class="lbl" x="129" y="22.4" text-anchor="middle">FAILED</text>
+    <text class="lbl-s" x="129" y="25.8" text-anchor="middle">error string</text>
+
+    <rect class="box" x="9" y="30" width="28" height="9" style="stroke-dasharray:1.2 0.9"/>
+    <text class="lbl-s" x="23" y="34.4" text-anchor="middle">DELETED</text>
+    <text class="lbl-s" x="23" y="37.2" text-anchor="middle">RECORD GONE</text>
+    <line class="hid" x1="23" y1="20" x2="23" y2="30"/>
+
+    <line class="t" x1="148" y1="4" x2="148" y2="39"/>
+    <text class="lbl-s" x="151" y="8.4">TERMINAL RECORDS</text>
+    <text class="lbl-s" x="151" y="12.4">ARE NOT MUTATED</text>
+    <text class="lbl-s" x="151" y="16.4">BY LATE PHASE</text>
+    <text class="lbl-s" x="151" y="20.4">WRITES. THE STORE</text>
+    <text class="lbl-s" x="151" y="24.4">RE-READS INSIDE</text>
+    <text class="lbl-s" x="151" y="28.4">A WATCH BLOCK.</text>
+    <text class="lbl-s" x="151" y="32.4">DELETE IS ALLOWED</text>
+    <text class="lbl-s" x="151" y="36.4">FROM ANY STATE.</text>
+    <text class="lbl-s" x="6" y="43">THE LOCAL EXECUTOR HAS NO TIMEOUT; THE RQ PATH APPLIES JOB_TIMEOUT_SECONDS = 1,800.</text>
+    <text class="code" x="176.6" y="44.0" text-anchor="end">FLW-421A</text>
+  </svg>
+  <figcaption><span class="n">Figure 4.2-1.</span>Queued, Running and Terminal Job States</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">4.2.2</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p>In API mode, <i>pipeline_runner</i> wraps the entire sequence in one exception handler. Any uncaught exception, including one raised while waiting on a future, is formatted as <i>Type: message</i>, the traceback is printed to the server log, and the record moves to FAILED with that string. The HTTP result endpoint then answers 500 for that job. The CLI has no equivalent wrapper: an uncaught exception ends the process, and whatever files were written before the failure remain.</p>
+    <p>Within the sequence, containment varies. Parse errors are stored in the symbol table with a detail string and later force a CRITICAL risk level. A failed PageRank converges to normalised in-degree, and a total failure yields zero scores rather than an exception. Explainability returns early when the collection or API key is absent and skips individual files whose call returns nothing. The document generator wraps each section, and each output, in its own handler so one bad section does not remove the rest.</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Failure containment classes">
+    <rect class="panel" x="1.5" y="2" width="177" height="44"/>
+    <text class="lbl-s" x="3.4" y="5.2">CONTAINMENT CLASSES</text>
+
+    <rect class="box" x="4" y="7" width="55" height="30"/>
+    <text class="lbl" x="31.5" y="12.4" text-anchor="middle">ABORT JOB</text>
+    <line class="t" x1="8" y1="15" x2="55" y2="15"/>
+    <text class="lbl-s" x="8" y="18.8" text-anchor="start">TREE FETCH FAILURE</text>
+    <text class="lbl-s" x="8" y="22.2" text-anchor="start">METADATA FAILURE</text>
+    <text class="lbl-s" x="8" y="25.6" text-anchor="start">FUTURE RAISES</text>
+    <text class="lbl-s" x="8" y="29" text-anchor="start">CHROMA IMPORT FAILURE</text>
+    <text class="lbl-s" x="8" y="32.4" text-anchor="start">SERIALISATION FAILURE</text>
+
+    <rect class="box" x="62" y="7" width="55" height="30"/>
+    <text class="lbl" x="89.5" y="12.4" text-anchor="middle">DEGRADE ONE FILE</text>
+    <line class="t" x1="66" y1="15" x2="113" y2="15"/>
+    <text class="lbl-s" x="66" y="18.8" text-anchor="start">PARSE ERROR &rarr; CRITICAL</text>
+    <text class="lbl-s" x="66" y="22.2" text-anchor="start">RAW FETCH EXHAUSTED</text>
+    <text class="lbl-s" x="66" y="25.6" text-anchor="start">FILE ABSENT FROM RAG</text>
+    <text class="lbl-s" x="66" y="29" text-anchor="start">LLM RETURNS NOTHING</text>
+    <text class="lbl-s" x="66" y="32.4" text-anchor="start">CACHE WRITE FAILS</text>
+
+    <rect class="box" x="120" y="7" width="55" height="30"/>
+    <text class="lbl" x="147.5" y="12.4" text-anchor="middle">DEGRADE OUTPUT</text>
+    <line class="t" x1="124" y1="15" x2="171" y2="15"/>
+    <text class="lbl-s" x="124" y="18.8" text-anchor="start">PAGERANK FALLBACK</text>
+    <text class="lbl-s" x="124" y="22.2" text-anchor="start">SECTION BUILDER FAILS</text>
+    <text class="lbl-s" x="124" y="25.6" text-anchor="start">AGENT CONTEXT FAILS</text>
+    <text class="lbl-s" x="124" y="29" text-anchor="start">COMPLEXITY JSON FAILS</text>
+    <text class="lbl-s" x="124" y="32.4" text-anchor="start">HTML GRAPH SKIPPED</text>
+
+    <text class="lbl-s" x="4" y="42">ABORT LEAVES A FAILED RECORD WITH NO RESULT. DEGRADATION LEAVES A COMPLETE RECORD WITH A SMALLER TRUTH.</text>
+    <text class="code" x="176.6" y="44.0" text-anchor="end">FLW-422A</text>
+  </svg>
+  <figcaption><span class="n">Figure 4.2-2.</span>Which Faults Stop a Run and Which Only Weaken It</figcaption>
+</figure>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">4.2.3</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 4.2-1. Retry and Timeout Boundaries</div>
+    <table class="dense">
+      <thead><tr><th>Operation</th><th>Attempts</th><th>Backoff / limit</th></tr></thead>
+      <tbody>
+        <tr><td>Raw file fetch</td><td class="v">5</td><td class="v">fixed 0.05 s inter-request</td></tr>
+        <tr><td>GitHub metadata/tree</td><td class="v">1</td><td class="v">raises to caller</td></tr>
+        <tr><td>Embedding request</td><td class="v">50 texts per call</td><td class="v">0.5 s between batches</td></tr>
+        <tr><td>Chat completion</td><td class="v">2</td><td class="v">120 s per attempt; 2 s pause</td></tr>
+        <tr><td>Store WATCH write</td><td class="v">5</td><td class="v">abort with error</td></tr>
+        <tr><td>RQ execution</td><td class="v">1</td><td class="v">1,800 s job timeout</td></tr>
+        <tr><td>Local thread pool</td><td class="v">1</td><td class="v">no timeout</td></tr>
+        <tr><td>Frontend poll</td><td class="v">indefinite</td><td class="v">1,500 ms; ignores errors</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">WARNING</span>
+      <p>Two latent faults escape their intended containment. Incremental chunk deletion calls an undefined <i>logger</i>, so a failed delete raises <i>NameError</i> instead of being logged. The CLI never writes <i>agent_context_md</i> to disk, so a successful run still lacks that deliverable. Neither is exercised by the current suite.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>FAILURE CHECK</span><span>INVESTIGATOR</span></div>
+      <ol>
+        <li><span>1</span><span>READ - status and error string</span></li>
+        <li><span>2</span><span>CLASSIFY - abort, file or output</span></li>
+        <li><span></span><span>&radic; COUNT - explained vs selected</span></li>
+        <li><span>3</span><span>CHECK - parse-error list</span></li>
+        <li><span>4</span><span>CONFIRM - no silent sample</span></li>
+      </ol>
+    </div>
+  </div>
+</div>

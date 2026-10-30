@@ -21,12 +21,13 @@ Tests cover:
   TestJobStore              - JobStore unit tests (no HTTP)
 """
 import pytest
+import fakeredis
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from src.api import pipeline_runner
 from src.api.main import app
-from src.api.job_store import JobStore
+from src.api.job_store import ACTIVE_INDEX_SENTINEL, JobStore, BackendUnavailableError
 from src.api.models import PHASE_PROGRESS
 from src.api.pipeline_runner import run as pipeline_runner_run
 
@@ -50,19 +51,9 @@ def client():
 def clear_store():
     """Clear job store to isolate tests."""
     from src.api.job_store import store
+    from src.api.rate_limit import reset_local_rate_limits
     store.clear()
-
-
-@pytest.fixture(autouse=True)
-def mock_github_api_size_validation():
-    """Mock GitHub API calls used in size validation to prevent real network requests during unit tests."""
-    with patch("src.api.main.fetch_repo_metadata") as mock_meta, \
-         patch("src.api.main.fetch_file_tree") as mock_tree:
-        mock_meta.return_value = {"default_branch": "main"}
-        mock_tree.return_value = [
-            {"path": "src/main.py", "size": 100, "sha": "sha_1", "type": "blob"}
-        ]
-        yield
+    reset_local_rate_limits()
 
 
 # -----------------------------------------------------------------------
@@ -129,6 +120,61 @@ def slow_runner(job_id: str, repo_url: str, options: dict):
 
 
 # -----------------------------------------------------------------------
+# Recording Redis proxy (health transfer assertions)
+# -----------------------------------------------------------------------
+
+class _RecordingPipeline:
+    def __init__(self, pipe, commands):
+        self._pipe = pipe
+        self._commands = commands
+
+    def __getattr__(self, name):
+        attr = getattr(self._pipe, name)
+        if callable(attr):
+            def wrapper(*args, **kwargs):
+                self._commands.append((name, args))
+                return attr(*args, **kwargs)
+            return wrapper
+        return attr
+
+
+class _RecordingClient:
+    def __init__(self, client):
+        self._client = client
+        self.commands = []
+
+    def pipeline(self, *args, **kwargs):
+        self.commands.append(("pipeline", args))
+        return _RecordingPipeline(self._client.pipeline(*args, **kwargs), self.commands)
+
+    def __getattr__(self, name):
+        attr = getattr(self._client, name)
+        if callable(attr):
+            def wrapper(*args, **kwargs):
+                self.commands.append((name, args))
+                return attr(*args, **kwargs)
+            return wrapper
+        return attr
+
+
+def _assert_no_job_record_downloads(commands):
+    names = [name for name, _ in commands]
+    assert "mget" not in names
+    assert "smembers" not in names
+    for name, args in commands:
+        if name == "get" and args:
+            assert "gnosis:job:" not in str(args[0])
+
+
+def _queue_stats_stub(_store=None):
+    return {
+        "redis_connected": True,
+        "mode": "rq_distributed",
+        "queue_depth": 0,
+    }
+
+
+# -----------------------------------------------------------------------
 # TestHealthAndRoot
 # -----------------------------------------------------------------------
 
@@ -170,6 +216,149 @@ class TestHealthAndRoot:
         response = client.get("/health")
         assert isinstance(response.json()["active_jobs"], int)
 
+    def test_health_response_contract_is_unchanged(self, client, monkeypatch):
+        monkeypatch.setattr("src.api.main.get_queue_stats", _queue_stats_stub)
+        body = client.get("/health").json()
+        assert set(body) == {
+            "status",
+            "version",
+            "active_jobs",
+            "redis_configured",
+            "redis_connected",
+            "queue_mode",
+            "queue_depth",
+        }
+        assert body["status"] == "ok"
+        assert isinstance(body["active_jobs"], int)
+
+    def test_all_health_routes_avoid_job_record_downloads(self, client, monkeypatch):
+        fake = fakeredis.FakeRedis(decode_responses=True)
+        recording = _RecordingClient(fake)
+        fake_store = JobStore()
+        fake_store.connect_redis(recording)
+
+        running = fake_store.create("https://github.com/test/running", {})
+        fake_store.start(running)
+        completed = fake_store.create("https://github.com/test/completed", {})
+        fake_store.finish(completed, {
+            "onboarding_doc": "x" * 200_000,
+            "explanations": {"src/big.py": "y" * 100_000},
+        })
+        assert fake_store.rebuild_active_index(arm=True)["armed"] == 1
+
+        monkeypatch.setattr("src.api.main.store", fake_store)
+        monkeypatch.setattr("src.api.main.get_queue_stats", _queue_stats_stub)
+
+        recording.commands.clear()
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert response.json()["active_jobs"] == 1
+        assert len(response.content) < 1000
+        _assert_no_job_record_downloads(recording.commands)
+        assert "scard" in [name for name, _ in recording.commands]
+
+        for path in ("/health", "/api/health"):
+            recording.commands.clear()
+            head = client.head(path)
+            assert head.status_code == 200
+            assert head.content == b""
+            _assert_no_job_record_downloads(recording.commands)
+            # Prove HEAD executed the handler (not a short-circuit).
+            assert "scard" in [name for name, _ in recording.commands]
+
+        recording.commands.clear()
+        response = client.get("/api/health")
+        assert response.status_code == 200
+        assert response.json()["active_jobs"] == 1
+        _assert_no_job_record_downloads(recording.commands)
+
+    def test_uninitialized_health_uses_legacy_and_does_not_backfill(self, client, monkeypatch):
+        fake = fakeredis.FakeRedis(decode_responses=True)
+        recording = _RecordingClient(fake)
+        fake_store = JobStore()
+        fake_store.connect_redis(recording)
+
+        job1 = fake_store.create("https://github.com/test/1", {})
+        fake_store.create("https://github.com/test/2", {})
+        fake_store.finish(job1, {"done": True})
+        fake.delete("gnosis:jobs:active")
+        assert not fake.sismember("gnosis:jobs:active", ACTIVE_INDEX_SENTINEL)
+
+        monkeypatch.setattr("src.api.main.store", fake_store)
+        monkeypatch.setattr("src.api.main.get_queue_stats", _queue_stats_stub)
+
+        recording.commands.clear()
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert response.json()["active_jobs"] == 1
+        assert "mget" in [name for name, _ in recording.commands]
+        # Read-only health must never arm or backfill the index.
+        assert not fake.sismember("gnosis:jobs:active", ACTIVE_INDEX_SENTINEL)
+
+    def test_health_survives_redis_read_failure(self, client, monkeypatch):
+        fake = fakeredis.FakeRedis(decode_responses=True)
+
+        class _PipelineFailure:
+            def __init__(self):
+                self.commands = []
+
+            def pipeline(self, *args, **kwargs):
+                self.commands.append("pipeline")
+                raise RuntimeError("redis down")
+
+            def __getattr__(self, name):
+                attr = getattr(fake, name)
+
+                def wrapper(*args, **kwargs):
+                    self.commands.append(name)
+                    return attr(*args, **kwargs)
+                return wrapper
+
+        failing = _PipelineFailure()
+        fake_store = JobStore()
+        fake_store.connect_redis(failing)
+
+        monkeypatch.setattr("src.api.main.store", fake_store)
+        monkeypatch.setattr("src.api.main.get_queue_stats", _queue_stats_stub)
+
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert isinstance(response.json()["active_jobs"], int)
+        assert response.json()["active_jobs"] == 0
+        assert "mget" not in failing.commands
+
+    def test_health_memory_mode_counts_unchanged(self, client, monkeypatch):
+        memory_store = JobStore()
+        assert memory_store.backend == "memory"
+        monkeypatch.setattr("src.api.main.store", memory_store)
+        monkeypatch.setattr("src.api.main.get_queue_stats", _queue_stats_stub)
+
+        job_id = memory_store.create("https://github.com/test/repo", {})
+        assert client.get("/health").json()["active_jobs"] == 1
+        memory_store.start(job_id)
+        assert client.get("/health").json()["active_jobs"] == 1
+        memory_store.finish(job_id, {"done": True})
+        assert client.get("/health").json()["active_jobs"] == 0
+
+        # HEAD must execute the same handler in memory mode too.
+        assert client.head("/health").status_code == 200
+        assert client.head("/api/health").status_code == 200
+
+    def test_health_reports_degraded_when_redis_configured_but_unreachable(
+        self, client, monkeypatch
+    ):
+        degraded_store = JobStore()
+        # Simulate a configured Redis URL whose connection attempt failed.
+        degraded_store._redis_configured = True
+        monkeypatch.setattr("src.api.main.store", degraded_store)
+
+        body = client.get("/health").json()
+
+        assert body["status"] == "degraded"
+        assert body["redis_configured"] is True
+        assert body["redis_connected"] is False
+        assert body["queue_mode"] == "local_threadpool"
+
 
 # -----------------------------------------------------------------------
 # TestAnalyzeEndpoint
@@ -205,6 +394,51 @@ class TestAnalyzeEndpoint:
                 json={"repo_url": "https://github.com/testowner/testrepo"}
             )
         assert response.json()["status"] == "queued"
+
+    def test_store_unavailable_returns_503(self, client, monkeypatch):
+        class _UnavailableStore:
+            def find_active_by_repo(self, repo_url):
+                return None
+
+            def create(self, repo_url, options, job_id=None):
+                raise BackendUnavailableError("redis write failed")
+
+        monkeypatch.setattr("src.api.main.store", _UnavailableStore())
+        response = client.post(
+            "/analyze",
+            json={"repo_url": "https://github.com/testowner/testrepo"},
+        )
+        assert response.status_code == 503
+
+    def test_queue_dispatch_failure_returns_503_and_fails_job(self, client, monkeypatch):
+        from src.api.queue import QueueDispatchError
+
+        calls = {"failed": []}
+
+        class _Store:
+            def find_active_by_repo(self, repo_url):
+                return None
+
+            def create(self, repo_url, options, job_id=None):
+                return "job-dispatch-failure"
+
+            def fail(self, job_id, error):
+                calls["failed"].append((job_id, error))
+
+        def _raise(*args, **kwargs):
+            raise QueueDispatchError("rq unavailable")
+
+        monkeypatch.setattr("src.api.main.store", _Store())
+        monkeypatch.setattr("src.api.main.enqueue_analysis_job", _raise)
+
+        response = client.post(
+            "/analyze",
+            json={"repo_url": "https://github.com/testowner/testrepo"},
+        )
+
+        assert response.status_code == 503
+        assert calls["failed"]
+        assert calls["failed"][0][0] == "job-dispatch-failure"
 
     def test_missing_repo_url_returns_422(self, client):
         response = client.post("/analyze", json={})

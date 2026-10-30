@@ -1,0 +1,116 @@
+<section class="para">
+  <div class="num">3.5.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>The retrieval stage builds a semantic index of the repository. It does not split text every N tokens; it emits one chunk for the module header, one for each function and one for each class, preserving code boundaries. Chunks are embedded by a hosted NVIDIA model and written to a ChromaDB collection scoped to the job. The one idea the reader must leave with is that stage 6 never reads whole files from GitHub; it reads these chunks (figure 3.5-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 60" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Semantic chunking, embedding and ChromaDB storage">
+    <rect class="panel" x="1.5" y="2" width="177" height="56"/>
+    <text class="lbl-s" x="3.4" y="5.2">CHUNK &rarr; EMBED &rarr; STORE</text>
+
+    <rect class="box" x="6" y="9" width="28" height="12"/>
+    <text class="lbl-s" x="20" y="14.4" text-anchor="middle">FILE TEXT</text>
+    <text class="lbl-s" x="20" y="17.6" text-anchor="middle">+ SYMBOLS</text>
+    <line class="wa" x1="34" y1="15" x2="43.4" y2="15"/>
+    <rect class="box" x="44" y="9" width="36" height="12"/>
+    <text class="lbl-s" x="62" y="14.4" text-anchor="middle">SEMANTIC CHUNKS</text>
+    <text class="lbl-s" x="62" y="17.6" text-anchor="middle">MODULE / FN / CLASS</text>
+    <line class="wa" x1="80" y1="15" x2="89.4" y2="15"/>
+    <rect class="box" x="90" y="9" width="34" height="12"/>
+    <text class="lbl-s" x="107" y="14.4" text-anchor="middle">EMBED 2048-D</text>
+    <text class="lbl-s" x="107" y="17.6" text-anchor="middle">50 PER REQUEST</text>
+    <line class="wa" x1="124" y1="15" x2="133.4" y2="15"/>
+    <rect class="box" x="134" y="9" width="39" height="12"/>
+    <text class="lbl-s" x="153.5" y="14.4" text-anchor="middle">CHROMADB</text>
+    <text class="lbl-s" x="153.5" y="17.6" text-anchor="middle">COSINE, PER JOB</text>
+
+    <rect class="panel" x="6" y="23" width="168" height="16"/>
+    <text class="lbl-s" x="8" y="26.2">BATCH BOUNDARIES</text>
+    <text class="lbl-s" x="8" y="30">STREAM 128 CHUNKS &rarr; EMBED INNER BATCHES OF 50 &rarr; ADD 128 &rarr; GC</text>
+    <text class="lbl-s" x="8" y="33.6">EMBED DELAY 0.5 S BETWEEN BATCHES; ADD ONCE PER 128-CHUNK FLUSH</text>
+    <text class="lbl-s" x="8" y="37.2">INPUT_TYPE = PASSAGE FOR INDEX, QUERY FOR SEARCH</text>
+
+    <rect class="panel" x="6" y="42" width="168" height="15"/>
+    <text class="lbl-s" x="8" y="45.2">RETRIEVAL INTERFACE &mdash; CODERETRIEVER</text>
+    <text class="lbl-s" x="8" y="48.8">QUERY(TEXT, N, FILTER) &middot; GET_FILE_CHUNKS(PATH) &middot; COUNT()</text>
+    <text class="lbl-s" x="8" y="52.4">FILTERS: FILE_PATH, LANGUAGE, SYMBOL_TYPE, RISK_LEVEL</text>
+    <text class="code" x="176.6" y="5.2" text-anchor="end">RAG-501A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.5-1.</span>Semantic Chunking, Embedding and Retrieval Interface</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">3.5.2</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p><i>run</i> names the collection <i>gnosis_{owner}_{repo}_{job_id}</i>, sanitised and length-capped, then gets or creates it with cosine distance. In a non-incremental run the collection is deleted first, so a re-run never mixes old vectors. For each file with chunks, it appends to a 128-chunk buffer; when the buffer fills, it requests embeddings, disambiguates duplicate identifiers, and adds documents with metadata. The final partial buffer follows the same path. Raw text is then released from state.</p>
+  </div>
+</section>
+
+<section class="para">
+  <div class="num">3.5.2.1</div>
+  <div>
+    <h3>Dimension Guard.</h3>
+    <p class="flush">On an incremental run, the stage peeks at one stored embedding. If its length differs from 2048, the collection is deleted and every file is re-embedded. This prevents a collection from mixing vectors produced by different models, which ChromaDB cannot query coherently. A changed embedding model therefore costs a full re-embed, not a partial one.</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Chunk metadata fields stored with each vector">
+    <rect class="panel" x="1.5" y="2" width="177" height="34"/>
+    <text class="lbl-s" x="3.4" y="5.2">METADATA WRITTEN WITH EVERY CHUNK</text>
+    <rect class="box" x="6" y="8" width="26" height="9"/><text class="lbl-s" x="19" y="13.6" text-anchor="middle">FILE_PATH</text>
+    <rect class="box" x="36" y="8" width="26" height="9"/><text class="lbl-s" x="49" y="13.6" text-anchor="middle">SYMBOL_NAME</text>
+    <rect class="box" x="66" y="8" width="26" height="9"/><text class="lbl-s" x="79" y="13.6" text-anchor="middle">SYMBOL_TYPE</text>
+    <rect class="box" x="96" y="8" width="22" height="9"/><text class="lbl-s" x="107" y="13.6" text-anchor="middle">LANGUAGE</text>
+    <rect class="box" x="122" y="8" width="24" height="9"/><text class="lbl-s" x="134" y="13.6" text-anchor="middle">LINE RANGE</text>
+    <rect class="box" x="150" y="8" width="24" height="9"/><text class="lbl-s" x="162" y="13.6" text-anchor="middle">COMPLEXITY</text>
+    <rect class="box" x="6" y="20" width="44" height="9"/><text class="lbl-s" x="28" y="25.6" text-anchor="middle">RISK_LEVEL</text>
+    <rect class="box" x="54" y="20" width="120" height="9"/><text class="lbl-s" x="114" y="25.6" text-anchor="middle">CHUNK_ID: SANITIZED_PATH :: SYMBOL :: LINE :: TYPE</text>
+    <text class="lbl-s" x="6" y="33" >NONE VALUES ARE CONVERTED TO SENTINELS BEFORE STORAGE; THEY ARE CONVERTED BACK ON READ.</text>
+    <text class="code" x="176.6" y="34.0" text-anchor="end">RAG-502A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.5-2.</span>Chunk Metadata Contract</figcaption>
+</figure>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">3.5.3</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 3.5-1. Retrieval Parameters</div>
+    <table class="dense">
+      <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Embedding model</td><td class="v">nvidia/nemotron-3-embed-1b</td></tr>
+        <tr><td>Dimensions</td><td class="v">2048</td></tr>
+        <tr><td>Embedding batch</td><td class="v">50 texts</td></tr>
+        <tr><td>Stream buffer</td><td class="v">128 chunks</td></tr>
+        <tr><td>Chroma add batch</td><td class="v">128-chunk flush (500 constant unused)</td></tr>
+        <tr><td>Distance</td><td class="v">cosine</td></tr>
+        <tr><td>Persistence</td><td class="v">./chroma_db</td></tr>
+        <tr><td>Collection scope</td><td class="v">owner + repo + job id</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">CAUTION</span>
+      <p>This stage clears <i>state.raw_contents</i> at the end. Stage 6's fallback therefore receives an empty string for every file, and explanation depends on retrieval succeeding. If the collection is empty or the retriever cannot connect, explanation degrades to a no-code prompt. See 8.1-1.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>INDEX CHECK</span><span>MAINTAINER</span></div>
+      <ol>
+        <li><span>1</span><span>READ - collection name in state</span></li>
+        <li><span>2</span><span>CALL - retriever.count()</span></li>
+        <li><span></span><span>&radic; COUNT - greater than zero</span></li>
+        <li><span>3</span><span>QUERY - a known function name</span></li>
+        <li><span>4</span><span>CONFIRM - file_path metadata matches</span></li>
+      </ol>
+    </div>
+  </div>
+</div>

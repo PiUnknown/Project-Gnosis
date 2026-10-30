@@ -1,0 +1,111 @@
+<section class="para">
+  <div class="num">3.3.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>The dependency stage converts internal imports into a directed graph whose nodes are manifest files and whose edges point from importer to imported file. It then computes in-degree, out-degree, PageRank, membership in a cycle, and, when the graph is acyclic, a topological order that becomes the suggested reading sequence. The one idea the reader must leave with is the edge direction: an edge A &rarr; B means A imports B, so high in-degree marks a file that many others depend on (figure 3.3-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 62" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Importer to imported edges, in-degree and a circular dependency">
+    <rect class="panel" x="1.5" y="2" width="177" height="58"/>
+    <text class="lbl-s" x="3.4" y="5.2">GRAPH ANATOMY &mdash; EDGE POINTS TO THE IMPORTED FILE</text>
+
+    <rect class="box" x="10" y="12" width="28" height="10"/><text class="lbl-s" x="24" y="18" text-anchor="middle">API/MAIN.PY</text>
+    <rect class="box" x="10" y="30" width="28" height="10"/><text class="lbl-s" x="24" y="36" text-anchor="middle">API/WORKER.PY</text>
+    <rect class="box" x="72" y="21" width="30" height="10"/><text class="lbl-s" x="87" y="27" text-anchor="middle">PIPELINE_RUNNER</text>
+    <rect class="box" x="132" y="12" width="30" height="10"/><text class="lbl-s" x="147" y="18" text-anchor="middle">ORCHESTRATOR</text>
+    <rect class="box" x="132" y="30" width="30" height="10"/><text class="lbl-s" x="147" y="36" text-anchor="middle">AGENTS/*</text>
+
+    <line class="wa" x1="38" y1="17" x2="71.4" y2="24"/>
+    <line class="wa" x1="38" y1="35" x2="71.4" y2="28"/>
+    <line class="wa" x1="102" y1="24" x2="131.4" y2="17.4"/>
+    <line class="wa" x1="102" y1="28" x2="131.4" y2="34.6"/>
+    <text class="lbl-s" x="44" y="15.4">IMPORTS</text>
+    <text class="lbl-s" x="104" y="21">CALLS</text>
+
+    <line class="w" x1="87" y1="31" x2="87" y2="44"/>
+    <line class="w" x1="87" y1="44" x2="147" y2="44"/>
+    <line class="wa" x1="147" y1="44" x2="147" y2="40.6"/>
+    <text class="lbl-s" x="104" y="47">PIPELINE IMPORTS ALL SEVEN AGENTS; NO AGENT IMPORTS ANOTHER</text>
+
+    <rect class="panel" x="10" y="50" width="152" height="7"/>
+    <text class="lbl-s" x="12" y="54.8">IN-DEGREE = NUMBER OF FILES THAT IMPORT THIS FILE &nbsp;&middot;&nbsp; OUT-DEGREE = NUMBER THIS FILE IMPORTS</text>
+
+    <text class="lbl-s" x="112" y="8.4">&hellip;A CYCLE IS A &rarr; B &rarr; A</text>
+    <text class="code" x="176.6" y="5.2" text-anchor="end">DEP-501A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.3-1.</span>Edge Direction and Degree Definitions</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">3.3.2</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p><i>run</i> adds every manifest file as a node before adding any edge, so isolated files remain visible to scoring and explanation. For each internal import it calls <i>resolve_import_to_paths</i>, which applies language-specific rules: Python absolute and relative module resolution, JavaScript extension and index resolution, Rust crate and <i>super</i> paths, C include paths, Go package directories, and Java source roots. Self-loops and targets outside the manifest are discarded. The stage then runs <i>nx.simple_cycles</i>, marks every node in a cycle, computes PageRank, and builds one statistics record per node.</p>
+  </div>
+</section>
+
+<section class="para">
+  <div class="num">3.3.2.1</div>
+  <div>
+    <h3>Reading Order.</h3>
+    <p class="flush">If the graph has no cycle, <i>nx.topological_sort</i> produces an order in which every dependency appears before its importer. If any cycle exists, the stage leaves the topological order empty rather than returning a partial order; the document then falls back to safe starting files. This is a deliberate all-or-nothing rule, not an oversight.</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Graph statistics record fields">
+    <rect class="panel" x="1.5" y="2" width="177" height="36"/>
+    <text class="lbl-s" x="3.4" y="5.2">GRAPH_STATS[PATH] &mdash; ONE RECORD PER NODE</text>
+    <rect class="box" x="7" y="9" width="26" height="9"/><text class="lbl-s" x="20" y="14.6" text-anchor="middle">IN_DEGREE</text>
+    <rect class="box" x="37" y="9" width="26" height="9"/><text class="lbl-s" x="50" y="14.6" text-anchor="middle">OUT_DEGREE</text>
+    <rect class="box" x="67" y="9" width="26" height="9"/><text class="lbl-s" x="80" y="14.6" text-anchor="middle">PAGERANK</text>
+    <rect class="box" x="97" y="9" width="36" height="9"/><text class="lbl-s" x="115" y="14.6" text-anchor="middle">IS_IN_CIRCULAR_DEP</text>
+    <rect class="box" x="137" y="9" width="36" height="9"/><text class="lbl-s" x="155" y="14.6" text-anchor="middle">DEPENDENTS[]</text>
+    <rect class="box" x="7" y="22" width="80" height="9"/><text class="lbl-s" x="47" y="27.6" text-anchor="middle">DEPENDENCIES[] &mdash; SUCCESSORS</text>
+    <rect class="box" x="91" y="22" width="82" height="9"/><text class="lbl-s" x="132" y="27.6" text-anchor="middle">STATE.CIRCULAR_DEPS[] &mdash; LISTS OF PATHS</text>
+    <text class="lbl-s" x="7" y="35.2">SCORING READS OUT_DEGREE; EXPLANATION READS IN_DEGREE; THE DOCUMENT READS BOTH.</text>
+    <text class="code" x="176.6" y="36.0" text-anchor="end">DEP-502A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.3-2.</span>Statistics Record and Its Consumers</figcaption>
+</figure>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">3.3.3</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 3.3-1. Graph Construction Rules</div>
+    <table class="dense">
+      <thead><tr><th>Rule</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Node set</td><td class="v">every manifest file</td></tr>
+        <tr><td>Edge</td><td class="v">importer &rarr; imported</td></tr>
+        <tr><td>External imports</td><td class="v">no edge</td></tr>
+        <tr><td>Self-loops</td><td class="v">discarded</td></tr>
+        <tr><td>Missing targets</td><td class="v">counted unresolved, dropped</td></tr>
+        <tr><td>Cycle algorithm</td><td class="v">nx.simple_cycles</td></tr>
+        <tr><td>Rank</td><td class="v">PageRank, 6 decimals</td></tr>
+        <tr><td>Topological order</td><td class="v">empty if any cycle</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">CAUTION</span>
+      <p><i>simple_cycles</i> enumerates every elementary cycle, and the cost can grow sharply on dense graphs. A repository with many mutually importing packages may spend most of stage 3 in cycle enumeration. The count is exact; it is not a sample.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>GRAPH CHECK</span><span>MAINTAINER</span></div>
+      <ol>
+        <li><span>1</span><span>READ - node count equals manifest</span></li>
+        <li><span>2</span><span>PICK - one known import</span></li>
+        <li><span></span><span>&radic; EDGE - direction is importer &rarr; target</span></li>
+        <li><span>3</span><span>CHECK - cycle list non-empty only if real</span></li>
+        <li><span>4</span><span>CONFIRM - topo empty when cycles exist</span></li>
+      </ol>
+    </div>
+  </div>
+</div>

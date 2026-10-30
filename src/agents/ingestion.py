@@ -16,7 +16,12 @@ def get_max_sampled_analysis_files():
     return int(os.getenv("MAX_SAMPLED_ANALYSIS_FILES", 3000))
 
 
-def run(state: ArchaeonState) -> ArchaeonState:
+def run(
+    state: ArchaeonState,
+    *,
+    reject_over_max: bool = False,
+    repo_size_kb: int | None = None,
+) -> ArchaeonState:
     """
     Ingestion Agent entry point.
 
@@ -59,6 +64,13 @@ def run(state: ArchaeonState) -> ArchaeonState:
     file_count = len(filtered)
     state.files_discovered = file_count
 
+    max_sampled = get_max_sampled_analysis_files()
+    if reject_over_max and file_count > max_sampled:
+        raise ValueError(
+            f"Repository exceeds the maximum file limit of {max_sampled} "
+            f"files (found {file_count}). Analysis rejected."
+        )
+
     if file_count <= get_max_full_analysis_files():
         state.analysis_mode = "Full"
     elif file_count <= get_max_warning_analysis_files():
@@ -68,9 +80,9 @@ def run(state: ArchaeonState) -> ArchaeonState:
         state.analysis_mode = "Sampled"
         print(f"  [INFO] Sampled analysis mode enabled ({file_count} files discovered).")
 
-    if len(filtered) > get_max_sampled_analysis_files():
-        print(f"  [WARNING] Capping at {get_max_sampled_analysis_files()} files for ingestion.")
-        filtered = filtered[:get_max_sampled_analysis_files()]
+    if len(filtered) > max_sampled:
+        print(f"  [WARNING] Capping at {max_sampled} files for ingestion.")
+        filtered = filtered[:max_sampled]
 
     # Step 4: Build manifest (no content yet, line_count is 0 for now)
     file_manifest = []
@@ -108,7 +120,8 @@ def run(state: ArchaeonState) -> ArchaeonState:
         state.default_branch,
         paths_to_fetch,
         token=state.github_token,
-        delay=0.05
+        delay=0.05,
+        repo_size_kb=repo_size_kb,
     )
 
     # In incremental mode, preserve previous raw contents for unchanged files if available
@@ -118,6 +131,19 @@ def run(state: ArchaeonState) -> ArchaeonState:
                 raw_contents[f.path] = state.previous_state.raw_contents[f.path]
 
     state.raw_contents = raw_contents
+    content_paths = set(raw_contents)
+    if state.is_incremental and state.previous_state:
+        previous_content_paths = getattr(
+            state.previous_state, "content_paths", None
+        )
+        if previous_content_paths is None:
+            previous_content_paths = set(state.previous_state.raw_contents)
+        unchanged_paths = (
+            state.manifest_diff.unchanged_paths if state.manifest_diff else set()
+        )
+        content_paths.update(previous_content_paths & unchanged_paths)
+    state.content_paths = content_paths
+    state.files_with_content = len(content_paths)
     del paths_to_fetch
 
     # Step 6: Update line counts now that content is available

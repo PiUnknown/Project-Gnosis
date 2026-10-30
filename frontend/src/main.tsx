@@ -2,35 +2,22 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
+import DeferredTelemetry from './components/DeferredTelemetry'
+import { initializeAnalyticsWhenIdle } from './lib/analytics'
 
 import * as Sentry from '@sentry/react'
-import { PostHogProvider } from '@posthog/react'
-import { Analytics } from '@vercel/analytics/react'
-import { SpeedInsights } from '@vercel/speed-insights/react'
 
 Sentry.init({
   dsn: import.meta.env.VITE_SENTRY_DSN || "https://2bd0f370583a6d64b0920920e804fc45@o4512010180066048.ingest.de.sentry.io/4512010184929360",
   environment: import.meta.env.MODE || "production",
 })
-Sentry.captureMessage("Gnosis System Online - Sentry Connected")
-
-const options = {
-  api_host: import.meta.env.VITE_POSTHOG_HOST || (import.meta.env.PROD ? "/ingest" : "https://eu.i.posthog.com"),
-  ui_host: "https://eu.posthog.com",
-  disable_session_recording: true,
-}
+initializeAnalyticsWhenIdle()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <Sentry.ErrorBoundary fallback={<div style={{ padding: 24, color: '#fff', background: '#1400FF', fontFamily: 'monospace' }}>An error occurred while loading the application. Please refresh.</div>}>
-      <PostHogProvider 
-        apiKey={import.meta.env.VITE_POSTHOG_PROJECT_TOKEN || "phc_vEgQtXumCU6NkHgdDiGm5J8MnDg4wEXTMuUjXRAYorDP"}
-        options={options}
-      >
-        <App />
-        <Analytics />
-        <SpeedInsights />
-      </PostHogProvider>
+      <App />
+      <DeferredTelemetry />
     </Sentry.ErrorBoundary>
   </React.StrictMode>,
 )

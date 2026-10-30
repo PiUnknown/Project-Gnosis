@@ -1,0 +1,112 @@
+<section class="para">
+  <div class="num">2.1.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>The backend is a Python 3 application with no framework beyond FastAPI at its edge. Analysis depends on five libraries that do the substantive work: tree-sitter for syntax, NetworkX for graph algorithms, Radon for Python complexity, ChromaDB for vector storage, and the OpenAI client pointed at NVIDIA NIM. The one idea the reader must leave with is that <i>requirements.txt</i> declares floors only; the versions in this handbook are the ones resolved in the local virtual environment, not a locked contract (figure 2.1-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 58" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Layered backend dependency stack">
+    <rect class="panel" x="1.5" y="2" width="177" height="54"/>
+    <text class="lbl-s" x="3.4" y="5.2">BACKEND STACK &mdash; RESOLVED IN .VENV</text>
+
+    <rect class="box" x="8" y="7.4" width="164" height="7.4"/>
+    <text class="lbl" x="12" y="12.4">EDGE</text>
+    <text class="lbl-s" x="34" y="12.4">FASTAPI 0.141.1 &nbsp;&middot;&nbsp; PYDANTIC 2.13.4 &nbsp;&middot;&nbsp; UVICORN 0.52.3</text>
+
+    <rect class="box" x="8" y="17" width="164" height="7.4"/>
+    <text class="lbl" x="12" y="22">CONTROL</text>
+    <text class="lbl-s" x="34" y="22">REDIS 8.1.0 &nbsp;&middot;&nbsp; RQ 2.11.0 &nbsp;&middot;&nbsp; FAKEREDIS 2.37.1 &nbsp;&middot;&nbsp; PYTEST 9.1.1</text>
+
+    <rect class="box" x="8" y="26.6" width="164" height="7.4"/>
+    <text class="lbl" x="12" y="31.6">ANALYSIS</text>
+    <text class="lbl-s" x="34" y="31.6">TREE-SITTER 0.26.0 &nbsp;&middot;&nbsp; NETWORKX 3.6.1 &nbsp;&middot;&nbsp; RADON 6.0.1 &nbsp;&middot;&nbsp; CHROMADB 1.5.9</text>
+
+    <rect class="box" x="8" y="36.2" width="164" height="7.4"/>
+    <text class="lbl" x="12" y="41.2">I/O</text>
+    <text class="lbl-s" x="34" y="41.2">REQUESTS 2.34.2 &nbsp;&middot;&nbsp; OPENAI 3.2.0 &nbsp;&middot;&nbsp; PYVIS 0.3.2 &nbsp;&middot;&nbsp; PSUTIL 7.2.2</text>
+
+    <rect class="box" x="8" y="45.8" width="164" height="7.4"/>
+    <text class="lbl" x="12" y="50.8">RUNTIME</text>
+    <text class="lbl-s" x="34" y="50.8">PYTHON 3.11.15 LOCAL &nbsp;&middot;&nbsp; 3.11-SLIM DOCKER &nbsp;&middot;&nbsp; 3.12 AZURE WORKFLOWS</text>
+
+    <text class="code" x="176.6" y="5.2" text-anchor="end">STK-501A</text>
+  </svg>
+  <figcaption><span class="n">Figure 2.1-1.</span>Backend Dependency Layers and Resolved Versions</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.4mm">
+  <div class="num">2.1.2</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p>FastAPI parses and validates requests with Pydantic models, exposes the routes, and delegates every long operation to a job runner. Requests and the OpenAI client carry out HTTPS calls to GitHub and NVIDIA. Tree-sitter supplies a concrete syntax tree per language; the parsers in <i>src/parsers/</i> convert those trees to symbol tables. NetworkX holds the file graph in memory and supplies cycle detection, topological sorting and PageRank. Radon computes Python cyclomatic complexity; the JavaScript and generic paths use a custom branch counter. ChromaDB persists chunk embeddings under <i>./chroma_db</i>, and RQ moves job identifiers through Redis.</p>
+  </div>
+</section>
+
+<section class="para">
+  <div class="num">2.1.2.1</div>
+  <div>
+    <h3>SQLite Substitution.</h3>
+    <p class="flush">At the top of <i>src/api/main.py</i>, before any ChromaDB import, the module imports <i>pysqlite3</i> and replaces <i>sys.modules["sqlite3"]</i> with it. The comment states that Azure App Service ships SQLite 3.31 while ChromaDB requires at least 3.35. The substitution is unconditional, so it also runs locally; it is an environment workaround, not an analysis feature.</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Version declaration versus resolution">
+    <rect class="panel" x="1.5" y="2" width="177" height="34"/>
+    <text class="lbl-s" x="3.4" y="5.2">DECLARED FLOOR vs RESOLVED VERSION</text>
+    <line class="w" x1="40" y1="8" x2="40" y2="31"/>
+    <text class="lbl-s" x="6" y="10.6" >PACKAGE</text>
+    <text class="lbl-s" x="48" y="10.6">DECLARED</text>
+    <text class="lbl-s" x="90" y="10.6">RESOLVED</text>
+    <text class="lbl-s" x="126" y="10.6">ROLE</text>
+    <text class="lbl-s" x="6" y="14.8">CHROMADB</text><text class="lbl-s" x="48" y="14.8">&gt;=0.4.22</text><text class="lbl-s" x="90" y="14.8">1.5.9</text><text class="lbl-s" x="126" y="14.8">VECTOR STORE</text>
+    <text class="lbl-s" x="6" y="18.4">FASTAPI</text><text class="lbl-s" x="48" y="18.4">&gt;=0.109.0</text><text class="lbl-s" x="90" y="18.4">0.141.1</text><text class="lbl-s" x="126" y="18.4">HTTP EDGE</text>
+    <text class="lbl-s" x="6" y="22">TREE-SITTER</text><text class="lbl-s" x="48" y="22">&gt;=0.21.3</text><text class="lbl-s" x="90" y="22">0.26.0</text><text class="lbl-s" x="126" y="22">SYNTAX</text>
+    <text class="lbl-s" x="6" y="25.6">OPENAI</text><text class="lbl-s" x="48" y="25.6">&gt;=1.0.0</text><text class="lbl-s" x="90" y="25.6">3.2.0</text><text class="lbl-s" x="126" y="25.6">NIM CLIENT</text>
+    <text class="lbl-s" x="6" y="29.2">REDIS</text><text class="lbl-s" x="48" y="29.2">&gt;=5.0.0</text><text class="lbl-s" x="90" y="29.2">8.1.0</text><text class="lbl-s" x="126" y="29.2">JOB STATE</text>
+    <text class="code" x="176.6" y="34.0" text-anchor="end">STK-502A</text>
+  </svg>
+  <figcaption><span class="n">Figure 2.1-2.</span>Declaration Floors and Local Resolution</figcaption>
+</figure>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">2.1.3</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 2.1-1. Backend Software and Actual Role</div>
+    <table class="dense">
+      <thead><tr><th>Package</th><th>Resolved</th><th>Role in this system</th></tr></thead>
+      <tbody>
+        <tr><td>chromadb</td><td class="v">1.5.9</td><td>Per-job collection of embedded code chunks</td></tr>
+        <tr><td>networkx</td><td class="v">3.6.1</td><td>DiGraph, simple_cycles, topological_sort, pagerank</td></tr>
+        <tr><td>radon</td><td class="v">6.0.1</td><td>Python cyclomatic complexity and line metrics</td></tr>
+        <tr><td>tree-sitter</td><td class="v">0.26.0</td><td>Parser runtime for eight language grammars</td></tr>
+        <tr><td>fastapi</td><td class="v">0.141.1</td><td>Routes, validation, middleware</td></tr>
+        <tr><td>pydantic</td><td class="v">2.13.4</td><td>Request and response schemas</td></tr>
+        <tr><td>openai</td><td class="v">3.2.0</td><td>OpenAI-compatible client for NVIDIA NIM</td></tr>
+        <tr><td>redis / rq</td><td class="v">8.1.0 / 2.11.0</td><td>Job records and distributed queue</td></tr>
+        <tr><td>pytest</td><td class="v">9.1.1</td><td>476-test verification suite</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">CAUTION</span>
+      <p>There is no Python lockfile. Every requirement is a lower bound, so two hosts can resolve different versions. The frontend does have a lockfile. Reproduce the versions in table 2.1-1 before attributing a defect to the code.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>STACK CHECK</span><span>MAINTAINER</span></div>
+      <ol>
+        <li><span>1</span><span>READ - requirements.txt floors</span></li>
+        <li><span>2</span><span>RUN - python -m pip list</span></li>
+        <li><span></span><span>&radic; MATCH - table 2.1-1</span></li>
+        <li><span>3</span><span>CHECK - Python 3.11 or 3.12</span></li>
+        <li><span>4</span><span>VERIFY - sqlite3 module is pysqlite3</span></li>
+      </ol>
+    </div>
+  </div>
+</div>

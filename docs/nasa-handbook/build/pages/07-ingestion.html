@@ -1,0 +1,134 @@
+<section class="para">
+  <div class="num">3.1.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>Ingestion is the only stage that talks to GitHub. It obtains the complete path list for one branch, keeps the files that are worth reading, classifies the repository by size, and downloads the raw text of each kept file. It writes two large fields: a manifest of file metadata and a dictionary of path-to-text. The one idea the reader must leave with is that the manifest, not the repository, defines everything downstream; a file absent here cannot exist for later stages (figure 3.1-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 62" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ingestion pipeline from tree listing to manifest and raw text">
+    <rect class="panel" x="1.5" y="2" width="177" height="58"/>
+    <text class="lbl-s" x="3.4" y="5.2">INGESTION &mdash; ONE TREE CALL, MANY RAW CALLS</text>
+
+    <rect class="box" x="6" y="10" width="27" height="14"/>
+    <text class="lbl" x="19.5" y="15.4" text-anchor="middle">TREE API</text>
+    <text class="lbl-s" x="19.5" y="18.6" text-anchor="middle">RECURSIVE=1</text>
+    <text class="lbl-s" x="19.5" y="21.6" text-anchor="middle">DEFAULT BRANCH</text>
+    <line class="wa" x1="33" y1="17" x2="42.4" y2="17"/>
+    <text class="lbl-s" x="33.6" y="15.4">PATHS</text>
+
+    <rect class="box" x="43" y="10" width="29" height="14"/>
+    <text class="lbl" x="57.5" y="15.4" text-anchor="middle">FILTER</text>
+    <text class="lbl-s" x="57.5" y="18.6" text-anchor="middle">24 DIRS OUT</text>
+    <text class="lbl-s" x="57.5" y="21.6" text-anchor="middle">18 EXTENSIONS IN</text>
+    <line class="wa" x1="72" y1="17" x2="81.4" y2="17"/>
+    <text class="lbl-s" x="72.6" y="15.4">KEEP</text>
+
+    <rect class="box" x="82" y="10" width="30" height="14"/>
+    <text class="lbl" x="97" y="15.4" text-anchor="middle">SIZE TIER</text>
+    <text class="lbl-s" x="97" y="18.6" text-anchor="middle">300 / 1,000 / 3,000</text>
+    <text class="lbl-s" x="97" y="21.6" text-anchor="middle">SORT DEPTH, NAME</text>
+    <line class="wa" x1="112" y1="17" x2="121.4" y2="17"/>
+    <text class="lbl-s" x="112.6" y="15.4">CAP</text>
+
+    <rect class="box" x="122" y="10" width="30" height="14"/>
+    <text class="lbl" x="137" y="15.4" text-anchor="middle">RAW FETCH</text>
+    <text class="lbl-s" x="137" y="18.6" text-anchor="middle">16 WORKERS MAX</text>
+    <text class="lbl-s" x="137" y="21.6" text-anchor="middle">5 RETRIES</text>
+    <line class="wa" x1="152" y1="17" x2="160.4" y2="17"/>
+    <text class="lbl-s" x="152.6" y="15.4">TEXT</text>
+
+    <rect class="box" x="161" y="10" width="14" height="14"/>
+    <text class="lbl-s" x="168" y="15.4" text-anchor="middle">STATE</text>
+    <text class="lbl-s" x="168" y="18.6" text-anchor="middle">MANIFEST</text>
+    <text class="lbl-s" x="168" y="21.6" text-anchor="middle">RAW</text>
+
+    <rect class="panel" x="6" y="29" width="168" height="22"/>
+    <text class="lbl-s" x="8" y="32.2">FILES THAT NEVER ENTER</text>
+    <text class="lbl-s" x="8" y="36.2">NODE_MODULES, .GIT, VENV, DIST, BUILD, TARGET, VENDOR, COVERAGE</text>
+    <text class="lbl-s" x="8" y="40">LOCKFILES, MINIFIED BUNDLES, BINARIES, FILES OVER 150 KB</text>
+    <text class="lbl-s" x="8" y="43.8">ANY EXTENSION NOT IN THE 18-ENTRY ALLOW LIST</text>
+    <text class="lbl-s" x="8" y="47.6">NO FILE IS EXECUTED OR WRITTEN BACK TO GITHUB</text>
+
+    <text class="lbl-s" x="6" y="56">OUTPUT: FILE_MANIFEST[], RAW_CONTENTS{}, FILES_DISCOVERED, ANALYSIS_MODE</text>
+    <text class="code" x="176.6" y="58.0" text-anchor="end">ING-501A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.1-1.</span>Ingestion Flow and Exclusion Boundary</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">3.1.2</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p>The stage calls <i>fetch_file_tree</i> once. For each entry it applies <i>should_include_file</i>, which checks directory segments first, then exact filenames, then minified suffixes, then the extension allow list, then the 150 KB ceiling. Surviving entries are sorted by slash count and then by path, so shallow files are preferred when a cap applies. The stage sets <i>analysis_mode</i> and calls <i>fetch_file_contents_batch</i>, which uses a shared requests session, a thread pool capped at sixteen, and five attempts with backoff. Line counts are computed from the returned text rather than trusted from the API.</p>
+  </div>
+</section>
+
+<section class="para">
+  <div class="num">3.1.2.1</div>
+  <div>
+    <h3>Incremental Manifest Diff.</h3>
+    <p class="flush">When <i>state.is_incremental</i> and a previous state exists, <i>compute_manifest_diff</i> classifies paths as added, modified, deleted or unchanged by SHA. Only changed paths are fetched; unchanged raw text is copied from the previous state when available. A deleted file is therefore visible to later stages as a diff entry, not as content.</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Parallel raw content fetch with retry">
+    <rect class="panel" x="1.5" y="2" width="177" height="34"/>
+    <text class="lbl-s" x="3.4" y="5.2">RAW CONTENT FAN-OUT</text>
+    <rect class="box" x="7" y="9" width="24" height="9"/><text class="lbl-s" x="19" y="14.6" text-anchor="middle">PATH LIST</text>
+    <line class="wa" x1="31" y1="13.5" x2="39.4" y2="13.5"/>
+    <rect class="box" x="40" y="9" width="26" height="9"/><text class="lbl-s" x="53" y="14.6" text-anchor="middle">POOL 16</text>
+    <line class="wa" x1="66" y1="13.5" x2="74.4" y2="13.5"/>
+    <rect class="box" x="75" y="9" width="30" height="9"/><text class="lbl-s" x="90" y="14.6" text-anchor="middle">RAW HOST</text>
+    <line class="wa" x1="105" y1="13.5" x2="113.4" y2="13.5"/>
+    <rect class="box" x="114" y="9" width="26" height="9"/><text class="lbl-s" x="127" y="14.6" text-anchor="middle">RETRY 5</text>
+    <line class="wa" x1="140" y1="13.5" x2="148.4" y2="13.5"/>
+    <rect class="box" x="149" y="9" width="24" height="9"/><text class="lbl-s" x="161" y="14.6" text-anchor="middle">TEXT MAP</text>
+    <text class="lbl-s" x="7" y="24">ON 403/429 THE FETCHER BACKS OFF; ON EXHAUSTION THE PATH IS ABSENT, NOT FATAL.</text>
+    <text class="lbl-s" x="7" y="28.4">RAW.GITHUBUSERCONTENT.COM DOES NOT COUNT AGAINST THE API RATE LIMIT.</text>
+    <text class="lbl-s" x="7" y="32.4">API FALLBACK IS USED WHEN THE RAW HOST RETURNS NO CONTENT.</text>
+    <text class="code" x="176.6" y="34.0" text-anchor="end">ING-502A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.1-2.</span>Content Fetch Pool and Retry Path</figcaption>
+</figure>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">3.1.3</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 3.1-1. Ingestion Parameters</div>
+    <table class="dense">
+      <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Tree requests per run</td><td class="v">1</td></tr>
+        <tr><td>Content workers</td><td class="v">min(16, paths)</td></tr>
+        <tr><td>Fetch attempts</td><td class="v">5, 0.5 s backoff</td></tr>
+        <tr><td>Inter-request delay</td><td class="v">0.05 s</td></tr>
+        <tr><td>Maximum file size</td><td class="v">150,000 bytes</td></tr>
+        <tr><td>Excluded directories</td><td class="v">24 named patterns</td></tr>
+        <tr><td>Accepted extensions</td><td class="v">18</td></tr>
+        <tr><td>Sort key</td><td class="v">(depth, path)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">CAUTION</span>
+      <p>The README says fifteen concurrent threads; the code caps at sixteen. It also lists a <i>tests/fixtures/sample_repo/</i> directory that is empty and untracked here. Trust table 3.1-1 and section 5.1-2, not the README tree.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>INGESTION CHECK</span><span>OPERATOR</span></div>
+      <ol>
+        <li><span>1</span><span>CONFIRM - GITHUB_TOKEN set</span></li>
+        <li><span>2</span><span>READ - files discovered</span></li>
+        <li><span></span><span>&radic; TIER - mode matches count</span></li>
+        <li><span>3</span><span>CHECK - manifest not empty</span></li>
+        <li><span>4</span><span>VERIFY - raw text for sample path</span></li>
+      </ol>
+    </div>
+  </div>
+</div>

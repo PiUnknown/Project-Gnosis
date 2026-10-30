@@ -45,6 +45,7 @@ class ArchaeonState:
     # --- Agent 3: Dependency Graph ---
     dependency_graph: Any = None                             # nx.DiGraph
     circular_deps: list = field(default_factory=list)        # list of cycles (list of lists)
+    circular_deps_truncated: bool = False                    # more cycles existed than the report cap
     circular_nodes: set = field(default_factory=set)         # all file paths in any cycle
     graph_stats: dict = field(default_factory=dict)          # path -> per-file metrics dict
     topological_order: list = field(default_factory=list)    # suggested reading order
@@ -69,6 +70,8 @@ class ArchaeonState:
     analysis_mode: str = "Full"
     files_discovered: int = 0
     files_analyzed: int = 0
+    files_with_content: Optional[int] = None
+    content_paths: set = field(default_factory=set)
     analyzed_paths: Optional[set] = None
 
     # --- Incremental Updates ---

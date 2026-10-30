@@ -1,0 +1,107 @@
+<section class="para">
+  <div class="num">3.7.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>The document generator is a pure function over state. It assembles the onboarding document section by section, produces a compact context document for a downstream AI assistant, serialises the complexity report, and writes a per-file explanation pair in Markdown and JSON. The one idea the reader must leave with is that every section is independently guarded: one failed section is omitted with a warning, and the remaining document is still returned (figure 3.7-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 62" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Document assembly from state sections to output artifacts">
+    <rect class="panel" x="1.5" y="2" width="86" height="58"/>
+    <text class="lbl-s" x="3.4" y="5.2">ONBOARDING SECTIONS</text>
+    <rect class="box" x="7" y="8" width="72" height="6"/><text class="lbl-s" x="43" y="12.4" text-anchor="middle">HEADER</text>
+    <rect class="box" x="7" y="16" width="72" height="6"/><text class="lbl-s" x="43" y="20.4" text-anchor="middle">PROJECT SUMMARY</text>
+    <rect class="box" x="7" y="24" width="72" height="6"/><text class="lbl-s" x="43" y="28.4" text-anchor="middle">REPOSITORY STATISTICS</text>
+    <rect class="box" x="7" y="32" width="72" height="6"/><text class="lbl-s" x="43" y="36.4" text-anchor="middle">ARCHITECTURE MAP</text>
+    <rect class="box" x="7" y="40" width="72" height="6"/><text class="lbl-s" x="43" y="44.4" text-anchor="middle">CORE COMPONENTS</text>
+    <rect class="box" x="7" y="48" width="72" height="6"/><text class="lbl-s" x="43" y="52.4" text-anchor="middle">TECH DEBT + READING ORDER</text>
+    <text class="lbl-s" x="7" y="57.6">FOOTER: MODE, URL, BRANCH, YEAR</text>
+
+    <rect class="panel" x="92" y="2" width="86" height="58"/>
+    <text class="lbl-s" x="93.4" y="5.2">ARTIFACTS</text>
+    <rect class="box" x="96" y="9" width="78" height="7.5"/><text class="lbl-s" x="135" y="13.9" text-anchor="middle">STEP 1 &mdash; ONBOARDING.MD</text>
+    <rect class="box" x="96" y="22.5" width="78" height="7.5"/><text class="lbl-s" x="135" y="27.4" text-anchor="middle">STEP 2 &mdash; AGENT_CONTEXT.MD</text>
+    <rect class="box" x="96" y="36" width="78" height="7.5"/><text class="lbl-s" x="135" y="40.9" text-anchor="middle">STEP 3 &mdash; COMPLEXITY_REPORT.JSON</text>
+    <rect class="box" x="96" y="49.5" width="78" height="7.5"/><text class="lbl-s" x="135" y="54.4" text-anchor="middle">STEP 4 &mdash; FILE_EXPLANATIONS .MD / .JSON</text>
+    <text class="code" x="176.6" y="5.2" text-anchor="end">DOC-501A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.7-1.</span>Document Assembly and Output Artifacts</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">3.7.2</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p><i>run</i> iterates the onboarding builders in a fixed order, appending each returned string. It then calls <i>generate_agent_context_doc</i>, which composes ten sections aimed at an AI coding assistant: overview, entry points, core components, relationships, high-risk areas, cycles, domain objects, change impact, safe starting points and AI explanations. The complexity report is serialised from the score objects. The per-file explanation document and JSON are produced by separate builders. Each of the four major outputs is wrapped in its own try block.</p>
+  </div>
+</section>
+
+<section class="para">
+  <div class="num">3.7.2.1</div>
+  <div>
+    <h3>Degradation Rule.</h3>
+    <p class="flush">Section builders that fail are skipped, not replaced by a placeholder, so a document can be missing a heading without any visible marker in the body. A failure of the whole agent-context builder substitutes a one-line error document. The API always returns whatever fields were produced; the CLI writes only the files that exist.</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Which downstream consumer reads which document field">
+    <rect class="panel" x="1.5" y="2" width="177" height="34"/>
+    <text class="lbl-s" x="3.4" y="5.2">FIELD &rarr; CONSUMER</text>
+    <rect class="box" x="6" y="9" width="36" height="8"/><text class="lbl-s" x="24" y="14.4" text-anchor="middle">FINAL_DOC</text>
+    <line class="wa" x1="42" y1="11" x2="51.4" y2="11"/>
+    <text class="lbl-s" x="53" y="12.4">API &rarr; WEB ONBOARDING TAB</text>
+    <line class="wa" x1="42" y1="15" x2="51.4" y2="15"/>
+    <text class="lbl-s" x="53" y="16.4">CLI &rarr; OUTPUTS/ONBOARDING.MD</text>
+    <rect class="box" x="6" y="21" width="36" height="8"/><text class="lbl-s" x="24" y="26.4" text-anchor="middle">AGENT_CONTEXT_MD</text>
+    <line class="wa" x1="42" y1="25" x2="51.4" y2="25"/>
+    <text class="lbl-s" x="53" y="26.4">API RESULT FIELD ONLY</text>
+    <line class="t" x1="96" y1="7.4" x2="96" y2="30"/>
+    <text class="lbl-s" x="100" y="10.4">WIRE NAMES IN THE API RESULT</text>
+    <text class="lbl-s" x="100" y="15">FINAL_DOC &rarr; ONBOARDING_DOC</text>
+    <text class="lbl-s" x="100" y="19.4">AGENT_CONTEXT_MD &rarr; AGENT_CONTEXT</text>
+    <text class="lbl-s" x="100" y="23.8">COMPLEXITY_REPORT.JSON &rarr; COMPLEXITY_REPORT</text>
+    <text class="lbl-s" x="6" y="33">THE CLI ORCHESTRATOR DOES NOT WRITE AGENT_CONTEXT.MD TO DISK.</text>
+    <text class="code" x="176.6" y="34.0" text-anchor="end">DOC-502A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.7-2.</span>Output Field Consumers</figcaption>
+</figure>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">3.7.3</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 3.7-1. Generated Documents</div>
+    <table class="dense">
+      <thead><tr><th>Artifact</th><th>Content</th><th>Written by</th></tr></thead>
+      <tbody>
+        <tr><td>onboarding.md</td><td>Eight narrative sections</td><td>CLI and API result</td></tr>
+        <tr><td>agent_context_md</td><td>Ten assistant-oriented sections</td><td>API result field only</td></tr>
+        <tr><td>complexity_report.json</td><td>Per-file scores and reasons</td><td>CLI and API</td></tr>
+        <tr><td>file_explanations.md</td><td>One section per explained file</td><td>CLI save helper</td></tr>
+        <tr><td>file_explanations.json</td><td>Path to explanation map</td><td>CLI save helper</td></tr>
+        <tr><td>symbol_tables.json</td><td>All parsed symbols</td><td>Orchestrator save</td></tr>
+        <tr><td>dependency_graph.json</td><td>Nodes, edges, cycles, order</td><td>Orchestrator save</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">CAUTION</span>
+      <p>The "Important Domain Objects" section reads <i>cls.methods</i>, but the class record exposes <i>method_names</i>. Every class therefore reports zero methods. See 8.1-1. Separately, the CLI path never persists <i>agent_context_md</i>; only the API returns it.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>DOCUMENT CHECK</span><span>REVIEWER</span></div>
+      <ol>
+        <li><span>1</span><span>OPEN - onboarding.md</span></li>
+        <li><span>2</span><span>COUNT - major headings present</span></li>
+        <li><span></span><span>&radic; RISK - table matches scores</span></li>
+        <li><span>3</span><span>CHECK - reading order not empty</span></li>
+        <li><span>4</span><span>VERIFY - footer names branch and mode</span></li>
+      </ol>
+    </div>
+  </div>
+</div>

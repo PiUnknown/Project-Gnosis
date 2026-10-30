@@ -149,10 +149,26 @@ def _build_project_summary(state: ArchaeonState) -> str:
         for lang, count in list(lang_breakdown.items())[:5]
     )
 
+    coverage_summary = ""
+    if state.files_with_content is not None:
+        manifest_files = len(state.file_manifest)
+        coverage_summary = (
+            f"**Files with content available:** {state.files_with_content} of "
+            f"{manifest_files} selected files.\n\n"
+        )
+        if state.files_with_content < manifest_files:
+            missing = manifest_files - state.files_with_content
+            coverage_summary += (
+                f"**Partial-input warning:** {missing} selected file(s) could "
+                "not be retrieved. Their symbols and dependencies may be "
+                "missing from this report.\n\n"
+            )
+
     return (
         f"## Project Summary\n\n"
-        f"**{_repo_name(state)}** contains **{state.files_analyzed}** analyzed files "
+        f"**{_repo_name(state)}** has **{state.files_analyzed}** files selected for analysis "
         f"({state.files_discovered} discovered).\n\n"
+        f"{coverage_summary}"
         f"**Languages:** {lang_str or 'Unknown'}  \n"
         f"**Total functions extracted:** {_total_functions(state)}  \n"
         f"**Risk distribution:** {risk['CRITICAL']} CRITICAL · {risk['HIGH']} HIGH · "
@@ -176,7 +192,7 @@ def _build_repository_statistics(state: ArchaeonState) -> str:
 
     rows = [
         ("Files discovered", state.files_discovered),
-        ("Files analyzed", state.files_analyzed),
+        ("Files selected for analysis", state.files_analyzed),
         ("Analysis mode", state.analysis_mode),
         ("Primary language", f"{top_lang} ({top_lang_pct}%)"),
         ("Total functions", _total_functions(state)),
@@ -187,6 +203,11 @@ def _build_repository_statistics(state: ArchaeonState) -> str:
         ("CRITICAL risk files", risk["CRITICAL"]),
         ("HIGH risk files", risk["HIGH"]),
     ]
+    if state.files_with_content is not None:
+        rows.insert(
+            2,
+            ("Files with content", f"{state.files_with_content} / {len(state.file_manifest)}"),
+        )
 
     table = "| Metric | Value |\n|--------|-------|\n"
     table += "\n".join(f"| {k} | {v} |" for k, v in rows)
@@ -402,6 +423,9 @@ def _build_tech_debt_report(state: ArchaeonState) -> str:
         for i, cycle in enumerate(state.circular_deps[:10], 1):
             cycle_str = " → ".join(f"`{_short_path(f)}`" for f in cycle) + f" → `{_short_path(cycle[0])}`"
             lines.append(f"| {i} | {cycle_str} | {len(cycle)} |")
+        if state.circular_deps_truncated:
+            lines.append("")
+            lines.append("Cycle enumeration was capped for performance. Every file involved in a cycle is still marked, but additional cycle paths are omitted.")
         lines.append("")
     else:
         lines += ["### Circular Dependencies", "", "No circular dependencies detected.", ""]
@@ -708,6 +732,10 @@ def _ac_circular_dependencies(state: ArchaeonState) -> str:
         "All files in cycles are marked CRITICAL risk. "
         "Resolve cycles before refactoring any member file."
     )
+    if state.circular_deps_truncated:
+        lines.append(
+            "Cycle enumeration was capped for performance; all cycle member files are still identified, but this list contains only a sample."
+        )
     lines.append("")
 
     for cycle in state.circular_deps[:10]:

@@ -1,0 +1,98 @@
+<section class="para">
+  <div class="num">6.1.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>This section separates what the code does from what the records say about why. Each entry carries a basis mark. <b>OBSERVED</b> means the behaviour is directly visible in the working tree. <b>DOCUMENTED</b> means a repository record states the rationale, usually the decision log. <b>INFERRED</b> means the consequence or motive is this handbook's reading and is not asserted by the project. The distinction matters because several remembered decisions no longer match the implementation (figure 6.1-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Decision evidence classes">
+    <rect class="panel" x="1.5" y="2" width="177" height="44"/>
+    <text class="lbl-s" x="3.4" y="5.2">EVIDENCE CLASSES USED IN THIS SECTION</text>
+
+    <rect class="box" x="5" y="7" width="55" height="30"/>
+    <text class="lbl" x="32.5" y="12.4" text-anchor="middle">OBSERVED</text>
+    <line class="t" x1="9" y1="15" x2="56" y2="15"/>
+    <text class="lbl-s" x="9" y="18.8">CODE PATH AND DATA</text>
+    <text class="lbl-s" x="9" y="22.2">FLOW ARE PRESENT</text>
+    <text class="lbl-s" x="9" y="25.6">AT THE ANALYSED</text>
+    <text class="lbl-s" x="9" y="29">COMMIT. TESTS OR</text>
+    <text class="lbl-s" x="9" y="32.4">TYPES CORROBORATE IT.</text>
+
+    <rect class="box" x="63" y="7" width="55" height="30"/>
+    <text class="lbl" x="90.5" y="12.4" text-anchor="middle">DOCUMENTED</text>
+    <line class="t" x1="67" y1="15" x2="114" y2="15"/>
+    <text class="lbl-s" x="67" y="18.8">A RECORD STATES</text>
+    <text class="lbl-s" x="67" y="22.2">THE CHOICE AND ITS</text>
+    <text class="lbl-s" x="67" y="25.6">REASON. THE CODE</text>
+    <text class="lbl-s" x="67" y="29">MAY HAVE MOVED</text>
+    <text class="lbl-s" x="67" y="32.4">SINCE THE ENTRY.</text>
+
+    <rect class="box" x="121" y="7" width="54" height="30"/>
+    <text class="lbl" x="148" y="12.4" text-anchor="middle">INFERRED</text>
+    <line class="t" x1="125" y1="15" x2="171" y2="15"/>
+    <text class="lbl-s" x="125" y="18.8">A CONSEQUENCE OR</text>
+    <text class="lbl-s" x="125" y="22.2">MOTIVE READ FROM</text>
+    <text class="lbl-s" x="125" y="25.6">STRUCTURE, NOT A</text>
+    <text class="lbl-s" x="125" y="29">PROJECT CLAIM.</text>
+    <text class="lbl-s" x="125" y="32.4">TREAT AS HYPOTHESIS.</text>
+
+    <text class="lbl-s" x="5" y="42">A DECISION CAN HAVE AN OBSERVED IMPLEMENTATION AND A DOCUMENTED RATIONALE THAT NO LONGER APPLIES.</text>
+    <text class="code" x="176.6" y="44.0" text-anchor="end">DEC-611A</text>
+  </svg>
+  <figcaption><span class="n">Figure 6.1-1.</span>How Each Claim in This Section Is Grounded</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">6.1.2</div>
+  <div>
+    <h2>ARCHITECTURAL DECISIONS.</h2>
+    <p>The system is organised around one mutable state object and a fixed stage order. That choice keeps every intermediate value inspectable and makes the CLI and API share a single implementation, but it also couples all stages to one schema and makes partial re-runs coarse.</p>
+  </div>
+</section>
+
+<div class="tcap">Table 6.1-1. Principal Decisions and Their Consequences</div>
+<table class="dense">
+  <thead><tr><th style="width:24%">Decision</th><th style="width:9%">Basis</th><th>Consequence and cost</th></tr></thead>
+  <tbody>
+    <tr><td>One shared state object</td><td class="v">OBSERVED</td><td>Every stage is independently inspectable; schema changes ripple through all agents; no message contract or versioning</td></tr>
+    <tr><td>Agents do not import agents</td><td class="v">OBSERVED</td><td>Stage replacement is local; orchestration knowledge concentrates in two runners that can drift</td></tr>
+    <tr><td>Parallel graph, complexity, retrieval</td><td class="v">OBSERVED / DOCUMENTED</td><td>Wall-clock saving on I/O-bound retrieval; coupling must be deferred and reapplied after the join</td></tr>
+    <tr><td>Depth-first file cap</td><td class="v">OBSERVED</td><td>Shallow entry points survive a sample; deep but central modules can be excluded without a warning in the document body</td></tr>
+    <tr><td>Hosted embeddings and chat</td><td class="v">OBSERVED / DOCUMENTED</td><td>No local GPU or model download; the tool stops working without network, key and quota</td></tr>
+    <tr><td>Chroma collection per job</td><td class="v">OBSERVED</td><td>Jobs cannot collide or read each other's code; collections accumulate because no retention job removes them</td></tr>
+    <tr><td>Redis optional, memory fallback</td><td class="v">OBSERVED</td><td>One-command local start; memory mode cannot share state across processes and loses jobs on restart</td></tr>
+    <tr><td>Dual route families</td><td class="v">OBSERVED / INFERRED</td><td>Older clients keep working; the two families return different codes and error shapes for the same condition</td></tr>
+    <tr><td>Markdown as primary output</td><td class="v">OBSERVED / DOCUMENTED</td><td>Readable in any editor and usable as model context; structure is prose, so machine consumers must parse it or use JSON</td></tr>
+    <tr><td>Fail-open document sections</td><td class="v">OBSERVED / INFERRED</td><td>A partial document is still delivered; a missing section can look like an empty finding rather than a failure</td></tr>
+    <tr><td>Client-side rendering and export</td><td class="v">OBSERVED</td><td>No server download endpoint and no result storage beyond the job record; large payloads cross the network once</td></tr>
+    <tr><td>No URL router in the SPA</td><td class="v">OBSERVED</td><td>Refresh returns to the landing screen; deep links and browser history are unavailable despite the installed router</td></tr>
+  </tbody>
+</table>
+
+<section class="para" style="margin-top:1.4mm">
+  <div class="num">6.1.3</div>
+  <div>
+    <h3>Why the Pipeline Is Not a DAG Scheduler.</h3>
+    <p class="flush">The three middle stages are independent after parsing, so a general scheduler was unnecessary. A fixed pool with explicit joins gives deterministic ordering of writes and avoids concurrent mutation of unrelated state fields. The cost is that a slow retrieval stage delays explainability even when the graph and scores are ready, because the join is a barrier. A finer-grained dependency graph could start explanation for files whose scores are final, but it would require per-file readiness tracking that the state object does not carry.</p>
+  </div>
+</section>
+
+<div class="lower">
+  <div>
+    <div class="notice">
+      <span class="tag">CAUTION</span>
+      <p>Per-job Chroma collections are removed only when <i>DELETE /jobs/{id}</i> is called, and that call is best-effort: a failure is logged and the record is deleted anyway. Nothing prunes on a timer and the client never calls it, so every analysis leaves an on-disk collection. Disk growth tracks runs, not repositories.</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="bar"><span>DECISION CHECK</span><span>REVIEWER</span></div>
+    <ol>
+      <li><span>1</span><span>ASK - what does the code do</span></li>
+      <li><span>2</span><span>ASK - what does the record claim</span></li>
+      <li><span></span><span>&radic; MARK - observed, documented, inferred</span></li>
+      <li><span>3</span><span>NAME - the cost, not only the benefit</span></li>
+    </ol>
+  </div>
+</div>

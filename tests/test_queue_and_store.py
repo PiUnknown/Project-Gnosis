@@ -12,8 +12,18 @@ import pytest
 import fakeredis
 from unittest.mock import patch, MagicMock
 
-from src.api.job_store import Job, JobStore
-from src.api.queue import enqueue_analysis_job, get_queue_stats, get_rq_queue
+from src.api.job_store import (
+    DEFAULT_JOB_TTL_SECONDS,
+    BackendUnavailableError,
+    Job,
+    JobStore,
+)
+from src.api.queue import (
+    QueueDispatchError,
+    enqueue_analysis_job,
+    get_queue_stats,
+    get_rq_queue,
+)
 from src.api.models import PHASE_PROGRESS
 
 
@@ -166,43 +176,150 @@ class TestRedisJobStore:
         self.store.clear()
         assert len(self.store.list_all()) == 0
 
+    def test_redis_create_failure_raises_backend_unavailable(self):
+        class _BrokenPipeline:
+            def pipeline(self, *args, **kwargs):
+                raise RuntimeError("redis down")
+
+        broken = JobStore()
+        broken.connect_redis(_BrokenPipeline())
+
+        with pytest.raises(BackendUnavailableError):
+            broken.create("https://github.com/test/repo", {})
+
+        # No silent in-memory record: the backend must stay empty.
+        assert broken.backend == "redis"
+        assert broken._memory_jobs == {}
+
+    def test_finish_applies_default_ttl(self, monkeypatch):
+        monkeypatch.delenv("JOB_TTL_SECONDS", raising=False)
+        job_id = self.store.create("https://github.com/test/repo", {})
+        self.store.start(job_id)
+
+        self.store.finish(job_id, {"done": True})
+
+        ttl = self.fake_redis.ttl(f"gnosis:job:{job_id}")
+        assert 0 < ttl <= DEFAULT_JOB_TTL_SECONDS
+
+    def test_fail_applies_default_ttl(self, monkeypatch):
+        monkeypatch.delenv("JOB_TTL_SECONDS", raising=False)
+        job_id = self.store.create("https://github.com/test/repo", {})
+
+        self.store.fail(job_id, "boom")
+
+        ttl = self.fake_redis.ttl(f"gnosis:job:{job_id}")
+        assert 0 < ttl <= DEFAULT_JOB_TTL_SECONDS
+
+    def test_expired_records_are_pruned_from_indexes(self):
+        job_id = self.store.create("https://github.com/test/repo", {})
+        self.fake_redis.delete(f"gnosis:job:{job_id}")  # simulate TTL expiry
+
+        assert self.store.list_all() == []
+
+        assert not self.fake_redis.sismember("gnosis:jobs", job_id)
+        assert not self.fake_redis.sismember("gnosis:jobs:active", job_id)
+
 
 class TestQueueManagement:
 
-    def test_fallback_enqueue_when_redis_unset(self):
+    def test_memory_store_dispatches_to_threadpool(self):
+        memory_store = JobStore()
         mock_executor = MagicMock()
-        with patch("src.api.queue.get_redis_connection", return_value=None):
-            is_dist, mode = enqueue_analysis_job("job-1", "https://github.com/test/repo", {}, executor=mock_executor)
-            assert is_dist is False
-            assert mode == "local_threadpool"
-            assert mock_executor.submit.called
+        is_dist, mode = enqueue_analysis_job(
+            "job-1",
+            "https://github.com/test/repo",
+            {},
+            executor=mock_executor,
+            store=memory_store,
+        )
+        assert is_dist is False
+        assert mode == "local_threadpool"
+        assert mock_executor.submit.called
+
+    def test_degraded_store_dispatches_in_process(self):
+        degraded_store = JobStore()
+        degraded_store.connect_redis(fakeredis.FakeRedis())  # pretend Redis worked
+        degraded_store.connect_redis(None)                   # then the link dropped
+        assert degraded_store.degraded is True
+        mock_executor = MagicMock()
+
+        is_dist, mode = enqueue_analysis_job(
+            "job-degraded",
+            "https://github.com/test/repo",
+            {},
+            executor=mock_executor,
+            store=degraded_store,
+        )
+
+        assert is_dist is False
+        assert mode == "local_threadpool"
+        assert mock_executor.submit.called
+
+    def test_redis_dispatch_failure_raises_instead_of_threadpool(self):
+        redis_store = JobStore()
+        redis_store.connect_redis(fakeredis.FakeRedis())
+        mock_executor = MagicMock()
+        broken_queue = MagicMock()
+        broken_queue.enqueue.side_effect = RuntimeError("quota exceeded")
+
+        with patch("src.api.queue.get_rq_queue", return_value=broken_queue):
+            with pytest.raises(QueueDispatchError):
+                enqueue_analysis_job(
+                    "job-fail",
+                    "https://github.com/test/repo",
+                    {},
+                    executor=mock_executor,
+                    store=redis_store,
+                )
+
+        assert not mock_executor.submit.called
 
     def test_rq_distributed_enqueue(self):
         fake_conn = fakeredis.FakeRedis()
-        with patch("src.api.queue.get_redis_connection", return_value=fake_conn):
-            is_dist, mode = enqueue_analysis_job("job-rq-1", "https://github.com/test/repo", {})
-            assert is_dist is True
-            assert mode == "rq_distributed"
-            
-            q = get_rq_queue(fake_conn)
-            assert len(q) == 1
-            enqueued_job = q.jobs[0]
-            assert enqueued_job.id == "job-rq-1"
+        redis_store = JobStore()
+        redis_store.connect_redis(fake_conn)
+        is_dist, mode = enqueue_analysis_job(
+            "job-rq-1",
+            "https://github.com/test/repo",
+            {},
+            store=redis_store,
+        )
+        assert is_dist is True
+        assert mode == "rq_distributed"
+
+        q = get_rq_queue(fake_conn)
+        assert len(q) == 1
+        enqueued_job = q.jobs[0]
+        assert enqueued_job.id == "job-rq-1"
 
     def test_queue_stats_fallback(self):
-        with patch("src.api.queue.get_redis_connection", return_value=None):
-            stats = get_queue_stats()
-            assert stats["redis_connected"] is False
-            assert stats["mode"] == "local_threadpool"
-            assert stats["queue_depth"] == 0
+        memory_store = JobStore()
+        stats = get_queue_stats(store=memory_store)
+        assert stats["redis_connected"] is False
+        assert stats["redis_configured"] is False
+        assert stats["store_degraded"] is False
+        assert stats["mode"] == "local_threadpool"
+        assert stats["queue_depth"] == 0
+
+    def test_queue_stats_reports_degraded_store(self):
+        degraded_store = JobStore()
+        degraded_store.connect_redis(fakeredis.FakeRedis())
+        degraded_store.connect_redis(None)
+
+        stats = get_queue_stats(store=degraded_store)
+        assert stats["redis_configured"] is True
+        assert stats["redis_connected"] is False
+        assert stats["store_degraded"] is True
+        assert stats["mode"] == "local_threadpool"
 
     def test_queue_stats_redis(self):
         fake_conn = fakeredis.FakeRedis()
-        with patch("src.api.queue.get_redis_connection", return_value=fake_conn):
-            stats = get_queue_stats()
-            assert stats["redis_connected"] is True
-            assert stats["mode"] == "rq_distributed"
-            assert stats["queue_depth"] == 0
+        redis_store = JobStore()
+        redis_store.connect_redis(fake_conn)
+        stats = get_queue_stats(store=redis_store)
+        assert stats["redis_connected"] is True
+        assert stats["mode"] == "rq_distributed"
+        assert stats["queue_depth"] == 0
 
 
 class TestWorkerHealthHandler:

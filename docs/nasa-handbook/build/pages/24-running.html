@@ -1,0 +1,134 @@
+<section class="para">
+  <div class="num">7.1.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>There are two deployment shapes and they differ in more than transport. The local shape runs the API in one process and executes jobs on a thread pool inside it. The distributed shape adds Redis and at least one worker process; the API only enqueues. Both share the same store interface and the same pipeline function. For reading or testing the codebase, the local shape needs no Redis and no model key if the LLM stage is skipped (figure 7.1-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 58" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Local and distributed process topology">
+    <rect class="panel" x="1.5" y="2" width="86" height="54"/>
+    <text class="lbl-s" x="3.4" y="5.2">LOCAL &mdash; NO REDIS</text>
+    <rect class="box" x="5" y="9" width="36" height="12"/>
+    <text class="lbl-s" x="23" y="13.6" text-anchor="middle">BROWSER OR CLI</text>
+    <text class="lbl-s" x="23" y="17.2" text-anchor="middle">HTTP / ARGV</text>
+    <line class="wa" x1="23" y1="21" x2="23" y2="25.4"/>
+    <rect class="box" x="5" y="26" width="36" height="12"/>
+    <text class="lbl-s" x="23" y="30.6" text-anchor="middle">API PROCESS</text>
+    <text class="lbl-s" x="23" y="34.2" text-anchor="middle">UVICORN</text>
+    <line class="wa" x1="23" y1="38" x2="23" y2="42.4"/>
+    <rect class="box" x="5" y="43" width="36" height="8"/>
+    <text class="lbl-s" x="23" y="48" text-anchor="middle">THREAD POOL (2)</text>
+    <text class="lbl-s" x="45" y="13.6">MEMORY DICT</text>
+    <text class="lbl-s" x="45" y="17.2">STATE LOST ON EXIT</text>
+    <text class="lbl-s" x="45" y="21">NO CROSS-PROCESS</text>
+    <text class="lbl-s" x="45" y="24.8">SHARING</text>
+    <text class="lbl-s" x="45" y="30.6">NO JOB TIMEOUT</text>
+    <text class="lbl-s" x="45" y="34.2">NO QUEUE DEPTH</text>
+    <text class="lbl-s" x="45" y="38">SIMPLE TO START</text>
+    <text class="lbl-s" x="5" y="54.4">FINE FOR ONE OPERATOR AND SHORT JOBS.</text>
+
+    <rect class="panel" x="92" y="2" width="86" height="54"/>
+    <text class="lbl-s" x="93.4" y="5.2">DISTRIBUTED &mdash; REDIS + RQ</text>
+    <rect class="box" x="95" y="9" width="24" height="12"/>
+    <text class="lbl-s" x="107" y="13.6" text-anchor="middle">CLIENT</text>
+    <text class="lbl-s" x="107" y="17.2" text-anchor="middle">HTTP</text>
+    <line class="wa" x1="107" y1="21" x2="107" y2="25.4"/>
+    <rect class="box" x="95" y="26" width="24" height="12"/>
+    <text class="lbl-s" x="107" y="30.6" text-anchor="middle">API</text>
+    <text class="lbl-s" x="107" y="34.2" text-anchor="middle">ENQUEUE ONLY</text>
+    <line class="wa" x1="119" y1="32" x2="129.4" y2="32"/>
+    <rect class="box" x="130" y="26" width="20" height="12"/>
+    <text class="lbl-s" x="140" y="30.6" text-anchor="middle">REDIS</text>
+    <text class="lbl-s" x="140" y="34.2" text-anchor="middle">QUEUE + KEYS</text>
+    <line class="wa" x1="140" y1="38" x2="140" y2="42.4"/>
+    <rect class="box" x="128" y="43" width="24" height="8"/>
+    <text class="lbl-s" x="140" y="48" text-anchor="middle">WORKER</text>
+    <text class="lbl-s" x="158" y="13.6">RECORD SURVIVES</text>
+    <text class="lbl-s" x="158" y="17.2">RESTART</text>
+    <text class="lbl-s" x="158" y="21">1,800 s TIMEOUT</text>
+    <text class="lbl-s" x="158" y="24.8">QUEUE DEPTH</text>
+    <text class="lbl-s" x="158" y="28.8">HEALTH SERVER</text>
+    <text class="lbl-s" x="158" y="32.4">ON PORT 8000</text>
+    <text class="lbl-s" x="158" y="36.4">SEPARATE LOG</text>
+    <text class="lbl-s" x="158" y="40.4">STREAM</text>
+    <text class="lbl-s" x="95" y="54.4">WORKER EXITS 1 IF REDIS IS UNREACHABLE AT START.</text>
+    <text class="code" x="176.6" y="54.4" text-anchor="end">OPS-711A</text>
+  </svg>
+  <figcaption><span class="n">Figure 7.1-1.</span>Process Topology With and Without Redis</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">7.1.2</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p>A CLI run needs an interpreter, dependencies, a GitHub address and, unless <i>--skip-llm</i> is passed, an NVIDIA key. It writes ten files into the output directory. An API run needs the same environment plus an HTTP client; when Redis is absent, the API executes the pipeline in a two-thread local pool. The frontend is independent: it needs Node, a build, and the API origin.</p>
+    <p>Environment is loaded from <i>.env</i> by <i>python-dotenv</i> in both entry points. Variable names below come from the example file only; no values were read for this handbook. A private repository requires a token, which is propagated per request and never persisted in a job record.</p>
+  </div>
+</section>
+
+<section class="para">
+  <div class="num">7.1.2.1</div>
+  <div>
+    <h3>Commands Executed for This Handbook.</h3>
+    <p class="flush">The commands below were run in the working tree on the change date. Nothing else was executed: in particular, no remote analysis, no Docker build, no worker start and no frontend build. Results are reported exactly as observed.</p>
+  </div>
+</section>
+
+<div class="tcap">Table 7.1-1. Verified Commands and Observed Results</div>
+<table class="dense">
+  <thead><tr><th style="width:43%">Command</th><th>Observed result</th></tr></thead>
+  <tbody>
+    <tr><td><i>.venv\Scripts\python.exe -m pytest tests -q</i></td><td>476 passed in 20.40 s</td></tr>
+    <tr><td><i>.venv\Scripts\python.exe -m pytest --collect-only -q</i></td><td>476 cases across 15 files</td></tr>
+    <tr><td><i>.venv\Scripts\python.exe run.py --help</i></td><td>Usage printed; exits 0; options <i>--url</i>, <i>--token</i>, <i>--incremental</i>, <i>--output</i>, <i>--no-html</i>, <i>--skip-llm</i>, <i>--max-explain</i>, <i>--test-rag</i></td></tr>
+    <tr><td><i>.venv\Scripts\python.exe -c "import src.api.main"</i></td><td>Imports without error; no startup side effects observed</td></tr>
+    <tr><td><i>python -m uvicorn src.api.main:app --port 8011</i></td><td>Startup complete; listener on 127.0.0.1:8011</td></tr>
+    <tr><td><i>GET http://127.0.0.1:8011/health</i></td><td><i>status ok</i>, version 1.0.0, active_jobs 0, redis_connected false, queue_mode local_threadpool, depth 0</td></tr>
+    <tr><td>Interpreter and browser resolution</td><td>Python 3.11.15 in <i>.venv</i>; Chrome present at its standard Windows path</td></tr>
+  </tbody>
+</table>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">7.1.3</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 7.1-2. Environment Variable Names</div>
+    <table class="dense">
+      <thead><tr><th>Name</th><th>Required</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td>NVIDIA_API_KEY</td><td class="v">for LLM/RAG</td><td>Embeddings and explanations</td></tr>
+        <tr><td>NVIDIA_BASE_URL</td><td class="v">no</td><td>Endpoint override</td></tr>
+        <tr><td>NVIDIA_MODEL</td><td class="v">no</td><td>Chat model override</td></tr>
+        <tr><td>GITHUB_TOKEN</td><td class="v">no</td><td>Private repos; 5,000 req/h</td></tr>
+        <tr><td>CHROMA_DB_PATH</td><td class="v">no</td><td>Persistence directory</td></tr>
+        <tr><td>REDIS_URL</td><td class="v">no</td><td>Enables Redis mode</td></tr>
+        <tr><td>RQ_QUEUE_NAME</td><td class="v">no</td><td>Default <i>gnosis_jobs</i></td></tr>
+        <tr><td>JOB_TIMEOUT_SECONDS</td><td class="v">no</td><td>Default 1,800</td></tr>
+        <tr><td>JOB_TTL_SECONDS</td><td class="v">no</td><td>Result expiry</td></tr>
+        <tr><td>MAX_*_ANALYSIS_FILES</td><td class="v">no</td><td>Tier thresholds</td></tr>
+        <tr><td>PORT</td><td class="v">worker</td><td>Health listener</td></tr>
+        <tr><td>VITE_API_URL</td><td class="v">frontend</td><td>API origin at build time</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">CAUTION</span>
+      <p>Not executed: <i>docker compose up</i>, <i>python -m src.api.worker</i>, <i>npm ci</i>, <i>npm run build</i>, and any analysis of a real repository. Their documented behaviour is described earlier from code, but this handbook makes no claim that they succeed on this machine.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>START CHECK</span><span>OPERATOR</span></div>
+      <ol>
+        <li><span>1</span><span>RUN - pytest, expect 476</span></li>
+        <li><span>2</span><span>RUN - run.py --help</span></li>
+        <li><span></span><span>&radic; START - /health returns ok</span></li>
+        <li><span>3</span><span>READ - queue_mode and redis flag</span></li>
+        <li><span>4</span><span>STOP - terminate listener</span></li>
+      </ol>
+    </div>
+  </div>
+</div>

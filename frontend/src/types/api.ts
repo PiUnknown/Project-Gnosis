@@ -53,6 +53,7 @@ export interface GraphData {
     in_degree: Record<string, number>;
     out_degree: Record<string, number>;
     circular_deps: string[][];
+    circular_deps_truncated?: boolean;
     topological_order: string[];
 }
 
@@ -81,6 +82,7 @@ export interface JobResult {
     agent_context_md?: string;
     /** Raw JSON string for complexity_report.json */
     complexity_report_json?: string;
+    circular_deps_truncated?: boolean;
 
     explanations?: Record<string, string>;
     graph_data?: GraphData;

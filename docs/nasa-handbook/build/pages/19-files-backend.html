@@ -1,0 +1,118 @@
+<section class="para">
+  <div class="num">5.1.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>This catalogue covers every tracked file at the analysed commit, plus two local files that are present but not yet tracked. It excludes generated and vendored material: the virtual environment, <i>node_modules</i>, build output, Chroma persistence, run outputs, caches and this handbook. Line counts are non-empty lines at the working tree, not logical statements. The purpose is orientation: a reader should be able to name the file that produces any value seen in the output (figure 5.1-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 37" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lines of code by package">
+    <rect class="panel" x="1.5" y="2" width="85" height="33"/>
+    <text class="lbl-s" x="3.4" y="5.2">SOURCE LINES BY PACKAGE</text>
+    <line class="t" x1="30" y1="7.4" x2="30" y2="34"/>
+    <text class="lbl-s" x="84" y="8.8" text-anchor="end">SCALE 120 LINES/mm</text>
+    <text class="lbl-s" x="4" y="10.4" text-anchor="start">ROOT</text>
+    <rect class="aud" x="30" y="7.6" width="5.0" height="3.2"/>
+    <text class="lbl-s" x="36.4" y="10.2" text-anchor="start">600</text>
+    <text class="lbl-s" x="4" y="14.8" text-anchor="start">AGENTS</text>
+    <rect class="vid" x="30" y="12" width="20.9" height="3.2"/>
+    <text class="lbl-s" x="52.3" y="14.6" text-anchor="start">2,504</text>
+    <text class="lbl-s" x="4" y="19.2" text-anchor="start">PARSERS</text>
+    <rect class="of" x="30" y="16.4" width="11.9" height="3.2"/>
+    <text class="lbl-s" x="43.3" y="19" text-anchor="start">1,429</text>
+    <text class="lbl-s" x="4" y="23.6" text-anchor="start">API</text>
+    <rect class="grain" x="30" y="20.8" width="13.3" height="3.2"/>
+    <text class="lbl-s" x="44.7" y="23.4" text-anchor="start">1,594</text>
+    <text class="lbl-s" x="4" y="28" text-anchor="start">UTILS</text>
+    <rect class="gap" x="30" y="25.2" width="16.6" height="3.2"/>
+    <text class="lbl-s" x="48" y="27.8" text-anchor="start">1,995</text>
+    <text class="lbl-s" x="4" y="32.4" text-anchor="start">TESTS</text>
+    <rect class="of" x="30" y="29.6" width="43.7" height="3.2" style="fill:none;stroke-dasharray:0.6 0.5"/>
+    <text class="lbl-s" x="75.1" y="32.2" text-anchor="start">5,244</text>
+
+    <rect class="panel" x="90" y="2" width="88" height="33"/>
+    <text class="lbl-s" x="91.4" y="5.2">PACKAGE DEPENDENCY DIRECTION</text>
+    <rect class="box" x="94" y="7" width="34" height="7"/>
+    <text class="lbl-s" x="111" y="11.6" text-anchor="middle">run.py</text>
+    <line class="wa" x1="111" y1="14" x2="111" y2="18.4"/>
+    <rect class="box" x="94" y="19" width="34" height="7"/>
+    <text class="lbl-s" x="111" y="23.6" text-anchor="middle">orchestrator</text>
+    <line class="wa" x1="111" y1="26" x2="111" y2="28.0"/>
+    <rect class="box" x="94" y="28.4" width="34" height="4.8"/>
+    <text class="lbl-s" x="111" y="31.7" text-anchor="middle">state</text>
+    <line class="wa" x1="128" y1="22.5" x2="138.4" y2="22.5"/>
+    <text class="lbl-s" x="140" y="18.4" text-anchor="start">AGENTS &rarr; UTILS</text>
+    <text class="lbl-s" x="140" y="22.4" text-anchor="start">AGENTS &rarr; PARSERS</text>
+    <text class="lbl-s" x="140" y="26.4" text-anchor="start">API &rarr; ORCHESTRATOR</text>
+    <text class="lbl-s" x="140" y="30.4" text-anchor="start">NO AGENT IMPORTS ANOTHER</text>
+    <text class="code" x="176.6" y="5.2" text-anchor="end">CAT-511A</text>
+  </svg>
+  <figcaption><span class="n">Figure 5.1-1.</span>Package Size and Allowed Import Direction</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1mm">
+  <div class="num">5.1.2</div>
+  <div>
+    <h2>BACKEND MODULES.</h2>
+    <p class="flush">Thirty-three Python modules carry the backend. <i>src/parsers</i> turns syntax into dataclasses; <i>src/utils</i> supplies everything that talks to the outside world; <i>src/agents</i> holds the seven stages; <i>src/api</i> adds transport and persistence. Empty <i>__init__.py</i> files are omitted from the table.</p>
+  </div>
+</section>
+
+<div class="tcap">Table 5.1-1. Backend Module Inventory (empty lines excluded)</div>
+<table class="dense">
+  <thead><tr><th style="width:31%">Module</th><th style="width:7%">Lines</th><th>Responsibility</th></tr></thead>
+  <tbody>
+    <tr><td>run.py</td><td class="v">204</td><td>Argument parsing, size pre-check, pipeline call, ten save calls</td></tr>
+    <tr><td>src/orchestrator.py</td><td class="v">335</td><td>Phase order, three-thread join, coupling rebind, output writers</td></tr>
+    <tr><td>src/state.py</td><td class="v">61</td><td><i>FileMetadata</i> and <i>ArchaeonState</i>; the only cross-agent contract</td></tr>
+    <tr><td>agents/ingestion.py</td><td class="v">135</td><td>Filter, sort, tier, cap at 3,000, batch fetch, line counts</td></tr>
+    <tr><td>agents/ast_parser.py</td><td class="v">335</td><td>Parallel parse, language dispatch, import internals, parse errors</td></tr>
+    <tr><td>agents/dependency_graph.py</td><td class="v">254</td><td>Nodes, edges, cycles, PageRank, topological order, per-file stats</td></tr>
+    <tr><td>agents/complexity_scorer.py</td><td class="v">353</td><td>Function scores, thresholds, risk reasons, deferred coupling</td></tr>
+    <tr><td>agents/code_rag.py</td><td class="v">254</td><td>Chunking, batched embeddings, Chroma write, raw-text release</td></tr>
+    <tr><td>agents/explainability.py</td><td class="v">373</td><td>File ranking, context budget, prompt, chat call, explanation cache</td></tr>
+    <tr><td>agents/doc_generator.py</td><td class="v">800</td><td>Onboarding, agent context, explanations, complexity JSON; section guards</td></tr>
+    <tr><td>api/main.py</td><td class="v">322</td><td>Dual route families, CORS, headers, request validation, queue choice</td></tr>
+    <tr><td>api/models.py</td><td class="v">142</td><td>Pydantic request, status, summary and result contracts</td></tr>
+    <tr><td>api/pipeline_runner.py</td><td class="v">295</td><td>API phase sequence, progress marks, result serialisation, failure record</td></tr>
+    <tr><td>api/job_store.py</td><td class="v">552</td><td>Memory and Redis stores, WATCH loop, active-index reconciliation</td></tr>
+    <tr><td>api/job_store_migrate.py</td><td class="v">95</td><td>Operator command to rebuild and arm the active index (untracked)</td></tr>
+    <tr><td>api/queue.py</td><td class="v">107</td><td>Redis connection, RQ queue, enqueue, depth and worker statistics</td></tr>
+    <tr><td>api/worker.py</td><td class="v">81</td><td>Health listener, Redis probe, RQ foreground worker</td></tr>
+    <tr><td>parsers/base.py</td><td class="v">91</td><td><i>FunctionInfo</i>, <i>ClassInfo</i>, <i>ImportInfo</i>, <i>SymbolTable</i>, <i>ComplexityScore</i></td></tr>
+    <tr><td>parsers/python_parser.py</td><td class="v">354</td><td>Python functions, classes, decorators, imports, docstrings</td></tr>
+    <tr><td>parsers/js_parser.py</td><td class="v">285</td><td>JavaScript and TypeScript declarations, arrows, imports</td></tr>
+    <tr><td>parsers/generic_parser.py</td><td class="v">426</td><td>Go, Rust, Java, C and C++ symbol extraction</td></tr>
+    <tr><td>parsers/complexity.py</td><td class="v">273</td><td>Python and JavaScript branch counting; generic fallback</td></tr>
+    <tr><td>utils/github_api.py</td><td class="v">197</td><td>URL parsing, metadata, tree, raw fetch pool, API fallback</td></tr>
+    <tr><td>utils/filters.py</td><td class="v">109</td><td>Extension allow-list, 24 excluded directories, 150 KB ceiling</td></tr>
+    <tr><td>utils/tree_sitter_utils.py</td><td class="v">88</td><td>Language grammar loading and parser cache</td></tr>
+    <tr><td>utils/chunker.py</td><td class="v">223</td><td>Module, class and function chunks with stable identifiers</td></tr>
+    <tr><td>utils/embedder.py</td><td class="v">114</td><td>Embedding client, batching, passage and query input types</td></tr>
+    <tr><td>utils/retriever.py</td><td class="v">233</td><td>Collection naming, cosine query, metadata filters, parsing</td></tr>
+    <tr><td>utils/nvidia_client.py</td><td class="v">208</td><td>Chat client, timeout, two attempts, output sanitisation</td></tr>
+    <tr><td>utils/explanation_cache.py</td><td class="v">135</td><td>Content-addressed explanation cache on local disk</td></tr>
+    <tr><td>utils/diff_engine.py</td><td class="v">242</td><td>SHA-based manifest diff and state rehydration</td></tr>
+    <tr><td>utils/graph_utils.py</td><td class="v">387</td><td>Per-language import resolution and pyvis HTML export</td></tr>
+    <tr><td>utils/metrics.py</td><td class="v">59</td><td>Phase timing and resident-memory prints</td></tr>
+  </tbody>
+</table>
+
+<div class="lower" style="margin-top:1.4mm">
+  <div>
+    <div class="notice">
+      <span class="tag">NOTE</span>
+      <p>Two files are outside the commit. <i>job_store_migrate.py</i> and <i>test_active_index.py</i> exist only in the working tree and are marked accordingly. Their presence means the committed source cannot rebuild the active index, even though the store can fall back to scanning records.</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="bar"><span>CATALOGUE CHECK</span><span>REVIEWER</span></div>
+    <ol>
+      <li><span></span><span>&radic; COUNT - 33 modules named</span></li>
+      <li><span></span><span>&radic; LINES - non-empty, working tree</span></li>
+      <li><span>1</span><span>EXCLUDED - env, deps, output, caches</span></li>
+      <li><span>2</span><span>MARKED - untracked files</span></li>
+    </ol>
+  </div>
+</div>

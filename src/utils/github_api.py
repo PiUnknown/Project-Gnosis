@@ -1,6 +1,9 @@
 import logging
+import os
 import requests
 import time
+import tarfile
+from urllib.parse import quote, unquote, urlencode, urlsplit
 from typing import Optional
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -39,17 +42,31 @@ def parse_github_url(url: str) -> tuple[str, str]:
       https://github.com/owner/repo.git
       https://github.com/owner/repo/
     """
-    url = url.strip().rstrip("/")
-    if url.endswith(".git"):
-        url = url[:-4]
+    url = url.strip()
+    if "://" not in url:
+        url = f"https://{url.lstrip('/')}"
 
-    parts = url.replace("https://", "").replace("http://", "").split("/")
-    # Expected: ["github.com", "owner", "repo"]
-    if len(parts) < 3:
-        raise ValueError(f"Cannot parse GitHub URL: {url}. Expected format: https://github.com/owner/repo")
+    parsed = urlsplit(url)
+    host = (parsed.hostname or "").lower()
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or host not in {"github.com", "www.github.com"}
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise ValueError(
+            f"Cannot parse GitHub URL: {url}. Expected https://github.com/owner/repo"
+        )
 
-    owner = parts[1]
-    repo = parts[2]
+    parts = [unquote(part) for part in parsed.path.strip("/").split("/") if part]
+    if len(parts) < 2 or not parts[0] or not parts[1]:
+        raise ValueError(
+            f"Cannot parse GitHub URL: {url}. Expected https://github.com/owner/repo"
+        )
+
+    owner, repo = parts[:2]
+    if repo.endswith(".git"):
+        repo = repo[:-4]
     return owner, repo
 
 
@@ -68,7 +85,10 @@ def fetch_repo_metadata(owner: str, repo: str, token: Optional[str] = None) -> d
     Fetch basic repo metadata: default branch, description, size.
     This is 1 API call. Uses the authenticated token if provided.
     """
-    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}"
+    url = (
+        f"{GITHUB_API_BASE}/repos/{quote(owner, safe='')}/"
+        f"{quote(repo, safe='')}"
+    )
     try:
         response = _RAW_SESSION.get(url, headers=_get_headers(token), timeout=15.0)
     except Exception as exc:
@@ -104,7 +124,10 @@ def fetch_file_tree(
     Returns list of file entries:
     [{"path": str, "type": "blob"|"tree", "size": int, "sha": str}, ...]
     """
-    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
+    url = (
+        f"{GITHUB_API_BASE}/repos/{quote(owner, safe='')}/"
+        f"{quote(repo, safe='')}/git/trees/{quote(branch, safe='')}?recursive=1"
+    )
     try:
         response = _RAW_SESSION.get(url, headers=_get_headers(token), timeout=25.0)
     except Exception as exc:
@@ -127,9 +150,10 @@ def fetch_file_tree(
     data = response.json()
 
     if data.get("truncated"):
-        print(
-            "[WARNING] Repository tree is truncated by GitHub (>100k entries). "
-            "Only partial results will be analyzed."
+        raise ValueError(
+            f"GitHub returned a truncated file tree for {owner}/{repo} "
+            "(over 100,000 entries). Analysis stopped to avoid producing "
+            "a report from an incomplete repository listing."
         )
 
     # Return only file blobs, not directory entries
@@ -153,7 +177,10 @@ def fetch_file_content_raw(
 
     Returns decoded string content, or None if the file is binary, not found, or fails.
     """
-    url = f"{GITHUB_RAW_BASE}/{owner}/{repo}/{branch}/{path}"
+    url = (
+        f"{GITHUB_RAW_BASE}/{quote(owner, safe='')}/{quote(repo, safe='')}/"
+        f"{quote(branch, safe='')}/{quote(path, safe='/')}"
+    )
     sess = session or _RAW_SESSION
     headers = _get_headers(token) if token else {}
     try:
@@ -166,7 +193,11 @@ def fetch_file_content_raw(
 
         # Fallback to GitHub REST API /contents for private repositories
         if token and response.status_code in (404, 403):
-            api_url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{path}?ref={branch}"
+            api_url = (
+                f"{GITHUB_API_BASE}/repos/{quote(owner, safe='')}/"
+                f"{quote(repo, safe='')}/contents/{quote(path, safe='/')}?"
+                f"{urlencode({'ref': branch})}"
+            )
             api_headers = {
                 "Authorization": f"Bearer {token}",
                 "Accept": "application/vnd.github.raw+json",
@@ -185,13 +216,80 @@ def fetch_file_content_raw(
         return None
 
 
+def _fetch_archive_contents(
+    owner: str,
+    repo: str,
+    branch: str,
+    paths: list[str],
+    timeout: tuple[float, float] = (10.0, 60.0),
+) -> dict[str, str]:
+    """Read selected files from one public GitHub tarball response.
+
+    This avoids hundreds of separate raw-content requests for medium-sized
+    public repositories. The tar stream is never extracted to disk; only paths
+    from the already-filtered GitHub tree are retained. Callers fall back to
+    the pooled per-file fetch path for missing files or any archive error.
+    """
+    wanted = set(paths)
+    if not wanted:
+        return {}
+
+    url = (
+        f"{GITHUB_API_BASE}/repos/{quote(owner, safe='')}/"
+        f"{quote(repo, safe='')}/tarball/{quote(branch, safe='')}"
+    )
+    response = None
+    contents: dict[str, str] = {}
+    try:
+        response = _RAW_SESSION.get(
+            url,
+            headers=_get_headers(),
+            timeout=timeout,
+            stream=True,
+        )
+        response.raise_for_status()
+        response.raw.decode_content = True
+
+        with tarfile.open(fileobj=response.raw, mode="r|gz") as archive:
+            for member in archive:
+                if not member.isfile():
+                    continue
+                _, separator, relative_path = member.name.partition("/")
+                if not separator or relative_path not in wanted:
+                    continue
+                file_stream = archive.extractfile(member)
+                if file_stream is None:
+                    continue
+                with file_stream:
+                    contents[relative_path] = file_stream.read().decode(
+                        "utf-8", errors="replace"
+                    )
+                if len(contents) == len(wanted):
+                    break
+    except Exception as exc:
+        logger.info(
+            "GitHub archive fetch unavailable for %s/%s (%s); "
+            "falling back to per-file requests.",
+            owner,
+            repo,
+            exc,
+        )
+        return {}
+    finally:
+        if response is not None:
+            response.close()
+
+    return contents
+
+
 def fetch_file_contents_batch(
     owner: str,
     repo: str,
     branch: str,
     paths: list[str],
     token: Optional[str] = None,
-    delay: float = 0.05
+    delay: float = 0.05,
+    repo_size_kb: Optional[int] = None,
 ) -> dict[str, str]:
     """
     Fetch content for multiple files concurrently using a ThreadPoolExecutor.
@@ -202,10 +300,42 @@ def fetch_file_contents_batch(
     """
     import concurrent.futures
 
-    results = {}
+    results: dict[str, str] = {}
     total = len(paths)
     if total == 0:
         return results
+
+    # A bounded archive avoids hundreds of individual requests for medium
+    # public repositories. Private repos and larger trees retain the pooled
+    # raw-content path. Missing archive entries fall back individually.
+    try:
+        archive_min_files = max(1, int(os.getenv("GITHUB_ARCHIVE_MIN_FILES", "80")))
+    except ValueError:
+        archive_min_files = 80
+    try:
+        archive_max_repo_kb = max(
+            0, int(os.getenv("GITHUB_ARCHIVE_MAX_REPO_KB", str(80 * 1024)))
+        )
+    except ValueError:
+        archive_max_repo_kb = 80 * 1024
+    if (
+        token is None
+        and repo_size_kb is not None
+        and 0 < repo_size_kb <= archive_max_repo_kb
+        and total >= archive_min_files
+    ):
+        print(f"  Fetching {total} files from one public GitHub archive...")
+        results = _fetch_archive_contents(owner, repo, branch, paths)
+        paths = [path for path in paths if path not in results]
+        total = len(paths)
+        if not paths:
+            print(f"  Fetched {len(results)} files from archive.")
+            return results
+        if results:
+            print(
+                f"  Archive supplied {len(results)} files; fetching "
+                f"{total} missing files individually..."
+            )
 
     max_workers = min(16, total)
 

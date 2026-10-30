@@ -10,7 +10,7 @@ Steps:
    with no imports — we want them in the graph so Phase 4 can find them)
 2. For each file's internal imports, resolve to actual file paths
    and add directed edges (importer → importee)
-3. Detect all circular dependencies with nx.simple_cycles()
+3. Detect circular nodes by strongly connected component and retain only a bounded cycle sample
 4. Compute per-node metrics: in-degree, out-degree, PageRank
 5. Compute topological order (suggested reading order) if no cycles
 6. Store everything in state for downstream agents
@@ -105,22 +105,21 @@ def run(state: ArchaeonState) -> ArchaeonState:
     # Step 3: Detect circular dependencies
     # ----------------------------------------------------------------
     print(f"\n  Detecting circular dependencies...")
-    cycles = list(nx.simple_cycles(G))
+    circular_nodes, cycles, cycles_truncated = _detect_cycles(G)
     state.circular_deps = cycles
-
-    circular_nodes: set = set()
-    for cycle in cycles:
-        for node in cycle:
-            circular_nodes.add(node)
     state.circular_nodes = circular_nodes
+    state.circular_deps_truncated = cycles_truncated
 
     if cycles:
-        print(f"  [WARN] {len(cycles)} circular dependency cycle(s) found:")
+        qualifier = "at least " if cycles_truncated else ""
+        print(f"  [WARN] {qualifier}{len(cycles)} circular dependency cycle(s) found:")
         for cycle in cycles[:5]:
             names = [PurePosixPath(p).name for p in cycle]
             cycle_str = " -> ".join(names) + f" -> {names[0]}"
             print(f"    {cycle_str}")
-        if len(cycles) > 5:
+        if cycles_truncated:
+            print("    Additional cycles were omitted to keep analysis bounded.")
+        elif len(cycles) > 5:
             print(f"    ...and {len(cycles) - 5} more cycles")
     else:
         print(f"  [OK] No circular dependencies detected")
@@ -223,6 +222,37 @@ def run(state: ArchaeonState) -> ArchaeonState:
     return state
 
 
+def _sample_cycles(G: nx.DiGraph, circular_nodes: set) -> tuple[list, bool]:
+    """Return a bounded sample while SCC analysis identifies every cyclic node."""
+    import os
+
+    try:
+        limit = int(os.getenv("MAX_CIRCULAR_CYCLES", "250"))
+    except (TypeError, ValueError):
+        limit = 250
+    limit = max(1, min(limit, 5000))
+    if not circular_nodes:
+        return [], False
+
+    examples = []
+    cycles = nx.simple_cycles(G.subgraph(circular_nodes))
+    for cycle in cycles:
+        if len(examples) == limit:
+            return examples, True
+        examples.append(cycle)
+    return examples, False
+
+
+def _detect_cycles(G: nx.DiGraph) -> tuple[set, list, bool]:
+    """Identify every cyclic node and retain a bounded set of cycle examples."""
+    circular_nodes = set()
+    for component in nx.strongly_connected_components(G):
+        if len(component) > 1:
+            circular_nodes.update(component)
+    examples, truncated = _sample_cycles(G, circular_nodes)
+    return circular_nodes, examples, truncated
+
+
 # -----------------------------------------------------------------------
 # PageRank computation
 # -----------------------------------------------------------------------
@@ -249,12 +279,55 @@ def _compute_pagerank(G: nx.DiGraph) -> dict:
 
     try:
         return nx.pagerank(G, alpha=0.85, max_iter=200)
-    except nx.PowerIterationFailedConvergence:
-        # Fallback: normalized in-degree
-        n = max(G.number_of_nodes(), 1)
-        return {node: G.in_degree(node) / n for node in G.nodes()}
-    except Exception:
-        return {node: 0.0 for node in G.nodes()}
+    except (ImportError, nx.PowerIterationFailedConvergence):
+        # NetworkX delegates PageRank to SciPy, which is optional in this
+        # project. Keep useful centrality scores without requiring SciPy.
+        return _compute_pagerank_without_scipy(G)
+
+
+def _compute_pagerank_without_scipy(
+    G: nx.DiGraph,
+    alpha: float = 0.85,
+    max_iter: int = 200,
+    tolerance: float = 1e-6,
+) -> dict:
+    """Compute standard PageRank with a small pure-Python power iteration."""
+    nodes = list(G.nodes())
+    node_count = len(nodes)
+    if node_count == 0:
+        return {}
+
+    successors_by_node = {
+        node: tuple(G.successors(node)) for node in nodes
+    }
+    dangling_nodes = tuple(
+        node for node in nodes if not successors_by_node[node]
+    )
+    rank = {node: 1.0 / node_count for node in nodes}
+    base_score = (1.0 - alpha) / node_count
+
+    for _ in range(max_iter):
+        dangling_mass = sum(rank[node] for node in dangling_nodes)
+        next_rank = {
+            node: base_score + alpha * dangling_mass / node_count
+            for node in nodes
+        }
+
+        for source, successors in successors_by_node.items():
+            if not successors:
+                continue
+            share = alpha * rank[source] / len(successors)
+            for target in successors:
+                next_rank[target] += share
+
+        difference = sum(
+            abs(next_rank[node] - rank[node]) for node in nodes
+        )
+        rank = next_rank
+        if difference < node_count * tolerance:
+            break
+
+    return rank
 
 
 # -----------------------------------------------------------------------

@@ -1,0 +1,41 @@
+<div class="cover-title">
+  <div class="kicker">PROJECT GNOSIS</div>
+  <div class="main">CODE ARCHAEOLOGY<br>SYSTEM</div>
+  <div class="sub">OPERATIONS HANDBOOK &nbsp;&middot;&nbsp; SYSTEMS DATA</div>
+</div>
+
+<div class="cover-rule"></div>
+
+<div class="cover-abstract">
+  <p>This handbook describes the Project Gnosis code-archaeology system as it exists in the working tree at commit <span class="nowrap">4135A25</span>, dated 16 October 2026. It is written for the engineer who must operate, extend or review the system without prior knowledge of it.</p>
+  <p>The system accepts a public GitHub repository address and returns a grounded architectural document: a file manifest, symbol tables, an import graph, per-file complexity scores, a vector index of semantic code chunks, and natural-language explanations produced by a hosted language model. Seven deterministic stages surround one non-deterministic stage. A shared state object carries the work between them.</p>
+  <p>Every statement is classified. <b>OBSERVED</b> means read from executable source in this tree. <b>DOCUMENTED</b> means asserted by a repository document or commit and not independently exercised. <b>INFERRED</b> means a conclusion drawn from structure, with its basis named. Where a document and the code disagree, the code is described and the disagreement is recorded.</p>
+</div>
+
+<div class="cover-meta">
+  <table>
+    <tr><td style="width:38mm">DOCUMENT</td><td>GN1A-03-BLOCK I-(1), Revision 1</td><td style="width:34mm">BASIC DATE</td><td>25 July 2026</td></tr>
+    <tr><td>PROGRAM</td><td>Project Gnosis / Archaeon</td><td>CHANGE DATE</td><td>16 October 2026</td></tr>
+    <tr><td>BASIS</td><td>139 commits; four uncommitted application paths</td><td>PAGES</td><td>1-1 through 8.2-1</td></tr>
+    <tr><td>PREPARED BY</td><td>Handbook working group, from source inspection</td><td>LICENSE</td><td>AGPL-3.0 or commercial</td></tr>
+  </table>
+</div>
+
+<div class="cover-meta" style="margin-top:5mm">
+  <div class="tcap">Contents</div>
+  <table class="dense">
+    <tr><td style="width:18mm">1</td><td>General: scope, reading map, purpose, architecture</td><td style="width:28mm">1-1 &ndash; 1-4</td></tr>
+    <tr><td>2</td><td>Computing equipment and software: declared and resolved stack</td><td>2.1-1 &ndash; 2.1-2</td></tr>
+    <tr><td>3</td><td>Subsystems 1&ndash;9: agents, API, store, queue, display</td><td>3.1-1 &ndash; 3.9-1</td></tr>
+    <tr><td>4</td><td>Operation: end-to-end flow, state, errors, retries</td><td>4.1-1 &ndash; 4.2-1</td></tr>
+    <tr><td>5</td><td>Equipment list: every repository-owned file</td><td>5.1-1 &ndash; 5.2-1</td></tr>
+    <tr><td>6</td><td>Design record: decisions, tradeoffs, documentation drift</td><td>6.1-1 &ndash; 6.2-1</td></tr>
+    <tr><td>7</td><td>Checkout: starting the system and running the tests</td><td>7.1-1 &ndash; 7.2-1</td></tr>
+    <tr><td>8</td><td>Appendix: defects, limitations, source verification, open items</td><td>8.1-1 &ndash; 8.2-1</td></tr>
+  </table>
+</div>
+
+<div class="notice" style="margin:5mm 12mm 0">
+  <span class="tag">NOTICE</span>
+  <p>This document is generated from a local working tree. It does not certify any deployed environment, credential, cloud setting or live service. Secret values are neither reproduced nor inferred. Figures are simplified; the source-verification appendix names the code behind each claim.</p>
+</div>

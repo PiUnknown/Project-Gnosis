@@ -1,0 +1,111 @@
+<section class="para">
+  <div class="num">8.1.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>This register lists defects and limitations confirmed by reading the working tree. Each entry names a file, the symptom, and the class of harm. None was fixed for this handbook. Severity is an engineering judgement, not a project rating: <b>HIGH</b> means a lost deliverable, a failed run on a supported path, or a credential exposure; <b>MEDIUM</b> means misleading output or an operational trap; <b>LOW</b> means dead code, stale text or cosmetic drift (figure 8.1-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 49" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Defect locations along the pipeline">
+    <rect class="panel" x="1.5" y="2" width="177" height="46.5"/>
+    <text class="lbl-s" x="3.4" y="5.2">DEFECT SITES ALONG THE RUN</text>
+
+    <rect class="box" x="5" y="8" width="25" height="10"/>
+    <text class="lbl-s" x="17.5" y="14.4" text-anchor="middle">INGEST</text>
+    <rect class="box" x="34" y="8" width="25" height="10"/>
+    <text class="lbl-s" x="46.5" y="14.4" text-anchor="middle">PARSE</text>
+    <rect class="box" x="63" y="8" width="27" height="10"/>
+    <text class="lbl-s" x="76.5" y="14.4" text-anchor="middle">GRAPH</text>
+    <rect class="box" x="94" y="8" width="27" height="10"/>
+    <text class="lbl-s" x="107.5" y="14.4" text-anchor="middle">COMPLEXITY</text>
+    <rect class="box" x="125" y="8" width="24" height="10"/>
+    <text class="lbl-s" x="137" y="14.4" text-anchor="middle">RETRIEVAL</text>
+    <rect class="box" x="153" y="8" width="22" height="10"/>
+    <text class="lbl-s" x="164" y="14.4" text-anchor="middle">EXPLAIN</text>
+
+    <line class="t" x1="5" y1="22" x2="175" y2="22"/>
+
+    <circle class="dot" cx="46.5" cy="25" r="1.5"/>
+    <text class="lbl-s" x="46.5" y="29.4" text-anchor="middle">D-03</text>
+    <text class="lbl-s" x="46.5" y="32.8" text-anchor="middle">METHOD COUNT</text>
+
+    <circle class="dot" cx="107.5" cy="25" r="1.5"/>
+    <text class="lbl-s" x="107.5" y="29.4" text-anchor="middle">D-02</text>
+    <text class="lbl-s" x="107.5" y="32.8" text-anchor="middle">RISK REASON</text>
+
+    <circle class="dot" cx="137" cy="25" r="1.5"/>
+    <text class="lbl-s" x="137" y="29.4" text-anchor="middle">D-01</text>
+    <text class="lbl-s" x="137" y="32.8" text-anchor="middle">LOGGER</text>
+    <text class="lbl-s" x="137" y="36.2" text-anchor="middle">D-06 RAW</text>
+
+    <circle class="dot" cx="164" cy="25" r="1.5"/>
+    <text class="lbl-s" x="164" y="29.4" text-anchor="middle">D-05</text>
+    <text class="lbl-s" x="164" y="32.8" text-anchor="middle">KEY PREFIX</text>
+
+    <circle class="dot" cx="17.5" cy="25" r="1.5"/>
+    <text class="lbl-s" x="17.5" y="29.4" text-anchor="middle">D-12</text>
+    <text class="lbl-s" x="17.5" y="32.8" text-anchor="middle">CONTENT CNT</text>
+
+    <circle class="dot" cx="76.5" cy="25" r="1.5"/>
+    <text class="lbl-s" x="76.5" y="29.4" text-anchor="middle">D-11</text>
+    <text class="lbl-s" x="76.5" y="32.8" text-anchor="middle">COLLECTION</text>
+    <text class="lbl-s" x="76.5" y="36.2" text-anchor="middle">GROWTH</text>
+
+    <line class="t" x1="5" y1="39" x2="175" y2="39"/>
+    <text class="lbl-s" x="6" y="42.2">OUTSIDE THE RUN: D-04 MISSING agent_context.md, D-07 TTL DIVERGENCE, D-08 ROUTE SEMANTICS,</text>
+    <text class="lbl-s" x="6" y="45.4">D-09 CORS, D-10 HEALTH PROBE, D-13 ENV EXAMPLE, D-14 VERSIONS, D-15 DEAD PAGE, D-16 UNREACHED SCREEN.</text>
+    <text class="code" x="176.6" y="46.5" text-anchor="end">VER-811A</text>
+  </svg>
+  <figcaption><span class="n">Figure 8.1-1.</span>Where Each Confirmed Defect Enters the Run</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1mm">
+  <div class="num">8.1.2</div>
+  <div>
+    <h2>DEFECT REGISTER.</h2>
+    <p class="flush">Locations are line numbers at the change date. “Latent” means the path is not exercised by the current suite; it does not mean the path is unreachable in production.</p>
+  </div>
+</section>
+
+<div class="tcap">Table 8.1-1. Confirmed Defects, Limitations and Their Effects</div>
+<table class="dense">
+  <thead><tr><th style="width:7%">ID</th><th style="width:26%">Location</th><th style="width:9%">Severity</th><th>Symptom and consequence</th></tr></thead>
+  <tbody>
+    <tr><td>D-01</td><td>agents/code_rag.py:109</td><td class="v">HIGH</td><td><i>logger</i> is undefined; a failed stale-chunk delete raises <i>NameError</i> and aborts the run instead of logging. Latent: needs incremental mode plus a delete failure.</td></tr>
+    <tr><td>D-02</td><td>agents/complexity_scorer.py:297</td><td class="v">MEDIUM</td><td>CRITICAL reason prints the complexity value where the function name belongs, e.g. “Function '24' has cyclomatic complexity 24”.</td></tr>
+    <tr><td>D-03</td><td>agents/doc_generator.py:738</td><td class="v">MEDIUM</td><td><i>ClassInfo</i> exposes <i>method_names</i>, but the section reads <i>methods</i>; every class is reported with 0 methods.</td></tr>
+    <tr><td>D-04</td><td>run.py:149–157</td><td class="v">HIGH</td><td><i>agent_context_md</i> is generated but never saved by the CLI; only the API returns it. The advertised deliverable is missing on disk.</td></tr>
+    <tr><td>D-05</td><td>agents/explainability.py:61</td><td class="v">HIGH</td><td>The first eight characters of the API key are printed to logs. Any log aggregation or screenshot leaks key material.</td></tr>
+    <tr><td>D-06</td><td>agents/code_rag.py:246</td><td class="v">MEDIUM</td><td>Raw text is cleared before explainability's fallback reads it; Agent 6 must rely on Chroma chunks and silently loses context if retrieval stored none.</td></tr>
+    <tr><td>D-07</td><td>api/job_store.py:345</td><td class="v">MEDIUM</td><td>RQ results expire after 86,400 s, but job records default to no expiry. The record outlives its result and reports a complete job with nothing to return.</td></tr>
+    <tr><td>D-08</td><td>api/main.py:238–254</td><td class="v">MEDIUM</td><td><i>/api/jobs/{id}</i> returns HTTP 200 with <i>{"error":"job not found"}</i>, while <i>/jobs/{id}</i> returns 404. Clients must branch on body shape.</td></tr>
+    <tr><td>D-09</td><td>api/main.py:55–59</td><td class="v">MEDIUM</td><td>CORS allows every origin with credentials enabled. Starlette reflects the caller's origin for credentialed requests, so any site can call the API with cookies if a browser has them.</td></tr>
+    <tr><td>D-10</td><td>api/worker.py:45–56</td><td class="v">MEDIUM</td><td>The worker health endpoint always answers “ok”; it does not test Redis, queue depth or the pipeline. A live worker can be idle or wedged.</td></tr>
+    <tr><td>D-11</td><td>utils/retriever.py:make_collection_name</td><td class="v">MEDIUM</td><td>Collections are per job; only <i>DELETE /jobs/{id}</i> removes one, best-effort and never called by the client. Disk use grows with every run.</td></tr>
+    <tr><td>D-12</td><td>orchestrator.py:166</td><td class="v">LOW</td><td><i>files_with_content</i> is computed after retrieval clears raw text, so the manifest always reports 0 despite successful ingestion.</td></tr>
+    <tr><td>D-13</td><td>.env.example:17</td><td class="v">LOW</td><td>Example model is <i>llama-3.3-70b-instruct</i>; code default is <i>llama-3.2-11b-vision-instruct</i>. Copying the example changes behaviour.</td></tr>
+    <tr><td>D-14</td><td>main.py:47, App.tsx:8, package.json</td><td class="v">LOW</td><td>API reports 1.0.0, client 1.1.0, package 1.0.0, change log has two 1.1.0 entries. No single version authority.</td></tr>
+    <tr><td>D-15</td><td>frontend/src/pages/ResultsPage.tsx</td><td class="v">LOW</td><td>762 lines of an earlier results implementation are compiled by nothing; <i>react-router-dom</i> is installed but unused.</td></tr>
+    <tr><td>D-16</td><td>frontend/src/App.tsx:23, 1646</td><td class="v">LOW</td><td>The <i>error</i> screen is declared and rendered but never set; failures appear inside the progress screen instead.</td></tr>
+  </tbody>
+</table>
+
+<div class="lower" style="margin-top:1.2mm">
+  <div>
+    <div class="notice">
+      <span class="tag">WARNING</span>
+      <p>D-05 is a credential-handling fault, not a cosmetic log line. The value is truncated, but a prefix narrows a brute-force search and is enough to correlate keys across logs. Do not paste production logs into issues or documents.</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="bar"><span>DEFECT CHECK</span><span>MAINTAINER</span></div>
+    <ol>
+      <li><span>1</span><span>REPRODUCE - name the path</span></li>
+      <li><span>2</span><span>LOCATE - file and line</span></li>
+      <li><span></span><span>&radic; CLASS - lost output, wrong output, trap</span></li>
+      <li><span>3</span><span>TEST - add a seam case first</span></li>
+      <li><span>4</span><span>FIX - one defect per change</span></li>
+    </ol>
+  </div>
+</div>

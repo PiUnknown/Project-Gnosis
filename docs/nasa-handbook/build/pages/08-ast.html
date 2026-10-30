@@ -1,0 +1,106 @@
+<section class="para">
+  <div class="num">3.2.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>Symbol extraction turns text into a language-neutral inventory. Each file is parsed by a tree-sitter grammar; three extractor families then walk the tree and emit functions, classes and imports into a <i>SymbolTable</i>. The one idea the reader must leave with is that later stages never see syntax trees. They see only the flat records defined in <i>src/parsers/base.py</i> (figure 3.2-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 62" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Tree-sitter parsing and extractor families producing a symbol table">
+    <rect class="panel" x="1.5" y="2" width="86" height="58"/>
+    <text class="lbl-s" x="3.4" y="5.2">PARSE</text>
+    <rect class="box" x="7" y="9" width="30" height="10"/><text class="lbl-s" x="22" y="15" text-anchor="middle">SOURCE BYTES</text>
+    <line class="wa" x1="37" y1="14" x2="46.4" y2="14"/>
+    <rect class="box" x="47" y="9" width="34" height="10"/><text class="lbl-s" x="64" y="15" text-anchor="middle">TREE-SITTER</text>
+    <line class="wa" x1="64" y1="19" x2="64" y2="27.4"/>
+    <rect class="box" x="47" y="28" width="34" height="10"/><text class="lbl-s" x="64" y="34" text-anchor="middle">SYNTAX TREE</text>
+    <line class="wa" x1="47" y1="33" x2="38.4" y2="33"/>
+    <rect class="box" x="7" y="28" width="30" height="10"/><text class="lbl-s" x="22" y="34" text-anchor="middle">HAS_ERROR?</text>
+    <text class="lbl-s" x="7" y="45">GRAMMAR KEY:</text>
+    <text class="lbl-s" x="7" y="48.6">PYTHON, JAVASCRIPT, TSX,</text>
+    <text class="lbl-s" x="7" y="52.2">TYPESCRIPT, GO, RUST, JAVA,</text>
+    <text class="lbl-s" x="7" y="55.8">C, CPP</text>
+
+    <rect class="panel" x="92" y="2" width="86" height="58"/>
+    <text class="lbl-s" x="93.4" y="5.2">EXTRACT</text>
+    <rect class="box" x="96" y="8" width="64" height="8"/><text class="lbl-s" x="128" y="13.2" text-anchor="middle">PYTHON_PARSER</text>
+    <rect class="box" x="96" y="18" width="64" height="8"/><text class="lbl-s" x="128" y="23.2" text-anchor="middle">JS_PARSER</text>
+    <rect class="box" x="96" y="28" width="64" height="8"/><text class="lbl-s" x="128" y="33.2" text-anchor="middle">GENERIC_PARSER: GO, RUST, JAVA, C, C++</text>
+    <polyline class="w" points="160,12 172,12 172,44.5"/>
+    <polyline class="w" points="160,22 172,22"/>
+    <polyline class="w" points="160,32 172,32"/>
+    <line class="wa" x1="172" y1="44.5" x2="168.4" y2="44.5"/>
+    <rect class="box" x="96" y="38" width="72" height="13"/>
+    <text class="lbl" x="128" y="43.2" text-anchor="middle">SYMBOLTABLE</text>
+    <text class="lbl-s" x="128" y="46.4" text-anchor="middle">FUNCTIONS, CLASSES, IMPORTS</text>
+    <text class="lbl-s" x="128" y="49.4" text-anchor="middle">DOCSTRING, PARSE_ERROR</text>
+    <text class="code" x="176.6" y="56.0" text-anchor="end">AST-501A</text>
+  </svg>
+  <figcaption><span class="n">Figure 3.2-1.</span>Parse and Extract Paths for Eight Languages</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">3.2.2</div>
+  <div>
+    <h2>FUNCTIONAL DESCRIPTION.</h2>
+    <p><i>run</i> builds the set of manifest paths, selects files to parse, and submits them to a thread pool sized <i>min(12, CPU count, file count)</i>. Each worker calls <i>_parse_single_file</i>, which selects a grammar key, parses bytes, and dispatches to <i>extract_python</i>, <i>extract_js</i> or <i>extract_generic</i>. Python methods are recorded both as functions and as class method names; JavaScript arrow functions and exported declarations are recognised; the generic extractor handles receiver-based Go methods, Rust impl blocks, Java constructors and C declarators. After parsing, <i>_resolve_internal_imports</i> marks each import as internal or external against the manifest.</p>
+  </div>
+</section>
+
+<section class="para">
+  <div class="num">3.2.2.1</div>
+  <div>
+    <h3>Error Tolerance.</h3>
+    <p class="flush">A tree-sitter syntax error does not discard the file. The extractor still emits whatever symbols it can and sets <i>parse_error=True</i> with a detail string. An exception during extraction produces an empty table flagged as an error. Downstream, the file is skipped by retrieval and forced to CRITICAL risk, so a parse failure is visible rather than silent.</p>
+  </div>
+</section>
+
+<div class="listing"><span class="c"># src/agents/ast_parser.py, _parse_single_file (condensed)</span>
+grammar_key = "TSX" if path.endswith(".tsx") else lang
+parser = get_parser(grammar_key)          <span class="c"># None -> skip, not error</span>
+tree = parser.parse(source_bytes)
+has_error = tree.root_node.has_error      <span class="c"># partial tree still usable</span>
+docstring, functions, classes, imports = extract_python(tree, source_bytes)
+st = SymbolTable(file_path=path, language=lang, module_docstring=docstring,
+                 functions=functions, classes=classes, imports=imports,
+                 parse_error=has_error)   <span class="c"># error is data, not an exception</span></div>
+
+<div class="lower">
+  <div>
+    <section class="para">
+      <div class="num">3.2.3</div>
+      <div><h2>PERFORMANCE AND DESIGN DATA.</h2></div>
+    </section>
+    <div class="tcap">Table 3.2-1. Grammars and Symbol Coverage</div>
+    <table class="dense">
+      <thead><tr><th>Language</th><th>Package</th><th>Coverage</th></tr></thead>
+      <tbody>
+        <tr><td>Python</td><td class="v">tree-sitter-python</td><td>functions, async, classes, methods, imports</td></tr>
+        <tr><td>JavaScript</td><td class="v">tree-sitter-javascript</td><td>declarations, arrows, classes, imports</td></tr>
+        <tr><td>TypeScript</td><td class="v">tree-sitter-typescript</td><td>TypeScript and TSX grammars</td></tr>
+        <tr><td>Go</td><td class="v">tree-sitter-go</td><td>functions, methods, structs, imports</td></tr>
+        <tr><td>Rust</td><td class="v">tree-sitter-rust</td><td>functions, impls, use declarations</td></tr>
+        <tr><td>Java</td><td class="v">tree-sitter-java</td><td>classes, methods, imports</td></tr>
+        <tr><td>C / C++</td><td class="v">tree-sitter-c / cpp</td><td>functions, structs, includes</td></tr>
+        <tr><td>Config / docs</td><td class="v">none</td><td>skipped after ingestion</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="notice">
+      <span class="tag">CAUTION</span>
+      <p>Symbol coverage is not semantic type resolution. A dynamic import, a generated macro, or a name assembled at run time will not appear. The absence of a symbol in table 3.2-1's output is not evidence that the symbol does not exist in the target repository.</p>
+    </div>
+    <div class="card">
+      <div class="bar"><span>PARSE CHECK</span><span>MAINTAINER</span></div>
+      <ol>
+        <li><span>1</span><span>READ - symbol_tables count</span></li>
+        <li><span>2</span><span>COMPARE - manifest count</span></li>
+        <li><span></span><span>&radic; PARSE_ERROR - false for sample</span></li>
+        <li><span>3</span><span>OPEN - one function record</span></li>
+        <li><span>4</span><span>CONFIRM - line range matches file</span></li>
+      </ol>
+    </div>
+  </div>
+</div>

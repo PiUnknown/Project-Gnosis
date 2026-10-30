@@ -29,6 +29,7 @@ from src.api.job_store import store
 from src.api.models import PHASE_PROGRESS
 from src.state import ArchaeonState
 from src.utils.github_api import parse_github_url, fetch_repo_metadata
+from src.utils.token_crypto import decrypt_github_token
 from src.agents import ingestion
 from src.agents import ast_parser
 from src.agents import dependency_graph
@@ -54,7 +55,14 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
 
     try:
         # ---- Setup state -------------------------------------------
-        github_token = options.get("github_token") or os.getenv("GITHUB_TOKEN")
+        persisted_job = store.get(job_id)
+        encrypted_token = (
+            persisted_job.options.get("github_token_encrypted")
+            if persisted_job and persisted_job.options
+            else None
+        )
+        github_token = decrypt_github_token(encrypted_token) if encrypted_token else None
+        github_token = github_token or os.getenv("GITHUB_TOKEN")
         max_explanations = options.get("max_explanations", 20)
         skip_llm = options.get("skip_llm", False)
         incremental = options.get("incremental", False)
@@ -77,6 +85,7 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
         t_start = log_phase_start("Metadata")
         metadata = fetch_repo_metadata(owner, repo_name, github_token)
         state.default_branch = metadata["default_branch"]
+        repo_size_kb = int(metadata.get("size") or 0)
         del metadata
         log_phase_end("Metadata", t_start, objects_cleaned=["Released temporary metadata response"])
         _end_phase(job_id, "metadata")
@@ -84,7 +93,11 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
         # ---- Phase 1: Ingestion ------------------------------------
         _start_phase(job_id, "ingestion")
         t_start = log_phase_start("Ingestion")
-        state = ingestion.run(state)
+        state = ingestion.run(
+            state,
+            reject_over_max=True,
+            repo_size_kb=repo_size_kb,
+        )
         log_phase_end("Ingestion", t_start, objects_cleaned=["Released file tree buffers", "Released temporary content buffers"])
         _end_phase(job_id, "ingestion")
 
@@ -126,7 +139,11 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
         t_start = log_phase_start("Explainability")
         print(f"  [Pipeline] skip_llm={options.get('skip_llm')}  type={type(options.get('skip_llm'))}")
         if not skip_llm:
-            state = explainability.run(state, max_count=max_explanations)
+            state = explainability.run(
+                state,
+                max_count=max_explanations,
+                progress_callback=store.update_explanation_progress,
+            )
         log_phase_end("Explainability", t_start, objects_cleaned=["Released prompt templates", "Released token arrays"])
         _end_phase(job_id, "explainability")
 
@@ -284,6 +301,7 @@ def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False)
             "total_files": state.files_analyzed,
             "files_discovered": state.files_discovered,
             "files_analyzed": state.files_analyzed,
+            "files_with_content": state.files_with_content,
             "analysis_mode": state.analysis_mode,
             "language_breakdown": lang_counts,
             "total_functions": sum(
@@ -301,6 +319,7 @@ def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False)
                 if state.dependency_graph else 0
             ),
             "circular_dep_count": len(state.circular_deps),
+            "circular_deps_truncated": state.circular_deps_truncated,
             "risk_distribution": risk_dist,
             "files_explained": len(state.explanations),
             "explained": len(state.explanations),
@@ -309,6 +328,7 @@ def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False)
         "complexity_report": {
             "critical_and_high": critical_high,
             "circular_deps": state.circular_deps,
+            "circular_deps_truncated": state.circular_deps_truncated,
         },
         "graph_summary": {
             "top_files_by_indegree": top_files,
@@ -325,10 +345,12 @@ def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False)
             "in_degree": {node["id"]: node["imported_by"] for node in graph_nodes},
             "out_degree": {node["id"]: node["imports"] for node in graph_nodes},
             "circular_deps": state.circular_deps,
+            "circular_deps_truncated": state.circular_deps_truncated,
             "topological_order": reading_order,
         },
         "reading_order": reading_order[:10],
         "complexity_rows": complexity_rows,
         "complexity_report_json": state.complexity_report_json or "{}",
         "circular_deps": state.circular_deps,
+        "circular_deps_truncated": state.circular_deps_truncated,
     }

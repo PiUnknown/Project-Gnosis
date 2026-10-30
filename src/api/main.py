@@ -21,23 +21,26 @@ try:
 except ImportError:
     pass
 
+import logging
 import os
-import uuid
-import concurrent.futures
+import time
 from typing import Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, field_validator
 
-from src.api import pipeline_runner
-from src.api.job_store import store
-from src.api.queue import enqueue_analysis_job, get_queue_stats, _local_executor
-from src.utils.github_api import parse_github_url, fetch_repo_metadata, fetch_file_tree
-from src.utils.filters import should_include_file
+from src.api.job_store import store, BackendUnavailableError
+from src.api.models import AnalyzeOptions
+from src.api.rate_limit import check_analyze_rate_limit
+from src.api.queue import (
+    enqueue_analysis_job,
+    get_queue_stats,
+    QueueDispatchError,
+    _local_executor,
+)
 from src.api.models import (
-    PHASE_PROGRESS,
     JobStatusResponse,
     JobSummary,
     JobListResponse,
@@ -45,27 +48,84 @@ from src.api.models import (
     HealthResponse,
     SubmitResponse
 )
+from src.utils.github_api import parse_github_url
+from src.utils.token_crypto import TokenEncryptionError, encrypt_github_token
 
-VERSION = "1.0.0"
+VERSION = "1.2.0"
+logger = logging.getLogger(__name__)
+
+RESULT_FIELDS = {
+    "summary",
+    "onboarding_doc",
+    "agent_context",
+    "file_explanations_md",
+    "dependency_rows",
+    "graph_data",
+    "reading_order",
+    "complexity_rows",
+    "explanations",
+    "complexity_report_json",
+    "complexity_report",
+    "circular_deps",
+    "circular_deps_truncated",
+    "skip_llm",
+    "branch",
+    "repo",
+    "job_id",
+    "analysis_mode",
+    "files_discovered",
+    "files_analyzed",
+    "edges",
+    "in_degree",
+    "out_degree",
+    "topological_order",
+}
 
 app = FastAPI()
 
+_default_cors_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8443",
+    "http://127.0.0.1:8443",
+]
+_cors_origins_raw = os.getenv("CORS_ALLOWED_ORIGINS")
+_cors_origins = (
+    [origin.strip() for origin in _cors_origins_raw.split(",") if origin.strip()]
+    if _cors_origins_raw is not None
+    else _default_cors_origins
+)
+if not _cors_origins:
+    _cors_origins = _default_cors_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Vite dev server
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    expose_headers=["Server-Timing"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 @app.middleware("http")
 async def add_security_headers(request, call_next):
+    started = time.perf_counter()
     response = await call_next(request)
+    duration_ms = (time.perf_counter() - started) * 1000
     response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Server-Timing"] = f"app;dur={duration_ms:.2f}"
+    logger.info(
+        "http_request method=%s path=%s status=%s duration_ms=%.2f",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
     return response
 
 # Local fallback executor instance (referenced in test fixtures)
@@ -87,7 +147,7 @@ class UnifiedAnalyzeRequest(BaseModel):
     skip_llm: bool = False
     github_token: Optional[str] = None
     incremental: bool = False
-    options: Optional[dict] = None
+    options: Optional[AnalyzeOptions] = None
 
     @field_validator("max_explanations")
     @classmethod
@@ -98,17 +158,25 @@ class UnifiedAnalyzeRequest(BaseModel):
             raise ValueError("max_explanations cannot exceed 100")
         return v
 
+    @field_validator("github_token")
+    @classmethod
+    def validate_github_token(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) > 500:
+            raise ValueError("github_token cannot exceed 500 characters")
+        return v
+
     @field_validator("repo_url")
     @classmethod
     def validate_repo_url(cls, v: str) -> str:
         v = v.strip()
-        if not v:
-            raise ValueError("repo_url cannot be empty")
-        if "github.com" not in v:
-            raise ValueError("URL must contain 'github.com'")
-        parts = v.replace("https://", "").replace("http://", "").split("/")
-        if len(parts) < 3:
-            raise ValueError("URL must be in format https://github.com/owner/repo")
+        if len(v) > 2048:
+            raise ValueError("repo_url cannot exceed 2048 characters")
+        try:
+            parse_github_url(v)
+        except ValueError as exc:
+            raise ValueError(
+                "URL must point to a GitHub repository: https://github.com/owner/repo"
+            ) from exc
         return v
 
 def _get_agents_list(job) -> list:
@@ -154,7 +222,10 @@ def _get_agents_list(job) -> list:
 
 @app.post("/analyze", response_model=SubmitResponse, status_code=202, tags=["Analysis"])
 @app.post("/api/analyze", status_code=202)
-def analyze(req: UnifiedAnalyzeRequest):
+def analyze(req: UnifiedAnalyzeRequest, request: Request):
+    client_ip = request.client.host if request.client else None
+    check_analyze_rate_limit(client_ip, getattr(store, "redis_client", None))
+
     # Extract options
     max_explanations = req.max_explanations
     skip_llm = req.skip_llm
@@ -162,65 +233,70 @@ def analyze(req: UnifiedAnalyzeRequest):
     incremental = req.incremental
 
     if req.options:
-        opt_max = req.options.get("max_explanations")
+        supplied_options = req.options.model_dump(exclude_unset=True)
+        opt_max = supplied_options.get("max_explanations")
         if opt_max is not None:
             if opt_max < 0 or opt_max > 100:
                 raise HTTPException(status_code=422, detail="max_explanations validation error")
             max_explanations = opt_max
-        opt_skip = req.options.get("skip_llm")
+        opt_skip = supplied_options.get("skip_llm")
         if opt_skip is not None:
             skip_llm = opt_skip
-        if req.options.get("github_token"):
-            github_token = req.options.get("github_token")
-        if req.options.get("incremental") is not None:
-            incremental = bool(req.options.get("incremental"))
+        if supplied_options.get("github_token"):
+            github_token = supplied_options.get("github_token")
+        if supplied_options.get("incremental") is not None:
+            incremental = bool(supplied_options.get("incremental"))
 
-    # Deduplication check
-    for job in store.list_all():
-        if (job.repo_url == req.repo_url 
-                and job.status in ("queued", "running")):
-            return JSONResponse(
-                status_code=409,
-                content={
-                    "job_id": job.job_id,
-                    "status": job.status,
-                    "message": "A job for this repository is already running."
-                }
-            )
-
-    # Validate file count before enqueuing a job
-    try:
-        owner, repo_name = parse_github_url(req.repo_url)
-        metadata = fetch_repo_metadata(owner, repo_name, github_token)
-        default_branch = metadata.get("default_branch", "main")
-        tree_entries = fetch_file_tree(owner, repo_name, default_branch, github_token)
-        filtered_files = [
-            entry for entry in tree_entries 
-            if should_include_file(entry["path"], entry.get("size", 0))
-        ]
-        
-        max_sampled = int(os.getenv("MAX_SAMPLED_ANALYSIS_FILES", 3000))
-        if len(filtered_files) > max_sampled:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Repository exceeds the maximum file limit of {max_sampled} files (found {len(filtered_files)}). Analysis rejected."
-            )
-    except Exception as exc:
-        if isinstance(exc, HTTPException):
-            raise exc
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to validate repository size: {exc}"
+    # Restrict duplicate checks to active jobs. The active Redis index falls
+    # back to a full scan until its operator-run reconciliation is armed.
+    active_job = store.find_active_by_repo(req.repo_url)
+    if active_job:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "job_id": active_job.job_id,
+                "status": active_job.status,
+                "message": "A job for this repository is already running."
+            }
         )
 
-    options = {
+    worker_options = {
         "max_explanations": max_explanations,
         "skip_llm": skip_llm,
-        "github_token": github_token,
         "incremental": incremental
     }
-    job_id = store.create(req.repo_url, options)
-    enqueue_analysis_job(job_id, req.repo_url, options, executor=_executor)
+    stored_options = dict(worker_options)
+    if github_token:
+        try:
+            stored_options["github_token_encrypted"] = encrypt_github_token(github_token)
+        except TokenEncryptionError as exc:
+            logger.error("[Analyze] Per-job GitHub token encryption is unavailable: %s", exc)
+            raise HTTPException(
+                status_code=503,
+                detail="Per-request GitHub token storage is not configured on this server.",
+            ) from exc
+
+    try:
+        job_id = store.create(req.repo_url, stored_options)
+    except BackendUnavailableError as exc:
+        logger.error(f"[Analyze] Job store unavailable: {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail="Job storage is temporarily unavailable. Please retry shortly.",
+        )
+
+    try:
+        enqueue_analysis_job(job_id, req.repo_url, worker_options, executor=_executor, store=store)
+    except QueueDispatchError as exc:
+        logger.error(f"[Analyze] Queue dispatch failed for job {job_id}: {exc}")
+        try:
+            store.fail(job_id, f"Queue dispatch failed: {exc}")
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=503,
+            detail="Job queue is temporarily unavailable. Please retry shortly.",
+        )
 
     return SubmitResponse(
         job_id=job_id,
@@ -247,6 +323,8 @@ def get_api_job_status(job_id: str):
         "current_phase": job.current_phase,
         "phases_completed": job.phases_completed,
         "progress_pct": job.progress_pct,
+        "explanations_completed": job.explanations_completed,
+        "explanations_total": job.explanations_total,
         "created_at": job.created_at,
         "completed_at": job.completed_at,
         "error": job.error,
@@ -265,7 +343,7 @@ def get_job_result(job_id: str):
     return job.result
 
 @app.get("/api/jobs/{job_id}/result")
-def get_api_job_result(job_id: str):
+def get_api_job_result(job_id: str, sections: Optional[str] = None):
     job = store.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -275,7 +353,17 @@ def get_api_job_result(job_id: str):
         return JSONResponse(status_code=202, content={"status": job.status, "error": "not ready"})
     if job.result is None:
         return JSONResponse(status_code=202, content={"status": "processing", "error": "not ready"})
-    return job.result
+    if not sections:
+        return job.result
+
+    requested = {section.strip() for section in sections.split(",") if section.strip()}
+    unknown = requested - RESULT_FIELDS
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown result section(s): {', '.join(sorted(unknown))}"
+        )
+    return {key: job.result[key] for key in requested if key in job.result}
 
 @app.delete("/jobs/{job_id}", tags=["Jobs"])
 @app.delete("/api/jobs/{job_id}")
@@ -284,18 +372,39 @@ def delete_job(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    if job.status == "running":
+        raise HTTPException(
+            status_code=409,
+            detail="This analysis is already running and cannot be safely cancelled. You can delete it after it finishes.",
+        )
+
+    if job.status == "queued":
+        from src.api.queue import cancel_analysis_job
+        try:
+            cancelled = cancel_analysis_job(job_id, store=store)
+        except QueueDispatchError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="The queued analysis could not be cancelled because the queue is unavailable.",
+            ) from exc
+        if not cancelled:
+            raise HTTPException(
+                status_code=409,
+                detail="The analysis has started and cannot be safely cancelled.",
+            )
+
     # Attempt to clean up the ChromaDB collection associated with this job
     try:
-        from src.utils.github_api import parse_github_url
-        from src.utils.retriever import make_collection_name, DEFAULT_CHROMA_DB_PATH
-        import chromadb
+        if job.status in ("complete", "failed"):
+            from src.utils.retriever import make_collection_name, DEFAULT_CHROMA_DB_PATH
+            import chromadb
 
-        owner, repo = parse_github_url(job.repo_url)
-        collection_name = make_collection_name(owner, repo, job_id)
+            owner, repo = parse_github_url(job.repo_url)
+            collection_name = make_collection_name(owner, repo, job_id)
 
-        client = chromadb.PersistentClient(path=DEFAULT_CHROMA_DB_PATH)
-        client.delete_collection(name=collection_name)
-        print(f"Cleaned up Chroma collection '{collection_name}' for deleted job {job_id}")
+            client = chromadb.PersistentClient(path=DEFAULT_CHROMA_DB_PATH)
+            client.delete_collection(name=collection_name)
+            print(f"Cleaned up Chroma collection '{collection_name}' for deleted job {job_id}")
     except Exception as exc:
         print(f"Non-fatal: could not delete Chroma collection for job {job_id}: {exc}")
 
@@ -328,11 +437,13 @@ def list_jobs():
 @app.get("/api/health")
 @app.head("/api/health")
 def health():
-    stats = get_queue_stats()
+    stats = get_queue_stats(store)
+    degraded = bool(stats.get("store_degraded"))
     return HealthResponse(
-        status="ok",
+        status="degraded" if degraded else "ok",
         version=VERSION,
         active_jobs=store.active_count(),
+        redis_configured=stats.get("redis_configured"),
         redis_connected=stats.get("redis_connected"),
         queue_mode=stats.get("mode"),
         queue_depth=stats.get("queue_depth")

@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GN1A-03-BLOCK I-(1) PROJECT GNOSIS OPERATIONS HANDBOOK, page 6.2-1</title>
+<style>
+  @font-face { font-family: "Routed Gothic"; src: url("fonts/routed-gothic.ttf"); unicode-range: U+0000-0030, U+0032-FFFF; }
+  @font-face { font-family: "Routed Gothic Narrow"; src: url("fonts/routed-gothic-narrow.ttf"); unicode-range: U+0000-0030, U+0032-FFFF; }
+  @font-face { font-family: "Routed Gothic"; src: local("Helvetica Neue"), local("HelveticaNeue"), local("Arial"); unicode-range: U+0031; }
+  @font-face { font-family: "Routed Gothic Narrow"; src: local("Helvetica Neue"), local("HelveticaNeue"), local("Arial"); unicode-range: U+0031; }
+  @font-face { font-family: "Letter Gothic"; src: url("fonts/LetterGothicCode-R.ttf"); font-weight: 400; }
+  @font-face { font-family: "Letter Gothic"; src: url("fonts/LetterGothicCode-B.ttf"); font-weight: 700; }
+
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #8a8a86; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @media print { html, body { background: none; } }
+
+  :root {
+    --ink: #000000;
+    --paper: #fbfaf5;
+    --type: "Iowan Old Style", "Iowan", Georgia, serif;
+    --leroy: "Routed Gothic Narrow", "Routed Gothic", sans-serif;
+    --selectric: "Letter Gothic", "Courier", monospace;
+  }
+  @media print { :root { --paper: #ffffff; } }
+
+  .page {
+    position: relative; width: 210mm; height: 297mm; margin: 0 auto;
+    padding: 9mm 15mm 0 16mm; background: var(--paper); color: var(--ink);
+    font-family: var(--type); font-size: 8pt; line-height: 1.33;
+    letter-spacing: 0.055em; overflow: hidden;
+  }
+
+  .head { text-align: center; line-height: 1.25; }
+  .head .doc { font-weight: 700; font-size: 8.6pt; letter-spacing: 0.06em; }
+  .head .title { font-weight: 700; font-size: 8.6pt; letter-spacing: 0.08em; }
+  .head .part { margin-top: 2.2mm; font-size: 8.2pt; letter-spacing: 0.1em; }
+  .rule { height: 0; border-top: 1.5pt solid var(--ink); margin: 1.4mm -2mm 0; }
+
+  .foot { position: absolute; left: 16mm; right: 15mm; bottom: 8mm; }
+  .foot .rule { margin: 0 -2mm 1.6mm; }
+  .foot .sub { text-align: center; letter-spacing: 0.1em; font-size: 8.2pt; }
+  .foot .line { display: flex; align-items: baseline; justify-content: space-between; margin-top: 2.2mm; font-size: 8.2pt; }
+  .foot .fill { display: inline-block; border-bottom: 0.6pt solid var(--ink); text-align: center; padding: 0 1mm; font-size: 8.8pt; letter-spacing: 0.03em; }
+
+  .opener { text-align: center; letter-spacing: 0.12em; margin: 3.4mm 0 2mm; line-height: 1.6; }
+
+  .para { display: grid; grid-template-columns: 19mm 1fr; position: relative; }
+  .para .num { letter-spacing: 0.08em; }
+  .para h2, .para h3 { margin: 0 0 0.8mm; font: inherit; font-weight: 400; letter-spacing: 0.08em; }
+  .para h3 { text-decoration: underline; text-underline-offset: 1.6pt; text-decoration-thickness: 0.5pt; letter-spacing: 0.06em; }
+  .para p { margin: 0 0 1mm; text-indent: 9mm; text-align: left; }
+  .para p.flush { text-indent: 0; }
+  .para p.tight { margin-bottom: 0.4mm; }
+  .changebar { position: absolute; left: -9mm; width: 1.3mm; background: var(--ink); }
+  .nowrap { white-space: nowrap; }
+
+  figure { margin: 1.6mm 0 0; }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption { text-align: center; margin-top: 0.6mm; letter-spacing: 0.07em; }
+  figcaption .n { margin-right: 3mm; }
+
+  svg text { font-family: var(--leroy); fill: var(--ink); letter-spacing: 0.04px; }
+  svg .o    { fill: none; stroke: var(--ink); stroke-width: 0.42; stroke-linejoin: round; stroke-linecap: round; }
+  svg .of   { fill: var(--paper); stroke: var(--ink); stroke-width: 0.42; stroke-linejoin: round; }
+  svg .t    { fill: none; stroke: var(--ink); stroke-width: 0.17; stroke-linecap: round; }
+  svg .hid  { fill: none; stroke: var(--ink); stroke-width: 0.22; stroke-dasharray: 1.3 0.7; }
+  svg .cl   { fill: none; stroke: var(--ink); stroke-width: 0.16; stroke-dasharray: 5 0.8 0.9 0.8; }
+  svg .cut  { fill: none; stroke: var(--ink); stroke-width: 0.5; stroke-dasharray: 5 1 1 1; }
+  svg .ld   { fill: none; stroke: var(--ink); stroke-width: 0.16; marker-end: url(#nh-leader); }
+  svg .dim  { fill: none; stroke: var(--ink); stroke-width: 0.16; marker-start: url(#nh-dim); }
+  svg .w    { fill: none; stroke: var(--ink); stroke-width: 0.3; stroke-linejoin: round; }
+  svg .wa   { fill: none; stroke: var(--ink); stroke-width: 0.3; stroke-linejoin: round; marker-end: url(#nh-arrow); }
+  svg .box  { fill: var(--paper); stroke: var(--ink); stroke-width: 0.45; }
+  svg .panel{ fill: none; stroke: var(--ink); stroke-width: 0.3; stroke-dasharray: 2 1; }
+  svg .ev   { fill: none; stroke: var(--ink); stroke-width: 0.18; stroke-dasharray: 1 0.7; }
+  svg .vid  { fill: url(#nh-hatch); stroke: var(--ink); stroke-width: 0.35; }
+  svg .aud  { fill: var(--paper); stroke: var(--ink); stroke-width: 0.35; }
+  svg .gap  { fill: var(--paper); stroke: var(--ink); stroke-width: 0.35; stroke-dasharray: 0.6 0.5; }
+  svg .grain{ fill: url(#nh-dots); stroke: var(--ink); stroke-width: 0.35; }
+  svg .dot  { fill: var(--ink); }
+  svg .lbl   { font-size: 2.35px; }
+  svg .lbl-s { font-size: 2.05px; }
+  svg .lbl-b { font-size: 2.5px; font-family: "Routed Gothic", sans-serif; }
+  svg .code  { font-size: 2.4px; font-family: "Routed Gothic", sans-serif; }
+
+  .lower { display: grid; grid-template-columns: 1fr 64mm; column-gap: 6mm; margin-top: 2.8mm; }
+  .tcap { text-align: center; letter-spacing: 0.07em; margin: 0 0 0.8mm; }
+  table { width: 100%; border-collapse: collapse; font-size: 7.3pt; line-height: 1.2; }
+  th, td { border: 0.6pt solid var(--ink); padding: 0.35mm 1.6mm; text-align: left; vertical-align: top; font-weight: 400; }
+  thead th { text-align: center; letter-spacing: 0.1em; padding: 0.5mm 1.6mm; }
+  td.v { white-space: nowrap; }
+  table.dense { font-size: 6.9pt; line-height: 1.16; }
+  table.dense th, table.dense td { padding: 0.24mm 1.2mm; }
+
+  .notice { text-align: left; margin-bottom: 1.8mm; }
+  .notice .tag { display: block; text-align: center; letter-spacing: 0.18em; font-weight: 700; text-decoration: underline; text-underline-offset: 1.6pt; text-decoration-thickness: 0.6pt; margin-bottom: 0.8mm; }
+  .notice p { margin: 0; font-size: 7.4pt; line-height: 1.28; }
+
+  .card { border: 0.8pt solid var(--ink); font-family: var(--selectric); font-size: 7.1pt; line-height: 1.3; letter-spacing: 0; }
+  .card .bar { background: var(--ink); color: var(--paper); font-weight: 700; padding: 0.5mm 1.8mm; display: flex; justify-content: space-between; }
+  .card ol { list-style: none; margin: 0; padding: 0.8mm 1.8mm 1mm; }
+  .card li { display: grid; grid-template-columns: 3.2mm 1fr; white-space: pre; }
+
+  .tab { position: absolute; right: 0; top: 112mm; width: 8.5mm; height: 17mm; background: var(--ink); color: var(--paper);
+    font-family: "Routed Gothic", sans-serif; font-size: 8pt; letter-spacing: 0.08em; display: flex; align-items: center; justify-content: center; }
+
+  /* ---------- additions for this handbook ---------- */
+  .cover-title { text-align: center; margin-top: 22mm; }
+  .cover-title .kicker { font-family: var(--leroy); font-size: 9pt; letter-spacing: 0.28em; }
+  .cover-title .main { font-family: var(--leroy); font-weight: 700; font-size: 27pt; letter-spacing: 0.10em; line-height: 1.15; margin-top: 5mm; }
+  .cover-title .sub { font-family: var(--leroy); font-size: 11pt; letter-spacing: 0.20em; margin-top: 4mm; }
+  .cover-rule { border-top: 2.2pt solid var(--ink); margin: 8mm 8mm 0; }
+  .cover-abstract { margin: 7mm 12mm 0; text-align: left; }
+  .cover-abstract p { text-indent: 0; margin: 0 0 2.2mm; font-size: 9pt; line-height: 1.4; }
+  .cover-meta { margin: 7mm 12mm 0; }
+  .cover-meta table { font-size: 7.8pt; }
+  .cover-meta td { padding: 0.8mm 2mm; }
+
+  .listing { font-family: var(--selectric); font-size: 6.8pt; line-height: 1.34; letter-spacing: 0;
+    border: 0.6pt solid var(--ink); padding: 1.4mm 2mm; margin: 1.2mm 0 1.6mm; white-space: pre; overflow: hidden; }
+  .listing .c { font-style: italic; }
+  .caption { text-align: center; letter-spacing: 0.07em; margin: 0.4mm 0 1.4mm; font-size: 7.6pt; }
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; column-gap: 6mm; }
+  .threecol { display: grid; grid-template-columns: 1fr 1fr 1fr; column-gap: 4mm; }
+  .kv { width: 100%; }
+  .note { font-size: 7.2pt; line-height: 1.28; }
+  ul.tight, ol.tight { margin: 0.4mm 0 1mm 0; padding-left: 4.5mm; }
+  ul.tight li, ol.tight li { margin-bottom: 0.5mm; }
+  .center { text-align: center; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="nh-leader" viewBox="0 0 6 4" refX="5.6" refY="2" markerWidth="2.1" markerHeight="1.05" markerUnits="userSpaceOnUse" orient="auto" preserveAspectRatio="none"><path d="M0,0 L6,2 L0,4 Z" fill="#000"/></marker>
+    <marker id="nh-arrow" viewBox="0 0 6 4" refX="5.6" refY="2" markerWidth="2.4" markerHeight="1.3" markerUnits="userSpaceOnUse" orient="auto" preserveAspectRatio="none"><path d="M0,0 L6,2 L0,4 Z" fill="#000"/></marker>
+    <marker id="nh-dim" viewBox="0 0 6 4" refX="0" refY="2" markerWidth="2.2" markerHeight="0.95" markerUnits="userSpaceOnUse" orient="auto" preserveAspectRatio="none"><path d="M6,0 L0,2 L6,4 Z" fill="#000"/></marker>
+    <pattern id="nh-hatch" width="1.1" height="1.1" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="1.1" stroke="#000" stroke-width="0.2"/></pattern>
+    <pattern id="nh-bp" width="1.4" height="1.4" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="0.7" height="1.4" fill="#000"/></pattern>
+    <pattern id="nh-dots" width="1.3" height="1.3" patternUnits="userSpaceOnUse"><circle cx="0.32" cy="0.32" r="0.15" fill="#000"/><circle cx="0.97" cy="0.97" r="0.15" fill="#000"/></pattern>
+  </defs>
+</svg>
+
+<div class="page">
+
+  <header class="head">
+    <div class="doc">GN1A-03-BLOCK I-(1)</div>
+    <div class="title">PROJECT GNOSIS OPERATIONS HANDBOOK</div>
+    <div class="part">SYSTEMS DATA</div>
+    <div class="rule"></div>
+  </header>
+
+  <div class="tab">DEC</div>
+
+  <div class="opener">SECTION 6 &nbsp;&nbsp;&middot;&nbsp;&nbsp; SUBSECTION 6.2<br>
+    DECISION LEDGER AND DOCUMENT DRIFT</div>
+
+<section class="para">
+  <div class="num">6.2.1</div>
+  <div>
+    <h2>INTRODUCTION.</h2>
+    <p>The repository carries three layers of description: the public README, the original specification, and the decision and change logs. They were written at different times and are not regenerated. Where they disagree with the code, this handbook follows the code and records the disagreement. The README is the most visible and the most stale; <i>agent.md</i> is the most current prose record; the decision log is the richest rationale but contains numbering faults (figure 6.2-1).</p>
+  </div>
+</section>
+
+<figure>
+  <svg viewBox="0 0 180 50" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Record drift severity">
+    <rect class="panel" x="1.5" y="2" width="177" height="46"/>
+    <text class="lbl-s" x="3.4" y="5.2">RECORD DRIFT &mdash; DISTANCE FROM THE WORKING TREE</text>
+
+    <rect class="box" x="5" y="9" width="40" height="14"/>
+    <text class="lbl-s" x="25" y="14" text-anchor="middle">README.md</text>
+    <text class="lbl-s" x="25" y="17.6" text-anchor="middle">PUBLIC CLAIMS</text>
+    <text class="lbl-s" x="25" y="21.2" text-anchor="middle">HIGH DRIFT</text>
+
+    <rect class="box" x="49" y="9" width="40" height="14"/>
+    <text class="lbl-s" x="69" y="14" text-anchor="middle">PROJECT_SPEC</text>
+    <text class="lbl-s" x="69" y="17.6" text-anchor="middle">ORIGINAL PLAN</text>
+    <text class="lbl-s" x="69" y="21.2" text-anchor="middle">HIGH DRIFT</text>
+
+    <rect class="box" x="93" y="9" width="40" height="14"/>
+    <text class="lbl-s" x="113" y="14" text-anchor="middle">DECISIONS</text>
+    <text class="lbl-s" x="113" y="17.6" text-anchor="middle">RATIONALE LOG</text>
+    <text class="lbl-s" x="113" y="21.2" text-anchor="middle">MOSTLY CURRENT</text>
+
+    <rect class="box" x="137" y="9" width="38" height="14"/>
+    <text class="lbl-s" x="156" y="14" text-anchor="middle">agent.md</text>
+    <text class="lbl-s" x="156" y="17.6" text-anchor="middle">HANDOFF</text>
+    <text class="lbl-s" x="156" y="21.2" text-anchor="middle">LOW DRIFT</text>
+
+    <line class="t" x1="5" y1="27" x2="175" y2="27"/>
+    <text class="lbl-s" x="5" y="31">A CLAIM IS NOT EVIDENCE. THE VERDICT COLUMN IN TABLE 6.2-1 IS BASED ON FILES READ AT THE CHANGE DATE.</text>
+    <text class="lbl-s" x="5" y="35.4">WHERE A RECORD AND A TEST DISAGREE, THE TEST WINS; WHERE A TEST AND THE CODE DISAGREE, THE CODE WINS.</text>
+    <text class="lbl-s" x="5" y="39.8">IGNORED MEMORY FILES ARE ABSENT FROM ANY CLONE, SO A FRESH CHECKOUT CANNOT REPRODUCE THIS RATIONALE.</text>
+    <text class="code" x="176.6" y="46.0" text-anchor="end">DEC-621A</text>
+  </svg>
+  <figcaption><span class="n">Figure 6.2-1.</span>Description Layers Ordered by Distance from Code</figcaption>
+</figure>
+
+<section class="para" style="margin-top:1.2mm">
+  <div class="num">6.2.2</div>
+  <div>
+    <h2>CLAIM-BY-CLAIM LEDGER.</h2>
+    <p>The left column quotes or paraphrases the record. The right column states what the tree actually contains. Only disagreements are listed; agreements are omitted rather than padded.</p>
+  </div>
+</section>
+
+<div class="tcap">Table 6.2-1. Documented Claims Checked Against the Working Tree</div>
+<table class="dense">
+  <thead><tr><th style="width:37%">Record claim</th><th style="width:12%">Source</th><th>Working tree</th></tr></thead>
+  <tbody>
+    <tr><td>“Sequential multi-agent pipeline”; parallel is “a v2 optimization”</td><td class="v">README 65, 567</td><td>Graph, complexity and retrieval run in a three-thread pool; coupling is deferred to a post-join fix-up</td></tr>
+    <tr><td>Ingestion uses “max 15 threads”</td><td class="v">README 198, 608</td><td>Pool size is <i>min(16, total files)</i>; delay 0.05 s; five retries per file</td></tr>
+    <tr><td>“407 tests” in CI</td><td class="v">README 220</td><td>476 cases collected and passing on the local interpreter</td></tr>
+    <tr><td>Frontend is “React 18 + … shadcn/ui”</td><td class="v">README 205, 346</td><td>Resolved React 19.2.8, Vite 8.2.0, Tailwind 4.3.3; no shadcn package or components</td></tr>
+    <tr><td>All job state is a module dict; Redis is a future upgrade</td><td class="v">README 584</td><td>Redis store, RQ queue and worker are implemented; memory mode is only the fallback</td></tr>
+    <tr><td>Workflow lives at <i>.github/workflows/azure-deploy.yml</i></td><td class="v">README 459</td><td>Two files: <i>master_project-gnosis-api.yml</i> and <i>master_project-gnosis-worker.yml</i></td></tr>
+    <tr><td>Test fixture repository at <i>tests/fixtures/sample_repo/</i></td><td class="v">README 364</td><td>The directory is empty and untracked; no test reads it, and tests build strings and fakes in memory</td></tr>
+    <tr><td>Seven phases run “in sequence” in the entry-point docstring</td><td class="v">run.py header</td><td>Entry point is sequential; the orchestrator is partially parallel</td></tr>
+    <tr><td>Public release is v1.0.0; version string in the client is 1.1.0</td><td class="v">ChangeLog / App.tsx</td><td>Two different <i>1.1.0</i> releases and an out-of-order <i>1.0.8</i>; no single source of version truth</td></tr>
+    <tr><td>“Deploys automatically on every push to master”</td><td class="v">README 455</td><td>Workflows exist, but trigger paths and branch filters are defined per workflow and were not executed here</td></tr>
+    <tr><td>Python 3.11 in the manual Azure command</td><td class="v">README 464</td><td>Container image uses 3.11-slim; both Azure workflows request 3.12; local interpreter is 3.11.15</td></tr>
+    <tr><td>Decision log identifiers are unique and ordered</td><td class="v">Decisions.md</td><td><i>DEC-008</i> appears twice with different subjects; entries are non-monotonic</td></tr>
+  </tbody>
+</table>
+
+<section class="para" style="margin-top:1.4mm">
+  <div class="num">6.2.3</div>
+  <div>
+    <h3>Records That Remain Useful.</h3>
+    <p class="flush"><i>agent.md</i> is the best starting point for a code-aware reader: it was written against the current pipeline and lists its own known drift. <i>Decisions.md</i> remains valuable for rationale even where identifiers are duplicated, because each entry names the problem it solved. <i>DESIGN.md</i> describes a visual system that is largely present in <i>index.css</i> and <i>App.tsx</i>, but it is ignored by git and therefore not part of a clone. <i>GLOSSARY.md</i> and <i>PROJECT_SPEC.md</i> describe the intended vocabulary and original scope; they should be read as history.</p>
+  </div>
+</section>
+
+<div class="lower">
+  <div>
+    <div class="notice">
+      <span class="tag">WARNING</span>
+      <p>The README's deployment section names a workflow file that does not exist. A reader following it will look for the wrong path and may conclude deployment is unconfigured. The actual workflows are present under different names; their live status was not tested and is not asserted here.</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="bar"><span>DRIFT CHECK</span><span>MAINTAINER</span></div>
+    <ol>
+      <li><span>1</span><span>PICK - one checkable claim</span></li>
+      <li><span>2</span><span>OPEN - the file that would prove it</span></li>
+      <li><span></span><span>&radic; RECORD - code, test, doc, or absent</span></li>
+      <li><span>3</span><span>FIX - the record, not the code, by default</span></li>
+      <li><span>4</span><span>DATE - every correction</span></li>
+    </ol>
+  </div>
+</div>
+
+
+  <footer class="foot">
+    <div class="rule"></div>
+    <div class="sub">DESIGN RECORD</div>
+    <div class="line">
+      <span>Mission <span class="fill" style="width:20mm">&nbsp;</span></span>
+      <span>Basic Date <span class="fill" style="width:30mm">25 JULY 2026</span></span>
+      <span>Change Date <span class="fill" style="width:30mm">16 OCTOBER 2026</span></span>
+      <span>Page <span class="fill" style="width:18mm">6.2-1</span></span>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  document.fonts.ready.then(() => {
+    const page = document.querySelector('.page')
+    const foot = page.querySelector('.foot')
+    let bottom = 0
+    for (const el of page.children) {
+      if (el === foot || el.classList.contains('tab')) continue
+      bottom = Math.max(bottom, el.getBoundingClientRect().bottom)
+    }
+    const free = (foot.getBoundingClientRect().top - bottom) * 25.4 / 96
+    document.documentElement.dataset.fit = free >= 0 ? `ok, ${free.toFixed(1)} mm free above the footer` : `OVERFLOW by ${(-free).toFixed(1)} mm`
+  })
+</script>
+
+</body>
+</html>

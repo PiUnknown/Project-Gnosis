@@ -6,7 +6,7 @@ Pydantic validates input automatically: if repo_url is missing or
 max_explanations is negative, FastAPI returns a 422 before the handler runs.
 """
 from typing import Optional
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 # -----------------------------------------------------------------------
@@ -23,6 +23,13 @@ class AnalyzeOptions(BaseModel):
     github_token: Optional[str] = None
     incremental: bool = False
 
+    @field_validator("github_token")
+    @classmethod
+    def validate_github_token(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and len(value) > 500:
+            raise ValueError("github_token cannot exceed 500 characters")
+        return value
+
     @field_validator("max_explanations")
     @classmethod
     def validate_max_explanations(cls, v: int) -> int:
@@ -38,7 +45,7 @@ class AnalyzeOptions(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     repo_url: str
-    options: AnalyzeOptions = AnalyzeOptions()
+    options: AnalyzeOptions = Field(default_factory=AnalyzeOptions)
 
     @field_validator("repo_url")
     @classmethod
@@ -94,8 +101,8 @@ class JobStatusResponse(BaseModel):
     WHY SEPARATE STATUS AND RESULT ENDPOINTS:
     Status responses are tiny (< 1KB) and polled frequently.
     Result responses can be large (100KB+ for a big repo's onboarding doc).
-    Combining them means every poll returns 100KB. Separating them means
-    polls are fast and the large payload is fetched exactly once.
+    The API also supports requesting named result sections so the initial
+    report view does not download graph and explanation payloads it has not opened.
     """
     job_id: str
     repo_url: str
@@ -103,6 +110,8 @@ class JobStatusResponse(BaseModel):
     current_phase: Optional[str]   # which agent is currently running
     phases_completed: list
     progress_pct: int              # 0-100
+    explanations_completed: int = 0
+    explanations_total: int = 0
     created_at: str
     completed_at: Optional[str]
     error: Optional[str]
@@ -162,6 +171,7 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     active_jobs: int
+    redis_configured: Optional[bool] = None
     redis_connected: Optional[bool] = None
     queue_mode: Optional[str] = None
     queue_depth: Optional[int] = None

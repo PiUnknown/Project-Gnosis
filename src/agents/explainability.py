@@ -12,10 +12,12 @@ CACHING: ./explanation_cache/ keyed by owner::repo::file_path::sha
 
 import os
 import time
+import concurrent.futures
 from pathlib import PurePosixPath
+from typing import Callable, Optional
 
 from src.state import ArchaeonState
-from src.utils.nvidia_client import call_llm, sleep_between_calls
+from src.utils.nvidia_client import call_llm, get_client, sleep_between_calls
 from src.utils.retriever import CodeRetriever, DEFAULT_CHROMA_DB_PATH
 from src.utils.explanation_cache import (
     make_cache_key,
@@ -55,7 +57,11 @@ parse errors), name them explicitly and specifically.
 # Agent entry point
 # -----------------------------------------------------------------------
 
-def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> ArchaeonState:
+def run(
+    state: ArchaeonState,
+    max_count: int = DEFAULT_MAX_EXPLANATIONS,
+    progress_callback: Optional[Callable[[int, int], None]] = None,
+) -> ArchaeonState:
     import os
     key = os.getenv("NVIDIA_API_KEY", "NOT_FOUND")
     print(f"  [Agent 6 DEBUG] NVIDIA_API_KEY = {'SET (' + key[:8] + '...)' if key != 'NOT_FOUND' else 'NOT FOUND'}")
@@ -113,121 +119,163 @@ def run(state: ArchaeonState, max_count: int = DEFAULT_MAX_EXPLANATIONS) -> Arch
         return state
 
     print()
-    explained  = 0
+    total_selected = len(selected)
+    explained = sum(1 for path in selected if path in state.explanations)
     cache_hits = 0
-    failed     = 0
-    api_calls  = 0
+    failed = 0
+    work = []
 
+    def report_progress() -> None:
+        if progress_callback:
+            progress_callback(explained, total_selected)
+
+    report_progress()
+
+    # Prepare contexts and prompts once, in stable priority order. Only the
+    # independent remote inference calls run concurrently.
     for idx, file_path in enumerate(selected):
-        t_file_start = time.time()
-        short_name   = PurePosixPath(file_path).name
-        score        = state.complexity_scores.get(file_path)
-        risk         = score.risk_level if score else "UNKNOWN"
-        in_deg       = state.graph_stats.get(file_path, {}).get('in_degree', 0)
+        if file_path in state.explanations:
+            cache_hits += 1
+            continue
 
-        print(
-            f"\n  [{idx + 1:>2}/{len(selected)}] {short_name:<35} "
-            f"risk={risk:<8} in_degree={in_deg}  "
-            f"[{time.strftime('%H:%M:%S')}]"
-        )
-
-        # ---- Cache check -----------------------------------------------
-        file_sha  = sha_lookup.get(file_path, "")
+        short_name = PurePosixPath(file_path).name
+        score = state.complexity_scores.get(file_path)
+        risk = score.risk_level if score else "UNKNOWN"
+        in_deg = state.graph_stats.get(file_path, {}).get("in_degree", 0)
+        file_sha = sha_lookup.get(file_path, "")
         cache_key = make_cache_key(
             owner=state.owner,
             repo_name=state.repo_name,
             file_path=file_path,
-            file_sha=file_sha
+            file_sha=file_sha,
         )
-        cached = get_cached_explanation(cache_key)
 
+        cached = get_cached_explanation(cache_key)
         if cached:
             state.explanations[file_path] = cached
-            explained  += 1
+            explained += 1
             cache_hits += 1
-            print(f"  [Agent 6] Cache hit — skipping API call")
+            report_progress()
+            print(f"  [{idx + 1:>2}/{total_selected}] {short_name}: cache hit")
             continue
 
-        # ---- Context assembly ------------------------------------------
-        print(f"  [Agent 6] Assembling code context from ChromaDB...")
-        t0           = time.time()
-        raw_code     = state.raw_contents.get(file_path, "")
-        code_context = _assemble_code_context(file_path, retriever, raw_content=raw_code)
-        print(f"  [Agent 6] Context assembled in {time.time()-t0:.2f}s "
-              f"({len(code_context)} chars)")
+        print(
+            f"\n  [{idx + 1:>2}/{total_selected}] {short_name:<35} "
+            f"risk={risk:<8} in_degree={in_deg}  "
+            f"[{time.strftime('%H:%M:%S')}]"
+        )
+        print("  [Agent 6] Assembling code context from ChromaDB...")
+        context_started = time.perf_counter()
+        raw_code = state.raw_contents.get(file_path, "")
+        code_context = _assemble_code_context(
+            file_path, retriever, raw_content=raw_code
+        )
+        print(
+            f"  [Agent 6] Context assembled in "
+            f"{time.perf_counter() - context_started:.2f}s "
+            f"({len(code_context)} chars)"
+        )
 
-        graph_entry = state.graph_stats.get(file_path, {})
-        language    = score.language if score else "Unknown"
-
-        # ---- Prompt construction ---------------------------------------
-        print(f"  [Agent 6] Building prompt...")
         user_prompt = _build_user_prompt(
             file_path=file_path,
-            language=language,
+            language=score.language if score else "Unknown",
             complexity_score=score,
-            graph_stats_entry=graph_entry,
-            code_context=code_context
+            graph_stats_entry=state.graph_stats.get(file_path, {}),
+            code_context=code_context,
         )
-        total_prompt_chars = len(SYSTEM_PROMPT) + len(user_prompt)
-        print(f"  [Agent 6] Prompt ready: system={len(SYSTEM_PROMPT)}chars  "
-              f"user={len(user_prompt)}chars  total={total_prompt_chars}chars")
-
-        # ---- NVIDIA NIM call -------------------------------------------
-        # call_llm() prints its own [NVIDIA] log lines with timing.
-        # If this is the last log line you see before a crash, the hang
-        # is inside the HTTP request inside call_llm().
-        print(f"  [Agent 6] Calling NVIDIA NIM... [{time.strftime('%H:%M:%S')}]")
-        t_api = time.time()
-
-        explanation = call_llm(
-            system_prompt=SYSTEM_PROMPT,
-            user_prompt=user_prompt,
-            temperature=0.1,
-            max_tokens=800
+        print(
+            f"  [Agent 6] Prompt ready: system={len(SYSTEM_PROMPT)}chars  "
+            f"user={len(user_prompt)}chars"
         )
-        api_calls += 1
-        api_elapsed = time.time() - t_api
+        work.append({
+            "file_path": file_path,
+            "file_sha": file_sha,
+            "cache_key": cache_key,
+            "user_prompt": user_prompt,
+            "short_name": short_name,
+        })
 
-        print(f"  [Agent 6] call_llm returned in {api_elapsed:.1f}s  "
-              f"result={'OK' if explanation else 'NONE'}")
+    try:
+        max_workers = int(os.getenv("NVIDIA_LLM_MAX_CONCURRENCY", "2"))
+    except ValueError:
+        max_workers = 2
+    max_workers = max(1, min(4, max_workers, len(work) or 1))
+    try:
+        start_interval = max(
+            0.0,
+            float(os.getenv("NVIDIA_LLM_START_INTERVAL_SECONDS", "0.5")),
+        )
+    except ValueError:
+        start_interval = 0.5
 
-        # ---- Result handling -------------------------------------------
-        if explanation:
-            explanation = explanation.strip()
-            state.explanations[file_path] = explanation
-            explained += 1
-
-            if file_sha:
-                ok = save_explanation(
-                    cache_key=cache_key,
-                    explanation=explanation,
-                    owner=state.owner,
-                    repo_name=state.repo_name,
-                    file_path=file_path,
-                    file_sha=file_sha
+    if work:
+        # Initialize the shared SDK client before worker threads start.
+        get_client()
+        print(
+            f"  [Agent 6] Sending {len(work)} uncached prompts "
+            f"(max concurrency={max_workers})"
+        )
+        futures = {}
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=max_workers
+        ) as executor:
+            for index, item in enumerate(work):
+                future = executor.submit(
+                    call_llm,
+                    system_prompt=SYSTEM_PROMPT,
+                    user_prompt=item["user_prompt"],
+                    temperature=0.1,
+                    max_tokens=800,
                 )
-                print(f"  [Agent 6] Cached: {ok}")
-        else:
-            failed += 1
-            print(f"  [Agent 6] No explanation returned — continuing to next file")
+                futures[future] = item
+                if index + 1 < len(work) and start_interval:
+                    sleep_between_calls(start_interval)
 
-        file_elapsed = time.time() - t_file_start
-        print(f"  [Agent 6] File done in {file_elapsed:.1f}s")
+            for future in concurrent.futures.as_completed(futures):
+                item = futures[future]
+                try:
+                    explanation = future.result()
+                except Exception as exc:
+                    explanation = None
+                    print(
+                        f"  [Agent 6] {item['short_name']} failed: {exc}"
+                    )
 
-        # ---- Inter-call sleep ------------------------------------------
-        remaining = selected[idx + 1:]
-        all_remaining_cached = all(
-            get_cached_explanation(
-                make_cache_key(state.owner, state.repo_name, p,
-                               sha_lookup.get(p, ""))
-            ) is not None
-            for p in remaining
-        )
-        if remaining and not all_remaining_cached:
-            sleep_between_calls()
+                if explanation:
+                    explanation = explanation.strip()
+                    state.explanations[item["file_path"]] = explanation
+                    if item["file_sha"]:
+                        cached = save_explanation(
+                            cache_key=item["cache_key"],
+                            explanation=explanation,
+                            owner=state.owner,
+                            repo_name=state.repo_name,
+                            file_path=item["file_path"],
+                            file_sha=item["file_sha"],
+                        )
+                        print(
+                            f"  [Agent 6] {item['short_name']} cached={cached}"
+                        )
+                else:
+                    failed += 1
+                    print(
+                        f"  [Agent 6] No explanation returned for "
+                        f"{item['short_name']}"
+                    )
+
+                explained += 1
+                report_progress()
 
     agent_elapsed = time.time() - t_agent_start
-    _print_summary(state, selected, explained, cache_hits, api_calls, failed, agent_elapsed)
+    _print_summary(
+        state,
+        selected,
+        len(state.explanations),
+        cache_hits,
+        len(work),
+        failed,
+        agent_elapsed,
+    )
     return state
 
 
@@ -428,8 +476,8 @@ def _print_summary(
     elif cache_hits > 0:
         print(f"\n  [INFO] Cache saved ~{cache_hits * 3000:,} tokens this run.")
 
-    if explained > 0:
-        print(f"\n  Sample explanation ({explained} total):")
+    if state.explanations:
+        print(f"\n  Sample explanation ({len(state.explanations)} total):")
         sample_path = next(iter(state.explanations))
         sample_text = state.explanations[sample_path]
         preview = sample_text[:300].replace('\n', ' ')
