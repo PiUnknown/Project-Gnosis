@@ -142,7 +142,11 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
             state = explainability.run(
                 state,
                 max_count=max_explanations,
-                progress_callback=store.update_explanation_progress,
+                # Bind job_id here: update_explanation_progress needs
+                # (job_id, completed, total) but the agent calls (completed, total).
+                progress_callback=lambda completed, total: store.update_explanation_progress(
+                    job_id, completed, total
+                ),
             )
         log_phase_end("Explainability", t_start, objects_cleaned=["Released prompt templates", "Released token arrays"])
         _end_phase(job_id, "explainability")
