@@ -167,7 +167,7 @@ Relevant environment overrides include `MAX_FULL_ANALYSIS_FILES`, `MAX_WARNING_A
 - Graph and complexity stages use NetworkX and tree-sitter; Python complexity uses Radon.
 - ChromaDB persists under `./chroma_db` by default. `src/api/main.py` and `src/api/worker.py` attempt to substitute `pysqlite3` for SQLite in Azure environments that ship an old SQLite version.
 - Embeddings use NVIDIA NIM `nvidia/nemotron-3-embed-1b` (2048 dimensions) in `src/utils/embedder.py`.
-- Explanations use NVIDIA NIM through an OpenAI-compatible client. Current default: `meta/llama-3.2-11b-vision-instruct`; `NVIDIA_BASE_URL` and `NVIDIA_MODEL` can override runtime defaults.
+- Explanations use NVIDIA NIM through an OpenAI-compatible client. Current default: `poolside/laguna-xs-2.1`; `NVIDIA_BASE_URL`, `NVIDIA_MODEL`, and `NVIDIA_MODEL_FALLBACKS` can override runtime defaults. NVIDIA retires models regularly, so verify the model against the live catalogue before changing it.
 - `REDIS_URL` enables Redis-backed job storage and queue dispatch. Related settings include `RQ_QUEUE_NAME`, `JOB_TIMEOUT_SECONDS`, and `JOB_TTL_SECONDS`.
 - `GITHUB_TOKEN` is the optional backend/CLI token. GitHub private repository fetch support exists in the backend/CLI, but the frontend currently has no PAT control or OAuth login.
 - **Token handling caveat:** the API currently includes request options in job records, and the Redis job store serializes those options. Treat a user-supplied PAT as sensitive; do not enable or expand frontend token submission without changing storage/redaction behavior.

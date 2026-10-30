@@ -65,7 +65,7 @@ Frontend Visualization & Onboarding Reports
 | Queue & Store | Upstash Redis | Cloud-managed serverless Redis (TLS) |
 | Worker | Render / Container Service | Dedicated RQ Background Worker (`python -m src.api.worker`) |
 | CI/CD | GitHub Actions | Builds & deploys to Azure on push to master |
-| LLM Inference | NVIDIA NIM Serverless | meta/llama-3.2-11b-vision-instruct |
+| LLM Inference | NVIDIA NIM Serverless | poolside/laguna-xs-2.1 |
 
 ### CORS Configuration
 Production CORS allows `https://gnosis.piunknown.dev`.
@@ -113,7 +113,7 @@ GitHub URL
 [Agent 6: Explainability Agent]
     - For each major component: retrieve context from ChromaDB
     - Build explanation prompt with dependency context
-    - Call NVIDIA NIM LLM (meta/llama-3.2-11b-vision-instruct)
+    - Call NVIDIA NIM LLM (poolside/laguna-xs-2.1)
     - Generate natural language explanation per component
     |
     v
@@ -303,7 +303,7 @@ This was resolved by processing chunks in streaming batches (`STREAM_BATCH_SIZE 
 **Output:** explanations dict written to state
 
 **LLM Provider:** NVIDIA NIM Serverless (migrated from Groq, August 2026)
-**Model:** `meta/llama-3.2-11b-vision-instruct` (default)
+**Model:** `poolside/laguna-xs-2.1` (default; `NVIDIA_MODEL` overrides, `NVIDIA_MODEL_FALLBACKS` lists fallbacks)
 **Client:** OpenAI-compatible client pointed at NVIDIA NIM endpoint
 **Temperature:** 0.1
 

@@ -93,7 +93,7 @@ const INITIAL_RESULT_FIELDS: ResultField[] = ['summary', 'onboarding_doc', 'bran
 const TAB_RESULT_FIELDS: Record<ResultsTab, ResultField[]> = {
   onboarding: [],
   agent_context: ['agent_context'],
-  explanations: ['file_explanations_md', 'explanations'],
+  explanations: ['file_explanations_md', 'explanations', 'explanation_status', 'explanations_failed', 'explanation_error'],
   dependency: ['dependency_rows', 'graph_data', 'circular_deps', 'reading_order'],
   complexity: ['complexity_rows', 'complexity_report_json', 'complexity_report'],
   raw: ['explanations', 'complexity_rows', 'complexity_report_json', 'dependency_rows', 'reading_order', 'circular_deps'],
