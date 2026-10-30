@@ -112,6 +112,10 @@ class JobStatusResponse(BaseModel):
     progress_pct: int              # 0-100
     explanations_completed: int = 0
     explanations_total: int = 0
+    # Why explanations are missing, when they are. `explanations_failed > 0`
+    # with `explanations_completed == 0` is a provider outage, not a skip.
+    explanations_failed: int = 0
+    explanation_error: Optional[str] = None
     created_at: str
     completed_at: Optional[str]
     error: Optional[str]
@@ -152,6 +156,11 @@ class AnalysisResult(BaseModel):
     summary: dict
     complexity_report: dict
     explanations: dict
+    explanation_status: Optional[str] = None
+    explanations_requested: int = 0
+    explanations_failed: int = 0
+    explanation_error: Optional[str] = None
+    explanations_skipped_reason: Optional[str] = None
     graph_summary: dict
     graph_data: Optional[dict] = None
     skip_llm: Optional[bool] = False

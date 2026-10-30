@@ -85,6 +85,11 @@ export interface JobResult {
     circular_deps_truncated?: boolean;
 
     explanations?: Record<string, string>;
+    /** complete | partial | failed | skipped — see the API's explanation_status */
+    explanation_status?: "complete" | "partial" | "failed" | "skipped";
+    explanations_requested?: number;
+    explanations_failed?: number;
+    explanation_error?: string | null;
     graph_data?: GraphData;
     symbol_tables?: Record<string, {
         functions: string[];

@@ -771,10 +771,12 @@ export default function ResultsPage() {
                         : (
                             <div style={{ padding: "40px" }}>
                                 <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "12px", fontWeight: 500, color: "#1400FF", letterSpacing: "0.12em", marginBottom: "8px", textTransform: "uppercase" }}>
-                                    SKIPPED AI EXPLANATIONS
+                                    {result.explanation_status === "failed" ? "AI EXPLANATIONS FAILED" : "AI EXPLANATIONS SKIPPED"}
                                 </p>
                                 <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11px", fontWeight: 400, color: "rgba(10,10,26,0.50)", letterSpacing: "0.10em", lineHeight: 1.6, textTransform: "uppercase" }}>
-                                    AI EXPLANATIONS WERE SKIPPED FOR THIS RUN. RE-RUN ANALYSIS WITH SKIP LLM DISABLED TO GENERATE FILE WALKTHROUGHS.
+                                    {result.explanation_status === "failed"
+                                        ? `ALL ${result.explanations_failed ?? 0} SELECTED FILES WERE ATTEMPTED AND NONE RETURNED AN EXPLANATION.${result.explanation_error ? ` PROVIDER ERROR: ${result.explanation_error}` : ""}`
+                                        : "AI EXPLANATIONS WERE NOT GENERATED FOR THIS RUN."}
                                 </p>
                             </div>
                         )

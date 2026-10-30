@@ -39,8 +39,6 @@ def run_pipeline(
         output_dir:        Directory containing cached outputs for incremental updates
         on_agent_complete: Optional callback function triggered after each agent boundary
     """
-    import concurrent.futures
-
     if isinstance(repo_url_or_state, ArchaeonState):
         state = repo_url_or_state
         if not state.github_token:
@@ -96,31 +94,28 @@ def run_pipeline(
     if on_agent_complete:
         on_agent_complete(1)
 
-    # --- Concurrent Group: Phase 3 (Dep Graph), Phase 4 (Complexity), Phase 5 (Code RAG) ---
-    t_parallel_start = log_phase_start("Parallel Agents (Graph, Complexity, Code RAG)")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-        future_graph = pool.submit(dependency_graph.run, state)
-        future_complexity = pool.submit(complexity_scorer.run, state)
-        future_rag = pool.submit(code_rag.run, state)
+    # --- Phases 3-5: sequential by data dependency -------------------
+    # dependency_graph decides which files are in scope (state.analyzed_paths /
+    # files_analyzed in Sampled mode); complexity_scorer and code_rag both
+    # filter on it. Running all three concurrently let complexity score every
+    # code file instead of the sampled subset and bound coupling while code_rag
+    # was still reading graph_stats. See pipeline_runner for the same fix.
+    t_parallel_start = log_phase_start("Graph, Complexity, Code RAG (sequential)")
+    state = dependency_graph.run(state)
+    if on_agent_complete:
+        on_agent_complete(2)
 
-        # Wait for Dependency Graph
-        future_graph.result()
-        if on_agent_complete:
-            on_agent_complete(2)
+    state = complexity_scorer.run(state)
+    complexity_scorer.apply_graph_coupling(state)
+    if on_agent_complete:
+        on_agent_complete(3)
 
-        # Wait for Complexity Scorer and bind graph coupling
-        future_complexity.result()
-        complexity_scorer.apply_graph_coupling(state)
-        if on_agent_complete:
-            on_agent_complete(3)
-
-        # Wait for Code RAG
-        future_rag.result()
-        if on_agent_complete:
-            on_agent_complete(4)
+    state = code_rag.run(state)
+    if on_agent_complete:
+        on_agent_complete(4)
 
     log_phase_end(
-        "Parallel Agents (Graph, Complexity, Code RAG)",
+        "Graph, Complexity, Code RAG (sequential)",
         t_parallel_start,
         objects_cleaned=["Synchronized parallel agent states", "Released concurrent task futures"]
     )
@@ -129,6 +124,9 @@ def run_pipeline(
     t_start = log_phase_start("Explainability")
     if skip_llm:
         print("\n[Orchestrator] Skipping Phase 6 (--skip-llm)")
+        state.explanations_skipped_reason = (
+            "AI explanations were disabled for this run (--skip-llm)"
+        )
     else:
         state = explainability.run(state, max_count=max_explanations)
     log_phase_end("Explainability", t_start, objects_cleaned=["Released prompt templates", "Released token arrays"])

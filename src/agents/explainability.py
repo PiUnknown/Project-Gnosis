@@ -71,11 +71,15 @@ def run(
     print(f"  [Agent 6] Started at {time.strftime('%H:%M:%S')}")
 
     if not state.chroma_collection_name:
-        print("  [WARNING] No ChromaDB collection in state. Run Phase 5 first.")
+        reason = "code RAG produced no ChromaDB collection (phase 5 did not run)"
+        state.explanations_skipped_reason = reason
+        print(f"  [WARNING] {reason}. Skipping explanations.")
         return state
 
     if not os.getenv("NVIDIA_API_KEY"):
-        print("  [WARNING] NVIDIA_API_KEY not set. Get a key at https://build.nvidia.com")
+        reason = "NVIDIA_API_KEY is not configured on this deployment"
+        state.explanations_skipped_reason = reason
+        print(f"  [WARNING] {reason}. Get a key at https://build.nvidia.com")
         return state
 
     # ---- ChromaDB connection -------------------------------------------
@@ -87,7 +91,9 @@ def run(
         )
         print(f"  ChromaDB chunks : {retriever.count()}")
     except Exception as exc:
-        print(f"  [ERROR] Could not connect to ChromaDB: {exc}")
+        reason = f"could not connect to ChromaDB: {exc}"
+        state.explanations_skipped_reason = reason
+        print(f"  [ERROR] {reason}")
         return state
 
     # ---- SHA lookup from manifest --------------------------------------
@@ -115,17 +121,29 @@ def run(
           f"(below priority or over cap)")
 
     if not selected:
-        print("  No files to explain.")
+        reason = "no files were eligible for explanation"
+        state.explanations_skipped_reason = reason
+        print(f"  {reason.capitalize()}.")
         return state
 
     print()
     total_selected = len(selected)
+    state.explanations_requested = total_selected
     explained = sum(1 for path in selected if path in state.explanations)
     cache_hits = 0
     failed = 0
+    failure_errors = []
     work = []
 
     def report_progress() -> None:
+        """
+        Report only successful explanations.
+
+        The previous implementation incremented for every completed future,
+        so a total provider outage still displayed "20/20" and looked exactly
+        like success. Progress now means "explanations actually produced";
+        failures are counted separately and surfaced in the job result.
+        """
         if progress_callback:
             progress_callback(explained, total_selected)
 
@@ -226,6 +244,9 @@ def run(
                     user_prompt=item["user_prompt"],
                     temperature=0.1,
                     max_tokens=800,
+                    # Surface the provider error instead of a silent None so the
+                    # job result and report can explain what went wrong.
+                    raise_on_failure=True,
                 )
                 futures[future] = item
                 if index + 1 < len(work) and start_interval:
@@ -233,10 +254,12 @@ def run(
 
             for future in concurrent.futures.as_completed(futures):
                 item = futures[future]
+                error_text = None
                 try:
                     explanation = future.result()
                 except Exception as exc:
                     explanation = None
+                    error_text = f"{item['short_name']}: {exc}"
                     print(
                         f"  [Agent 6] {item['short_name']} failed: {exc}"
                     )
@@ -256,15 +279,25 @@ def run(
                         print(
                             f"  [Agent 6] {item['short_name']} cached={cached}"
                         )
+                    explained += 1
+                    # Progress advances only when an explanation exists.
+                    report_progress()
                 else:
                     failed += 1
+                    failure_errors.append(
+                        error_text
+                        or f"{item['short_name']}: no explanation returned"
+                    )
                     print(
                         f"  [Agent 6] No explanation returned for "
                         f"{item['short_name']}"
                     )
 
-                explained += 1
-                report_progress()
+    if failure_errors:
+        # Keep the newest/first provider error: it is the same for every file
+        # in a provider outage, so one representative message is enough.
+        state.explanation_error = failure_errors[0]
+        state.explanations_failed = failed
 
     agent_elapsed = time.time() - t_agent_start
     _print_summary(
@@ -468,9 +501,11 @@ def _print_summary(
 
     if failed > 0:
         print(
-            f"\n  [INFO] {failed} file(s) failed. Check [NVIDIA] log lines above "
-            f"for timeout or rate limit details."
+            f"\n  [WARNING] {failed} of {len(selected)} selected file(s) have "
+            f"NO explanation. This run's AI explanations are incomplete."
         )
+        if state.explanation_error:
+            print(f"  [WARNING] Provider error: {state.explanation_error}")
     if cache_hits == len(selected):
         print(f"\n  [INFO] All explanations from cache. Zero API tokens used.")
     elif cache_hits > 0:

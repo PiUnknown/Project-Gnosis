@@ -12,7 +12,6 @@ its delivery mechanism. The API runner duplicates the agent call
 sequence (7 lines) in exchange for the ability to interleave job
 store updates without touching the orchestrator.
 """
-import concurrent.futures
 import os
 import sys
 import traceback
@@ -108,31 +107,39 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
         log_phase_end("AST Parser", t_start, objects_cleaned=["Released temporary AST nodes", "Released tree-sitter syntax trees"])
         _end_phase(job_id, "ast_parser")
 
-        # ---- Concurrent Phases 3, 4, 5 ----------------------------
+        # ---- Phases 3, 4, 5 ----------------------------------------
+        # These MUST run sequentially, despite the pipeline summary naming
+        # them "parallel agents".
+        #
+        # WHY: dependency_graph is what decides which files are in scope. It
+        # sets state.analyzed_paths / state.files_analyzed in Sampled mode, and
+        # complexity_scorer and code_rag both filter on analyzed_paths. Running
+        # all three concurrently meant complexity_scorer started before
+        # analyzed_paths existed (scoring all 871 code files instead of the 300
+        # selected ones) and apply_graph_coupling ran while code_rag was still
+        # reading graph_stats. The report then disagreed with itself: "300 files
+        # selected" next to 871 complexity rows.
+        #
+        # The previous 3-way pool bought a little wall-clock time and cost
+        # correctness; the phases are now ordered by data dependency.
         _start_phase(job_id, "dependency_graph")
-        t_parallel_start = log_phase_start("Parallel Agents (Graph, Complexity, Code RAG)")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
-            future_graph = pool.submit(dependency_graph.run, state)
-            future_complexity = pool.submit(complexity_scorer.run, state)
-            future_rag = pool.submit(code_rag.run, state)
+        t_phase_start = log_phase_start("Dependency Graph")
+        state = dependency_graph.run(state)
+        log_phase_end("Dependency Graph", t_phase_start, objects_cleaned=["Released graph adjacency buffers"])
+        _end_phase(job_id, "dependency_graph")
 
-            future_graph.result()
-            _end_phase(job_id, "dependency_graph")
+        _start_phase(job_id, "complexity_scorer")
+        t_phase_start = log_phase_start("Complexity Scorer")
+        state = complexity_scorer.run(state)
+        complexity_scorer.apply_graph_coupling(state)
+        log_phase_end("Complexity Scorer", t_phase_start, objects_cleaned=["Released complexity intermediates"])
+        _end_phase(job_id, "complexity_scorer")
 
-            _start_phase(job_id, "complexity_scorer")
-            future_complexity.result()
-            complexity_scorer.apply_graph_coupling(state)
-            _end_phase(job_id, "complexity_scorer")
-
-            _start_phase(job_id, "code_rag")
-            future_rag.result()
-            _end_phase(job_id, "code_rag")
-
-        log_phase_end(
-            "Parallel Agents (Graph, Complexity, Code RAG)",
-            t_parallel_start,
-            objects_cleaned=["Synchronized parallel API states"]
-        )
+        _start_phase(job_id, "code_rag")
+        t_phase_start = log_phase_start("Code RAG")
+        state = code_rag.run(state)
+        log_phase_end("Code RAG", t_phase_start, objects_cleaned=["Released embedding batches"])
+        _end_phase(job_id, "code_rag")
 
         # ---- Phase 6: Explainability (optional) -------------------
         _start_phase(job_id, "explainability")
@@ -148,6 +155,21 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
                     job_id, completed, total
                 ),
             )
+        else:
+            state.explanations_skipped_reason = (
+                "AI explanations were disabled for this run (skip_llm=true)"
+            )
+
+        # Progress alone cannot distinguish success from a total outage: a run
+        # where every LLM call failed used to report 20/20. Record the failures
+        # and the provider error so the status endpoint is truthful.
+        store.set_explanation_outcome(
+            job_id,
+            completed=len(state.explanations),
+            total=state.explanations_requested or len(state.explanations),
+            failed=state.explanations_failed,
+            error=state.explanation_error,
+        )
         log_phase_end("Explainability", t_start, objects_cleaned=["Released prompt templates", "Released token arrays"])
         _end_phase(job_id, "explainability")
 
@@ -288,6 +310,17 @@ def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False)
             "flags": scores.risk_reasons,
         })
 
+    # Explainability outcome — a job can complete with missing explanations,
+    # and that must be visible rather than inferred from an empty map.
+    if skip_llm or state.explanations_skipped_reason:
+        explanation_status = "skipped"
+    elif state.explanations_failed:
+        explanation_status = "partial" if state.explanations else "failed"
+    elif state.explanations:
+        explanation_status = "complete"
+    else:
+        explanation_status = "skipped" if not state.explanations_requested else "failed"
+
     reading_order = state.topological_order or []
 
     return {
@@ -329,6 +362,16 @@ def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False)
             "explained": len(state.explanations),
             "top_complex_functions": top_fns,
         },
+        # Explicit explainability outcome. `explanation_status` is one of:
+        #   "complete" — every selected file was explained
+        #   "partial"  — some explanations are missing
+        #   "failed"   — files were attempted but none produced an explanation
+        #   "skipped"  — the phase did not run (skip_llm or a setup problem)
+        "explanation_status": explanation_status,
+        "explanations_requested": state.explanations_requested,
+        "explanations_failed": state.explanations_failed,
+        "explanation_error": state.explanation_error,
+        "explanations_skipped_reason": state.explanations_skipped_reason,
         "complexity_report": {
             "critical_and_high": critical_high,
             "circular_deps": state.circular_deps,

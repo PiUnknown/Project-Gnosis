@@ -621,3 +621,94 @@ class TestOutputSanitization:
         from src.utils.nvidia_client import sanitize_llm_output
         clean = "This file provides pure utility functions for parsing CLI arguments."
         assert sanitize_llm_output(clean) == clean
+
+# -----------------------------------------------------------------------
+# Failure accounting (regression: a total outage reported "20/20")
+# -----------------------------------------------------------------------
+
+class TestExplanationFailureAccounting:
+
+    def test_failed_calls_do_not_advance_progress(self):
+        """Progress means "explanation produced", not "call finished"."""
+        state = _make_full_state(num_files=3)
+        progress = []
+
+        with patch("src.agents.explainability.CodeRetriever", return_value=MockRetriever()):
+            with patch("src.agents.explainability.call_llm", side_effect=RuntimeError("404 model gone")):
+                with patch("src.agents.explainability.sleep_between_calls"):
+                    with patch.dict("os.environ", {"NVIDIA_API_KEY": "test_key"}):
+                        result = run(
+                            state,
+                            max_count=3,
+                            progress_callback=lambda done, total: progress.append((done, total)),
+                        )
+
+        assert len(result.explanations) == 0
+        # First report is the initial 0/N; failures must not move it.
+        assert progress[0] == (0, 3)
+        assert all(done == 0 for done, _ in progress)
+
+    def test_failure_count_and_error_are_recorded(self):
+        state = _make_full_state(num_files=3)
+
+        with patch("src.agents.explainability.CodeRetriever", return_value=MockRetriever()):
+            with patch(
+                "src.agents.explainability.call_llm",
+                side_effect=RuntimeError("Error code: 404 - model not found"),
+            ):
+                with patch("src.agents.explainability.sleep_between_calls"):
+                    with patch.dict("os.environ", {"NVIDIA_API_KEY": "test_key"}):
+                        result = run(state, max_count=3)
+
+        assert result.explanations_requested == 3
+        assert result.explanations_failed == 3
+        assert "404" in result.explanation_error
+
+    def test_partial_failure_counts_only_failures(self):
+        state = _make_full_state(num_files=4)
+        calls = {"n": 0}
+
+        def alternating(system_prompt, user_prompt, **kwargs):
+            calls["n"] += 1
+            if calls["n"] % 2 == 0:
+                raise RuntimeError("rate limit")
+            return CANNED_EXPLANATION
+
+        with patch("src.agents.explainability.CodeRetriever", return_value=MockRetriever()):
+            with patch("src.agents.explainability.call_llm", side_effect=alternating):
+                with patch("src.agents.explainability.sleep_between_calls"):
+                    with patch.dict("os.environ", {"NVIDIA_API_KEY": "test_key"}):
+                        result = run(state, max_count=4)
+
+        assert result.explanations_requested == 4
+        assert len(result.explanations) == 2
+        assert result.explanations_failed == 2
+        assert result.explanation_error
+
+    def test_missing_collection_records_skip_reason(self):
+        state = _make_full_state()
+        state.chroma_collection_name = None
+        with patch.dict("os.environ", {"NVIDIA_API_KEY": "test_key"}):
+            result = run(state, max_count=5)
+        assert result.explanations_skipped_reason
+        assert "ChromaDB" in result.explanations_skipped_reason
+
+    def test_missing_api_key_records_skip_reason(self):
+        state = _make_full_state()
+        env = {k: v for k, v in __import__("os").environ.items() if k != "NVIDIA_API_KEY"}
+        with patch.dict("os.environ", env, clear=True):
+            result = run(state, max_count=5)
+        assert "NVIDIA_API_KEY" in result.explanations_skipped_reason
+
+    def test_successful_run_reports_no_failures(self):
+        state = _make_full_state(num_files=4)
+        with patch("src.agents.explainability.CodeRetriever", return_value=MockRetriever()):
+            with patch("src.agents.explainability.call_llm", return_value=CANNED_EXPLANATION):
+                with patch("src.agents.explainability.sleep_between_calls"):
+                    with patch.dict("os.environ", {"NVIDIA_API_KEY": "test_key"}):
+                        result = run(state, max_count=4)
+
+        assert result.explanations_requested == 4
+        assert result.explanations_failed == 0
+        assert result.explanation_error is None
+        assert result.explanations_skipped_reason is None

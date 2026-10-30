@@ -64,6 +64,11 @@ interface AnalysisResult {
   reading_order?: string[]
   complexity_rows?: ComplexityRow[]
   explanations?: Record<string, string>
+  /** complete | partial | failed | skipped — see the API's explanation_status */
+  explanation_status?: 'complete' | 'partial' | 'failed' | 'skipped'
+  explanations_requested?: number
+  explanations_failed?: number
+  explanation_error?: string | null
   complexity_report_json?: string
   circular_deps?: string[][]
   circular_deps_truncated?: boolean
@@ -768,10 +773,12 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
                 : (
                   <div style={{ padding: '24px 0' }}>
                     <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 500, color: '#1400FF', letterSpacing: '0.12em', marginBottom: 8, textTransform: 'uppercase' }}>
-                      SKIPPED AI EXPLANATIONS
+                      {result?.explanation_status === 'failed' ? 'AI EXPLANATIONS FAILED' : 'AI EXPLANATIONS SKIPPED'}
                     </p>
                     <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 400, color: 'rgba(10,10,26,0.50)', letterSpacing: '0.10em', lineHeight: 1.6, textTransform: 'uppercase' }}>
-                      AI EXPLANATIONS WERE SKIPPED FOR THIS RUN. RE-RUN ANALYSIS WITH SKIP LLM DISABLED TO GENERATE FILE WALKTHROUGHS.
+                      {result?.explanation_status === 'failed'
+                        ? `ALL ${result.explanations_failed ?? 0} SELECTED FILES WERE ATTEMPTED AND NONE RETURNED AN EXPLANATION.${result.explanation_error ? ` PROVIDER ERROR: ${result.explanation_error}` : ''}`
+                        : 'AI EXPLANATIONS WERE NOT GENERATED FOR THIS RUN.'}
                     </p>
                   </div>
                 )

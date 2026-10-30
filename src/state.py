@@ -58,6 +58,13 @@ class ArchaeonState:
 
     # --- Agent 6: Explainability ---
     explanations: dict = field(default_factory=dict)
+    # Accounting for the explainability phase. Without these, a total LLM
+    # outage looks identical to a successful run: the map stays empty and the
+    # progress counter still reaches the total.
+    explanations_requested: int = 0          # files selected for explanation
+    explanations_failed: int = 0             # files whose LLM call returned nothing
+    explanation_error: Optional[str] = None  # provider error from the first failure
+    explanations_skipped_reason: Optional[str] = None  # why the phase never ran
 
     # --- Agent 7: Doc Generator ---
     final_doc: str = None

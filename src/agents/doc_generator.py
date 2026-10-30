@@ -52,14 +52,38 @@ def _default_branch(state: ArchaeonState) -> str:
     return state.default_branch or "main"
 
 
+_NON_CODE_LANGUAGES = frozenset({
+    "Markdown", "MDX", "YAML", "TOML", "JSON", "Text", "Unknown",
+    "Dockerfile", "Makefile", "Shell", "XML", "CSV", "INI", "GitIgnore",
+})
+
+
 def _language_breakdown(state: ArchaeonState) -> dict:
     """
-    Count files per language from file_manifest.
-    file_manifest contains FileMetadata objects — access .language directly.
+    Count files per language across files that were actually analysed.
+
+    WHY NOT COUNT file_manifest:
+    The manifest holds every discovered file — Markdown docs, TOML manifests,
+    YAML config. Counting it labelled a Rust project's primary language as
+    "Markdown (1178 files)" and, because the percentage was divided by the much
+    smaller analysed-file count, produced "Markdown (393%)". Only files with a
+    complexity score have been through the parser, so those are the files this
+    report actually describes.
     """
     counts: dict = {}
+    for score in state.complexity_scores.values():
+        lang = getattr(score, "language", None) or "Unknown"
+        counts[lang] = counts.get(lang, 0) + 1
+
+    if counts:
+        return dict(sorted(counts.items(), key=lambda x: x[1], reverse=True))
+
+    # Fallback when scoring produced nothing: filter the manifest by known
+    # non-code formats so prose and config do not dominate the breakdown.
     for f in state.file_manifest:
         lang = f.language if hasattr(f, "language") else f.get("language", "Unknown")
+        if lang in _NON_CODE_LANGUAGES:
+            continue
         counts[lang] = counts.get(lang, 0) + 1
     return dict(sorted(counts.items(), key=lambda x: x[1], reverse=True))
 
@@ -143,6 +167,7 @@ def _build_header(state: ArchaeonState) -> str:
 def _build_project_summary(state: ArchaeonState) -> str:
     lang_breakdown = _language_breakdown(state)
     risk = _risk_counts(state)
+    scored = len(state.complexity_scores)
 
     lang_str = ", ".join(
         f"{lang} ({count} files)"
@@ -151,23 +176,27 @@ def _build_project_summary(state: ArchaeonState) -> str:
 
     coverage_summary = ""
     if state.files_with_content is not None:
-        manifest_files = len(state.file_manifest)
+        # Denominator is what was DISCOVERED, not what was selected: reporting
+        # "2083 of 2083 selected files" was meaningless because only 300 were
+        # ever selected.
+        discovered = state.files_discovered or len(state.file_manifest)
         coverage_summary = (
             f"**Files with content available:** {state.files_with_content} of "
-            f"{manifest_files} selected files.\n\n"
+            f"{discovered} discovered files.\n\n"
         )
-        if state.files_with_content < manifest_files:
-            missing = manifest_files - state.files_with_content
+        if discovered and state.files_with_content < discovered:
+            missing = discovered - state.files_with_content
             coverage_summary += (
-                f"**Partial-input warning:** {missing} selected file(s) could "
-                "not be retrieved. Their symbols and dependencies may be "
-                "missing from this report.\n\n"
+                f"**Partial-input warning:** {missing} discovered file(s) could "
+                "not be retrieved and were excluded. Their symbols and "
+                "dependencies may be missing from this report.\n\n"
             )
 
     return (
         f"## Project Summary\n\n"
         f"**{_repo_name(state)}** has **{state.files_analyzed}** files selected for analysis "
-        f"({state.files_discovered} discovered).\n\n"
+        f"({state.files_discovered} discovered). **{scored}** of them were scored "
+        f"for complexity.\n\n"
         f"{coverage_summary}"
         f"**Languages:** {lang_str or 'Unknown'}  \n"
         f"**Total functions extracted:** {_total_functions(state)}  \n"
@@ -179,22 +208,28 @@ def _build_project_summary(state: ArchaeonState) -> str:
 def _build_repository_statistics(state: ArchaeonState) -> str:
     lang_breakdown = _language_breakdown(state)
     risk = _risk_counts(state)
+    scored = len(state.complexity_scores)
 
     g = state.dependency_graph
     graph_nodes = g.number_of_nodes() if g else 0
     graph_edges = g.number_of_edges() if g else 0
 
-    top_lang = list(lang_breakdown.keys())[0] if lang_breakdown else "Unknown"
+    # Percentage must be relative to the analysed files counted in the
+    # breakdown, not to files_analyzed. Dividing 1178 Markdown files by 300
+    # analysed files produced "Markdown (393%)".
+    lang_total = sum(lang_breakdown.values())
+    top_lang = next(iter(lang_breakdown), "Unknown")
     top_lang_pct = (
-        round(lang_breakdown[top_lang] / max(state.files_analyzed, 1) * 100)
-        if lang_breakdown else 0
+        round(lang_breakdown[top_lang] / lang_total * 100)
+        if lang_total else 0
     )
 
     rows = [
         ("Files discovered", state.files_discovered),
         ("Files selected for analysis", state.files_analyzed),
+        ("Files scored for complexity", scored),
         ("Analysis mode", state.analysis_mode),
-        ("Primary language", f"{top_lang} ({top_lang_pct}%)"),
+        ("Primary language", f"{top_lang} ({top_lang_pct}% of scored files)"),
         ("Total functions", _total_functions(state)),
         ("Total classes", _total_classes(state)),
         ("Dependency graph nodes", graph_nodes),
@@ -205,8 +240,9 @@ def _build_repository_statistics(state: ArchaeonState) -> str:
     ]
     if state.files_with_content is not None:
         rows.insert(
-            2,
-            ("Files with content", f"{state.files_with_content} / {len(state.file_manifest)}"),
+            3,
+            ("Files with content", f"{state.files_with_content} / "
+                                   f"{state.files_discovered or len(state.file_manifest)} discovered"),
         )
 
     table = "| Metric | Value |\n|--------|-------|\n"
@@ -311,12 +347,62 @@ def _build_core_components(state: ArchaeonState) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _explanations_unavailable_notice(state: ArchaeonState) -> str:
+    """
+    Explain WHY a document contains no explanations.
+
+    Previously every empty explanations map produced "SKIPPED AI EXPLANATIONS",
+    so a total provider outage was reported as an intentional skip. The job
+    now carries the real cause, so the notice can state it.
+    """
+    if state.explanations_skipped_reason:
+        return (
+            "**AI EXPLANATIONS SKIPPED**  \n"
+            f"Reason: {state.explanations_skipped_reason}.  \n"
+            "Re-run the analysis once the cause above is resolved."
+        )
+    if state.explanations_failed:
+        detail = (
+            f"  \nProvider error: `{state.explanation_error}`"
+            if state.explanation_error else ""
+        )
+        return (
+            "**AI EXPLANATIONS FAILED**  \n"
+            f"All {state.explanations_failed} selected file(s) were attempted and "
+            f"none returned an explanation.{detail}  \n"
+            "This report was generated without AI explanations. Fix the model "
+            "configuration and re-run the analysis."
+        )
+    return (
+        "**NO AI EXPLANATIONS IN THIS RUN**  \n"
+        "No file explanations were available when this report was generated. "
+        "Re-run the analysis with AI explanations enabled."
+    )
+
+
+def _explanations_partial_notice(state: ArchaeonState) -> str:
+    """Warning banner for runs where only some explanations succeeded."""
+    if not state.explanations_failed:
+        return ""
+    total = state.explanations_requested or (
+        len(state.explanations) + state.explanations_failed
+    )
+    notice = (
+        f"> **Partial AI explanations:** {state.explanations_failed} of {total} "
+        f"selected file(s) could not be explained. The sections below cover only "
+        f"the files that succeeded."
+    )
+    if state.explanation_error:
+        notice += f"  \n> Provider error: `{state.explanation_error}`"
+    return notice + "\n\n"
+
+
 def _build_explanations_doc(state: ArchaeonState) -> str:
     if not state.explanations:
         return (
             "## File Explanations\n\n"
-            "**SKIPPED AI EXPLANATIONS**  \n"
-            "AI EXPLANATIONS WERE SKIPPED FOR THIS RUN. RE-RUN ANALYSIS WITH SKIP LLM DISABLED TO GENERATE FILE WALKTHROUGHS.\n"
+            + _explanations_unavailable_notice(state)
+            + "\n"
         )
 
     # Sort by in-degree descending
@@ -325,6 +411,10 @@ def _build_explanations_doc(state: ArchaeonState) -> str:
     explained_paths.sort(key=lambda fp: in_deg.get(fp, 0), reverse=True)
 
     lines = ["## File Explanations", ""]
+    partial = _explanations_partial_notice(state)
+    if partial:
+        lines.append(partial.rstrip())
+        lines.append("")
 
     # 1. First sentence index at the top of file_explanations.md
     lines.append("| File | One-line summary | Risk |")
@@ -864,12 +954,14 @@ def _ac_ai_explanations(state: ArchaeonState) -> str:
     lines = ["## AI Explanations", ""]
 
     if not state.explanations:
-        lines.append(
-            "**SKIPPED AI EXPLANATIONS**  \n"
-            "AI EXPLANATIONS WERE SKIPPED FOR THIS RUN. RE-RUN ANALYSIS WITH SKIP LLM DISABLED TO GENERATE FILE WALKTHROUGHS."
-        )
+        lines.append(_explanations_unavailable_notice(state))
         lines.append("")
         return "\n".join(lines) + "\n"
+
+    partial = _explanations_partial_notice(state)
+    if partial:
+        lines.append(partial.rstrip())
+        lines.append("")
 
     in_deg = _in_degree_map(state)
     sorted_exps = sorted(

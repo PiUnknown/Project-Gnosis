@@ -225,7 +225,7 @@ def test_missing_content_in_partial_download_keeps_other_files_usable(monkeypatc
     assert set(state.raw_contents) == {"src/available.py"}
     assert "src/available.py" in state.symbol_tables
     assert "src/missing.py" not in state.symbol_tables
-    assert "1 of 2 selected files" in state.final_doc
+    assert "1 of 2 discovered files" in state.final_doc
     assert "Partial-input warning" in state.final_doc
 
 

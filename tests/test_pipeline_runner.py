@@ -53,6 +53,13 @@ def test_explainability_progress_callback_receives_bound_job_id(monkeypatch):
         assert progress_callback is not None
         # The agent contract is (completed, total); the runner must bind job_id.
         progress_callback(2, 5)
+        # The runner records the real outcome from state afterwards, so the
+        # fake must populate the same fields the agent would.
+        state.explanations_requested = 5
+        state.explanations = {
+            "src/a.py": "first explanation",
+            "src/b.py": "second explanation",
+        }
         return state
 
     _patch_agents(monkeypatch, fake_explainability)
@@ -64,6 +71,55 @@ def test_explainability_progress_callback_receives_bound_job_id(monkeypatch):
     assert job.error is None
     assert job.explanations_completed == 2
     assert job.explanations_total == 5
+    assert job.explanations_failed == 0
+
+
+def test_failed_explanations_are_recorded_on_the_job(monkeypatch):
+    """A total LLM outage must not look like a successful 20/20 run."""
+    job_store = JobStore()
+    job_id = job_store.create("https://github.com/owner/repo", {"skip_llm": False})
+    monkeypatch.setattr(pipeline_runner, "store", job_store)
+
+    def fake_explainability(state, max_count=20, progress_callback=None):
+        state.explanations_requested = 5
+        state.explanations_failed = 5
+        state.explanation_error = "poolside/laguna-xs-2.1: NotFoundError: 404"
+        # Progress stays at zero because nothing succeeded.
+        progress_callback(0, 5)
+        return state
+
+    _patch_agents(monkeypatch, fake_explainability)
+
+    pipeline_runner.run(job_id, "https://github.com/owner/repo", {"skip_llm": False})
+
+    job = job_store.get(job_id)
+    assert job.status == "complete", job.error
+    assert job.explanations_completed == 0
+    assert job.explanations_total == 5
+    assert job.explanations_failed == 5
+    assert "404" in job.explanation_error
+
+
+def test_skip_llm_records_skip_reason(monkeypatch):
+    job_store = JobStore()
+    job_id = job_store.create("https://github.com/owner/repo", {"skip_llm": True})
+    monkeypatch.setattr(pipeline_runner, "store", job_store)
+
+    captured = {}
+
+    def fake_doc_generator(state):
+        captured["reason"] = state.explanations_skipped_reason
+        return state
+
+    def fake_explainability(state, max_count=20, progress_callback=None):
+        return state
+
+    _patch_agents(monkeypatch, fake_explainability)
+    monkeypatch.setattr(pipeline_runner.doc_generator, "run", fake_doc_generator)
+
+    pipeline_runner.run(job_id, "https://github.com/owner/repo", {"skip_llm": True})
+
+    assert "skip_llm" in (captured["reason"] or "")
 
 
 def test_skip_llm_does_not_wire_explainability_callback(monkeypatch):
@@ -84,3 +140,129 @@ def test_skip_llm_does_not_wire_explainability_callback(monkeypatch):
     job = job_store.get(job_id)
     assert job.status == "complete", job.error
     assert calls == []
+
+def test_graph_then_complexity_then_rag_order(monkeypatch):
+    """
+    Phases 3-5 must run in data-dependency order.
+
+    dependency_graph decides which files are in scope (analyzed_paths), and
+    both complexity_scorer and code_rag filter on it. Running them
+    concurrently let complexity score every code file instead of the sampled
+    subset, which is how a report ended up claiming "300 files selected" next
+    to 871 complexity rows.
+    """
+    job_store = JobStore()
+    job_id = job_store.create("https://github.com/owner/repo", {"skip_llm": True})
+    monkeypatch.setattr(pipeline_runner, "store", job_store)
+
+    order = []
+
+    def record(name):
+        def _run(state, **kwargs):
+            order.append(name)
+            if name == "graph":
+                # Emulate Sampled mode: the graph decides the analysed subset.
+                state.analyzed_paths = {"src/a.py"}
+                state.files_analyzed = 1
+            return state
+        return _run
+
+    _patch_agents(monkeypatch, lambda state, **kwargs: state)
+    monkeypatch.setattr(pipeline_runner.dependency_graph, "run", record("graph"))
+    monkeypatch.setattr(pipeline_runner.complexity_scorer, "run", record("complexity"))
+    monkeypatch.setattr(
+        pipeline_runner.complexity_scorer,
+        "apply_graph_coupling",
+        lambda state: order.append("coupling"),
+    )
+    monkeypatch.setattr(pipeline_runner.code_rag, "run", record("rag"))
+
+    pipeline_runner.run(job_id, "https://github.com/owner/repo", {"skip_llm": True})
+
+    assert order == ["graph", "complexity", "coupling", "rag"], order
+
+
+def test_complexity_sees_analyzed_paths_before_scoring(monkeypatch):
+    """The graph's sampled subset must exist before complexity scoring starts."""
+    job_store = JobStore()
+    job_id = job_store.create("https://github.com/owner/repo", {"skip_llm": True})
+    monkeypatch.setattr(pipeline_runner, "store", job_store)
+
+    observed = {}
+
+    def graph(state, **kwargs):
+        state.analyzed_paths = {"src/a.py"}
+        state.files_analyzed = 1
+        return state
+
+    def complexity(state, **kwargs):
+        observed["analyzed_paths"] = state.analyzed_paths
+        observed["files_analyzed"] = state.files_analyzed
+        return state
+
+    _patch_agents(monkeypatch, lambda state, **kwargs: state)
+    monkeypatch.setattr(pipeline_runner.dependency_graph, "run", graph)
+    monkeypatch.setattr(pipeline_runner.complexity_scorer, "run", complexity)
+
+    pipeline_runner.run(job_id, "https://github.com/owner/repo", {"skip_llm": True})
+
+    assert observed["analyzed_paths"] == {"src/a.py"}
+    assert observed["files_analyzed"] == 1
+
+# -----------------------------------------------------------------------
+# Result serialisation: the explanation outcome must be explicit
+# -----------------------------------------------------------------------
+
+def _result_state(**kwargs):
+    from src.state import ArchaeonState
+
+    state = ArchaeonState(repo_url="https://github.com/o/r", owner="o", repo_name="r")
+    state.default_branch = "main"
+    state.files_discovered = 10
+    state.files_analyzed = 5
+    for key, value in kwargs.items():
+        setattr(state, key, value)
+    return state
+
+
+def test_result_reports_complete_explanations():
+    state = _result_state(
+        explanations_requested=5,
+        explanations={"a.py": "x", "b.py": "y"},
+    )
+    result = pipeline_runner._serialize_result("job", state)
+    assert result["explanation_status"] == "complete"
+    assert result["explanations_requested"] == 5
+    assert result["explanations_failed"] == 0
+
+
+def test_result_reports_partial_explanations():
+    state = _result_state(
+        explanations_requested=5,
+        explanations={"a.py": "x"},
+        explanations_failed=4,
+        explanation_error="rate limit",
+    )
+    result = pipeline_runner._serialize_result("job", state)
+    assert result["explanation_status"] == "partial"
+    assert result["explanations_failed"] == 4
+    assert result["explanation_error"] == "rate limit"
+
+
+def test_result_reports_failed_explanations():
+    """The production regression: 20/20 progress but zero explanations."""
+    state = _result_state(
+        explanations_requested=20,
+        explanations_failed=20,
+        explanation_error="poolside/laguna-xs-2.1: NotFoundError: 404",
+    )
+    result = pipeline_runner._serialize_result("job", state)
+    assert result["explanation_status"] == "failed"
+    assert result["explanations_failed"] == 20
+    assert "404" in result["explanation_error"]
+
+
+def test_result_reports_skipped_explanations():
+    state = _result_state()
+    result = pipeline_runner._serialize_result("job", state, skip_llm=True)
+    assert result["explanation_status"] == "skipped"

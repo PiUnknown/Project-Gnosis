@@ -72,7 +72,8 @@ class Job:
         "job_id", "repo_url", "options",
         "status", "current_phase", "phases_completed",
         "progress_pct", "created_at", "completed_at",
-        "error", "result", "explanations_completed", "explanations_total"
+        "error", "result", "explanations_completed", "explanations_total",
+        "explanations_failed", "explanation_error"
     )
 
     def __init__(
@@ -89,7 +90,9 @@ class Job:
         error: Optional[str] = None,
         result: Optional[dict] = None,
         explanations_completed: int = 0,
-        explanations_total: int = 0
+        explanations_total: int = 0,
+        explanations_failed: int = 0,
+        explanation_error: Optional[str] = None
     ):
         self.job_id           = job_id
         self.repo_url         = repo_url
@@ -104,6 +107,8 @@ class Job:
         self.result           = result   # set on completion
         self.explanations_completed = max(0, int(explanations_completed or 0))
         self.explanations_total = max(0, int(explanations_total or 0))
+        self.explanations_failed = max(0, int(explanations_failed or 0))
+        self.explanation_error = explanation_error
 
     def to_dict(self) -> dict:
         return {
@@ -119,7 +124,9 @@ class Job:
             "error": self.error,
             "result": self.result,
             "explanations_completed": self.explanations_completed,
-            "explanations_total": self.explanations_total
+            "explanations_total": self.explanations_total,
+            "explanations_failed": self.explanations_failed,
+            "explanation_error": self.explanation_error
         }
 
     @classmethod
@@ -137,7 +144,9 @@ class Job:
             error=data.get("error"),
             result=data.get("result"),
             explanations_completed=data.get("explanations_completed", 0),
-            explanations_total=data.get("explanations_total", 0)
+            explanations_total=data.get("explanations_total", 0),
+            explanations_failed=data.get("explanations_failed", 0),
+            explanation_error=data.get("explanation_error")
         )
 
 
@@ -679,6 +688,44 @@ class JobStore:
             if job:
                 job.explanations_completed = completed
                 job.explanations_total = total
+
+    def set_explanation_outcome(
+        self,
+        job_id: str,
+        completed: int,
+        total: int,
+        failed: int,
+        error: Optional[str],
+    ) -> None:
+        """
+        Persist the final explainability result for a job.
+
+        Written after the agent finishes because the failure count is only
+        known then. Without it, a job whose explanations all failed still
+        reports `explanations_completed == explanations_total`.
+        """
+        completed = max(0, int(completed or 0))
+        total = max(0, int(total or 0))
+        failed = max(0, int(failed or 0))
+
+        if self.is_redis:
+            def mutate(job: Job) -> bool:
+                job.explanations_completed = completed
+                job.explanations_total = total
+                job.explanations_failed = failed
+                job.explanation_error = error
+                return True
+
+            self._mutate_redis_job(job_id, mutate, "set_explanation_outcome")
+            return
+
+        with self._lock:
+            job = self._memory_jobs.get(job_id)
+            if job:
+                job.explanations_completed = completed
+                job.explanations_total = total
+                job.explanations_failed = failed
+                job.explanation_error = error
 
     def _legacy_active_count(self) -> int:
         """Exact pre-index implementation; used until the fast path is armed."""
