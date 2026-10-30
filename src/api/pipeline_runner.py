@@ -221,10 +221,23 @@ def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False)
         risk_dist[score.risk_level] = risk_dist.get(score.risk_level, 0) + 1
 
     # Language breakdown
+    #
+    # WHY SCORED FILES: this sits next to ``total_files`` (= files_analyzed),
+    # so the counts must share that denominator. Counting the manifest mixed
+    # sampled and unsampled files and produced e.g. 871 language files beside
+    # "total_files": 300. Scored files are the ones the report describes; the
+    # manifest is only a fallback when scoring produced nothing.
     lang_counts: dict = {}
-    for f in state.file_manifest:
-        if f.language not in ("Markdown", "YAML", "TOML", "Unknown"):
-            lang_counts[f.language] = lang_counts.get(f.language, 0) + 1
+    for score in state.complexity_scores.values():
+        lang = getattr(score, "language", None) or "Unknown"
+        lang_counts[lang] = lang_counts.get(lang, 0) + 1
+    if not lang_counts:
+        for f in state.file_manifest:
+            if f.language not in ("Markdown", "YAML", "TOML", "Unknown"):
+                lang_counts[f.language] = lang_counts.get(f.language, 0) + 1
+    lang_counts = dict(
+        sorted(lang_counts.items(), key=lambda item: item[1], reverse=True)
+    )
 
     # Top 10 most complex functions
     all_fns = []

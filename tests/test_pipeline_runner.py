@@ -225,6 +225,46 @@ def _result_state(**kwargs):
     return state
 
 
+def test_result_language_breakdown_counts_only_scored_files():
+    """The production regression: 871 language files beside total_files 300."""
+    from types import SimpleNamespace
+
+    def score(path, language):
+        return SimpleNamespace(
+            file_path=path,
+            language=language,
+            function_scores={},
+            avg_complexity=0.0,
+            max_complexity=0.0,
+            max_complexity_function="",
+            function_count=0,
+            avg_function_lines=0.0,
+            risk_level="LOW",
+            risk_reasons=[],
+            coupling_score=0.0,
+        )
+
+    state = _result_state()
+    state.files_analyzed = 2
+    state.complexity_scores = {
+        "src/a.rs": score("src/a.rs", "Rust"),
+        "src/b.py": score("src/b.py", "Python"),
+    }
+    # Unscored manifest entries must not inflate the breakdown.
+    state.file_manifest = [
+        SimpleNamespace(path="src/a.rs", language="Rust"),
+        SimpleNamespace(path="src/b.py", language="Python"),
+        SimpleNamespace(path="src/c.rs", language="Rust"),
+        SimpleNamespace(path="README.md", language="Markdown"),
+    ]
+
+    result = pipeline_runner._serialize_result("job", state)
+    breakdown = result["summary"]["language_breakdown"]
+
+    assert breakdown == {"Python": 1, "Rust": 1}
+    assert sum(breakdown.values()) == result["summary"]["total_files"]
+
+
 def test_result_reports_complete_explanations():
     state = _result_state(
         explanations_requested=5,
