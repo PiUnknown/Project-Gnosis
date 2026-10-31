@@ -64,11 +64,7 @@ interface AnalysisResult {
   reading_order?: string[]
   complexity_rows?: ComplexityRow[]
   explanations?: Record<string, string>
-  /** complete | partial | failed | skipped — see the API's explanation_status */
-  explanation_status?: 'complete' | 'partial' | 'failed' | 'skipped'
-  explanations_requested?: number
-  explanations_failed?: number
-  explanation_error?: string | null
+  explanation_status?: 'available_on_demand'
   complexity_report_json?: string
   circular_deps?: string[][]
   circular_deps_truncated?: boolean
@@ -83,17 +79,17 @@ interface AnalysisResult {
   in_degree?: Record<string, number>
   out_degree?: Record<string, number>
   topological_order?: string[]
-  skip_llm?: boolean
+  analyzed_files?: Array<{ path: string }>
 }
 
 type RiskLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'
 type ResultField = keyof AnalysisResult
 
-const INITIAL_RESULT_FIELDS: ResultField[] = ['summary', 'onboarding_doc', 'branch', 'skip_llm']
+const INITIAL_RESULT_FIELDS: ResultField[] = ['summary', 'onboarding_doc', 'branch']
 const TAB_RESULT_FIELDS: Record<ResultsTab, ResultField[]> = {
   onboarding: [],
   agent_context: ['agent_context'],
-  explanations: ['file_explanations_md', 'explanations', 'explanation_status', 'explanations_failed', 'explanation_error'],
+  explanations: ['file_explanations_md', 'explanations', 'analyzed_files', 'explanation_status'],
   dependency: ['dependency_rows', 'graph_data', 'circular_deps', 'reading_order'],
   complexity: ['complexity_rows', 'complexity_report_json', 'complexity_report'],
   raw: ['explanations', 'complexity_rows', 'complexity_report_json', 'dependency_rows', 'reading_order', 'circular_deps'],
@@ -315,6 +311,9 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
   const [downloadError, setDownloadError] = useState('')
   const [fetchError, setFetchError] = useState('')
   const [sectionError, setSectionError] = useState('')
+  const [selectedExplanationFile, setSelectedExplanationFile] = useState('')
+  const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false)
+  const [explanationRequestError, setExplanationRequestError] = useState('')
   const [fileFilter, setFileFilter] = useState('')
   const [sortBy, setSortBy] = useState<'risk' | 'avg_cc' | 'max_cc'>('risk')
   const reducedMotion = useReducedMotion()
@@ -356,6 +355,38 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
       })
     }
     return resultRef.current
+  }
+
+
+  const generateSelectedExplanation = async () => {
+    if (!selectedExplanationFile || isGeneratingExplanation) return
+    setIsGeneratingExplanation(true)
+    setExplanationRequestError('')
+    try {
+      const response = await fetch(API_BASE + '/api/jobs/' + jobId + '/explanations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_path: selectedExplanationFile }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.detail || 'EXPLANATION REQUEST FAILED (' + response.status + ')')
+      const current = resultRef.current
+      if (current) {
+        const explanations = { ...(current.explanations || {}), [payload.file_path]: payload.explanation }
+        const updated = {
+          ...current,
+          explanations,
+          summary: { ...current.summary, explained: Object.keys(explanations).length },
+        }
+        resultRef.current = updated
+        setResult(updated)
+      }
+      track('file_explanation_generated', { repo_url: repoUrl, job_id: jobId, file_path: selectedExplanationFile, cached: payload.cached })
+    } catch (error) {
+      setExplanationRequestError(error instanceof Error ? error.message : 'COULD NOT GENERATE EXPLANATION')
+    } finally {
+      setIsGeneratingExplanation(false)
+    }
   }
 
   useEffect(() => {
@@ -410,7 +441,6 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
               total_classes: data.summary?.total_classes,
               import_edges: data.summary?.import_edges,
               average_complexity: data.summary?.average_complexity,
-              skip_llm: data.skip_llm,
               branch: data.branch || 'main',
             })
           }
@@ -541,9 +571,6 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
 
   const explainedValue = (() => {
     if (!result) return '—'
-    if (result.skip_llm === true) {
-      return 'SKIPPED'
-    }
     if (result.explanations) {
       return Object.keys(result.explanations).length
     }
@@ -763,31 +790,53 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
         {/* ── Tab: File Explanations ── */}
         {!loading && !sectionsLoading && !sectionError && !fetchError && activeTab === 'explanations' && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: 'rgba(10,10,26,0.50)' }}>FILE EXPLANATIONS</span>
-              <DownloadBtn label={downloading === 'file_explanations.md' ? 'PREPARING…' : '↓ DOWNLOAD .MD'} onLight disabled={!result || downloading === 'file_explanations.md'} onClick={() => void handleDownload(['file_explanations_md'], 'file_explanations.md', analysis => analysis.file_explanations_md || '')} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
+              <div>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: 'rgba(10,10,26,0.50)' }}>FILE EXPLANATIONS / ON DEMAND</span>
+                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'rgba(10,10,26,0.45)', marginTop: 8 }}>{result?.analyzed_files?.length || 0} ANALYZED FILES AVAILABLE</div>
+              </div>
+              <DownloadBtn
+                label={downloading === 'file_explanations.md' ? 'PREPARING…' : '↓ DOWNLOAD .MD'}
+                onLight
+                disabled={!result || !Object.keys(result.explanations || {}).length || downloading === 'file_explanations.md'}
+                onClick={() => void handleDownload(['explanations'], 'file_explanations.md', analysis =>
+                  Object.entries(analysis.explanations || {}).map(([path, text]) => '## ' + path + '\n\n' + text).join('\n\n'),
+                )}
+              />
             </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 24 }}>
+              <label htmlFor="on-demand-explanation-file" style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: 'rgba(10,10,26,0.55)' }}>CHOOSE FILE</label>
+              <select
+                id="on-demand-explanation-file"
+                value={selectedExplanationFile}
+                onChange={event => { setSelectedExplanationFile(event.target.value); setExplanationRequestError('') }}
+                disabled={!result?.analyzed_files?.length}
+                style={{ minWidth: 320, maxWidth: '100%', height: 42, padding: '0 12px', background: '#F0F0FF', color: '#1400FF', border: '1px solid rgba(20,0,255,0.35)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 11 }}
+              >
+                <option value="">SELECT AN ANALYZED FILE</option>
+                {(result?.analyzed_files || []).map(file => <option key={file.path} value={file.path}>{file.path}</option>)}
+              </select>
+              <button
+                type="button"
+                onClick={() => void generateSelectedExplanation()}
+                disabled={!selectedExplanationFile || isGeneratingExplanation || Boolean(result?.explanations?.[selectedExplanationFile])}
+                style={{ height: 42, padding: '0 16px', border: '1px solid #1400FF', background: '#1400FF', color: '#FFFFFF', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, letterSpacing: '0.08em', cursor: !selectedExplanationFile || isGeneratingExplanation || result?.explanations?.[selectedExplanationFile] ? 'not-allowed' : 'pointer', opacity: !selectedExplanationFile || isGeneratingExplanation || result?.explanations?.[selectedExplanationFile] ? 0.6 : 1 }}
+              >
+                {isGeneratingExplanation ? 'GENERATING…' : result?.explanations?.[selectedExplanationFile] ? 'EXPLANATION READY' : 'GENERATE EXPLANATION'}
+              </button>
+            </div>
+            {explanationRequestError && <p role="alert" style={{ color: '#B42318', fontFamily: "'IBM Plex Mono', monospace", fontSize: 11 }}>{explanationRequestError}</p>}
             <div className="gnosis-markdown" style={{ maxWidth: 760, margin: '0 auto' }}>
-              {result?.file_explanations_md
-                ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.file_explanations_md}</ReactMarkdown>
-                : (
-                  <div style={{ padding: '24px 0' }}>
-                    <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 500, color: '#1400FF', letterSpacing: '0.12em', marginBottom: 8, textTransform: 'uppercase' }}>
-                      {result?.explanation_status === 'failed' ? 'AI EXPLANATIONS FAILED' : 'AI EXPLANATIONS SKIPPED'}
-                    </p>
-                    <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 400, color: 'rgba(10,10,26,0.50)', letterSpacing: '0.10em', lineHeight: 1.6, textTransform: 'uppercase' }}>
-                      {result?.explanation_status === 'failed'
-                        ? `ALL ${result.explanations_failed ?? 0} SELECTED FILES WERE ATTEMPTED AND NONE RETURNED AN EXPLANATION.${result.explanation_error ? ` PROVIDER ERROR: ${result.explanation_error}` : ''}`
-                        : 'AI EXPLANATIONS WERE NOT GENERATED FOR THIS RUN.'}
-                    </p>
-                  </div>
-                )
+              {selectedExplanationFile && result?.explanations?.[selectedExplanationFile]
+                ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.explanations[selectedExplanationFile]}</ReactMarkdown>
+                : <p style={{ padding: '24px 0', fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: 'rgba(10,10,26,0.48)', letterSpacing: '0.05em' }}>
+                    {result?.analyzed_files?.length ? 'SELECT A FILE TO REQUEST ITS EXPLANATION. ONLY THAT FILE WILL BE SENT FOR EXPLANATION.' : 'NO ANALYZED FILE LIST IS AVAILABLE FOR THIS RESULT.'}
+                  </p>
               }
             </div>
           </div>
         )}
 
-        {/* ── Tab 2: Dependency Graph ── */}
         {!loading && !sectionsLoading && !sectionError && activeTab === 'dependency' && (
           <div>
             {/* Risk Distribution Summary Bar */}
@@ -1000,7 +1049,7 @@ function ResultsPage({ repoUrl, jobId, onHome }: { repoUrl: string; jobId: strin
         <div style={{ display: 'flex', gap: 12, marginLeft: 24 }}>
           <DownloadBtn label={downloading === 'onboarding.md' ? 'PREPARING…' : '↓ ONBOARDING.MD'} disabled={!result || downloading === 'onboarding.md'} onClick={() => void handleDownload(['onboarding_doc'], 'onboarding.md', analysis => analysis.onboarding_doc || '')} />
           <DownloadBtn label={downloading === 'agent_context.md' ? 'PREPARING…' : '↓ AGENT_CONTEXT.MD'} disabled={!result || downloading === 'agent_context.md'} onClick={() => void handleDownload(['agent_context'], 'agent_context.md', analysis => analysis.agent_context || '')} />
-          {result?.skip_llm !== true && <DownloadBtn label={downloading === 'file_explanations.md' ? 'PREPARING…' : '↓ FILE_EXPLANATIONS.MD'} disabled={!result || downloading === 'file_explanations.md'} onClick={() => void handleDownload(['file_explanations_md'], 'file_explanations.md', analysis => analysis.file_explanations_md || '')} />}
+          {Object.keys(result?.explanations || {}).length > 0 && <DownloadBtn label={downloading === 'file_explanations.md' ? 'PREPARING…' : '↓ FILE_EXPLANATIONS.MD'} disabled={!result || downloading === 'file_explanations.md'} onClick={() => void handleDownload(['explanations'], 'file_explanations.md', analysis => Object.entries(analysis.explanations || {}).map(([path, text]) => '## ' + path + '\n\n' + text).join('\n\n'))} />}
           <DownloadBtn label={downloading === 'complexity_report.json' ? 'PREPARING…' : '↓ COMPLEXITY_REPORT.JSON'} disabled={!result || downloading === 'complexity_report.json'} onClick={() => void handleDownload(['complexity_report_json'], 'complexity_report.json', analysis => analysis.complexity_report_json || '{}', 'application/json')} />
           <DownloadBtn label={downloading === 'dependency_graph.json' ? 'PREPARING…' : '↓ DEPENDENCY_GRAPH.JSON'} disabled={!result || downloading === 'dependency_graph.json'} onClick={() => void handleDownload(['dependency_rows'], 'dependency_graph.json', analysis => JSON.stringify(analysis.dependency_rows || [], null, 2), 'application/json')} />
         </div>

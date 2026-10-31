@@ -6,8 +6,6 @@ Primary deliverable: onboarding.md
 
 Usage:
   python run.py --url https://github.com/psf/black
-  python run.py --url https://github.com/tiangolo/fastapi --max-explain 10
-  python run.py --url https://github.com/realpython/codetiming --skip-llm
   python run.py --url https://github.com/tiangolo/fastapi --test-rag
 """
 import sys
@@ -43,14 +41,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Full pipeline with LLM explanations (requires NVIDIA_API_KEY in .env)
+  # Analyze a repository; explanations can be requested after analysis
   python run.py --url https://github.com/psf/black
-
-  # Skip LLM calls (faster, no API key needed)
-  python run.py --url https://github.com/realpython/codetiming --skip-llm
-
-  # Limit LLM explanations to preserve free-tier quota
-  python run.py --url https://github.com/tiangolo/fastapi --max-explain 5
 
   # Skip the pyvis HTML (faster on large repos)
   python run.py --url https://github.com/psf/black --no-html
@@ -80,14 +72,6 @@ Examples:
         help="Skip pyvis dependency_graph.html generation"
     )
     parser.add_argument(
-        "--skip-llm", action="store_true",
-        help="Skip Phase 6 (Explainability). Produces doc without explanations."
-    )
-    parser.add_argument(
-        "--max-explain", type=int, default=20,
-        help="Max files to explain via LLM (default: 20, NVIDIA free tier limit)"
-    )
-    parser.add_argument(
         "--test-rag", action="store_true",
         help="Run 3 test retrieval queries after pipeline completes"
     )
@@ -95,19 +79,11 @@ Examples:
 
     # Environment validation
     github_token = args.token or os.getenv("GITHUB_TOKEN")
-    nvidia_key   = os.getenv("NVIDIA_API_KEY")
 
     if not github_token:
         print("[INFO] No GitHub token provided. Using unauthenticated mode.")
         print("       Limited to 60 GitHub API requests/hour.")
         print("       Pass --token <PAT> or add GITHUB_TOKEN to .env for private repos & 5000/hr.\n")
-
-    if not nvidia_key and not args.skip_llm:
-        print("[INFO] No NVIDIA_API_KEY in .env.")
-        print("       Phase 6 (Explainability) will be skipped.")
-        print("       Get a free key at https://build.nvidia.com")
-        print("       Add NVIDIA_API_KEY=nvapi_... to your .env file.\n")
-        args.skip_llm = True
 
     # Pre-validate repository size
     try:
@@ -137,8 +113,6 @@ Examples:
     state = run_pipeline(
         args.url,
         github_token=github_token,
-        max_explanations=args.max_explain,
-        skip_llm=args.skip_llm,
         incremental=args.incremental,
         output_dir=args.output
     )

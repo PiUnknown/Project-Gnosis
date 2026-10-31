@@ -6,8 +6,6 @@
 export interface AnalyzeRequest {
     repo_url: string;
     github_token?: string;
-    max_explanations?: number;
-    skip_llm?: boolean;
 }
 
 export interface AnalyzeResponse {

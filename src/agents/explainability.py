@@ -12,6 +12,7 @@ CACHING: ./explanation_cache/ keyed by owner::repo::file_path::sha
 
 import os
 import time
+from types import SimpleNamespace
 import concurrent.futures
 from pathlib import PurePosixPath
 from typing import Callable, Optional
@@ -25,6 +26,7 @@ from src.utils.explanation_cache import (
     save_explanation,
     cache_stats
 )
+from src.utils.github_api import fetch_file_content_raw
 
 DEFAULT_MAX_EXPLANATIONS = 20
 MAX_CODE_CHARS           = 8000
@@ -310,6 +312,79 @@ def run(
         agent_elapsed,
     )
     return state
+
+
+
+
+def explain_file_on_demand(
+    *,
+    owner: str,
+    repo_name: str,
+    branch: str,
+    file_path: str,
+    file_sha: str,
+    language: str,
+    collection_name: str,
+    file_metadata: dict,
+    github_token: str | None = None,
+) -> tuple[str, bool]:
+    """Generate or retrieve one explanation for an analyzed repository file."""
+    cache_key = make_cache_key(owner, repo_name, file_path, file_sha or "")
+    cached = get_cached_explanation(cache_key)
+    if cached:
+        return cached, True
+    if not os.getenv("NVIDIA_API_KEY"):
+        raise RuntimeError("NVIDIA_API_KEY is not configured")
+
+    retriever = CodeRetriever(collection_name=collection_name, chroma_db_path=DEFAULT_CHROMA_DB_PATH)
+    chunks = retriever.get_file_chunks(file_path)
+    raw_content = ""
+    if not chunks:
+        raw_content = fetch_file_content_raw(owner, repo_name, branch, file_path, token=github_token) or ""
+    code_context = _assemble_code_context(file_path, retriever, raw_content=raw_content)
+    if not code_context.strip():
+        raise ValueError("Source context for this file is no longer available")
+
+    complexity = SimpleNamespace(
+        risk_level=file_metadata.get("risk", "UNKNOWN"),
+        risk_reasons=file_metadata.get("risk_reasons", []),
+        max_complexity_function=file_metadata.get("worst_fn"),
+        max_complexity=file_metadata.get("max_cc", 0),
+        avg_complexity=file_metadata.get("avg_cc", 0),
+        coupling_score=file_metadata.get("coupling", 0),
+        function_count=file_metadata.get("function_count", 0),
+    )
+    user_prompt = _build_user_prompt(
+        file_path=file_path,
+        language=language,
+        complexity_score=complexity,
+        graph_stats_entry={
+            "in_degree": file_metadata.get("in_degree", 0),
+            "dependencies": file_metadata.get("dependencies", []),
+            "dependents": file_metadata.get("dependents", []),
+        },
+        code_context=code_context,
+    )
+    explanation = call_llm(
+        system_prompt=SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        temperature=0.1,
+        max_tokens=800,
+        raise_on_failure=True,
+    )
+    if not explanation:
+        raise RuntimeError("The explanation model returned no result")
+    explanation = explanation.strip()
+    if file_sha:
+        save_explanation(
+            cache_key=cache_key,
+            explanation=explanation,
+            owner=owner,
+            repo_name=repo_name,
+            file_path=file_path,
+            file_sha=file_sha,
+        )
+    return explanation, False
 
 
 # -----------------------------------------------------------------------

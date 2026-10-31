@@ -2,8 +2,6 @@
 Pydantic models for API request and response validation.
 
 All models are defined here so main.py stays focused on routing logic.
-Pydantic validates input automatically: if repo_url is missing or
-max_explanations is negative, FastAPI returns a 422 before the handler runs.
 """
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
@@ -18,8 +16,6 @@ class AnalyzeOptions(BaseModel):
     Optional pipeline configuration per request.
     All fields have defaults so the client can omit the options object entirely.
     """
-    max_explanations: int = 20
-    skip_llm: bool = False
     github_token: Optional[str] = None
     incremental: bool = False
 
@@ -29,18 +25,6 @@ class AnalyzeOptions(BaseModel):
         if value is not None and len(value) > 500:
             raise ValueError("github_token cannot exceed 500 characters")
         return value
-
-    @field_validator("max_explanations")
-    @classmethod
-    def validate_max_explanations(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("max_explanations must be >= 0")
-        if v > 100:
-            raise ValueError(
-                "max_explanations cannot exceed 100. "
-                "Groq free tier allows ~6000 requests/day."
-            )
-        return v
 
 
 class AnalyzeRequest(BaseModel):
@@ -157,13 +141,15 @@ class AnalysisResult(BaseModel):
     complexity_report: dict
     explanations: dict
     explanation_status: Optional[str] = None
-    explanations_requested: int = 0
-    explanations_failed: int = 0
-    explanation_error: Optional[str] = None
-    explanations_skipped_reason: Optional[str] = None
     graph_summary: dict
     graph_data: Optional[dict] = None
-    skip_llm: Optional[bool] = False
+    analyzed_files: list[dict] = Field(default_factory=list)
+
+
+class FileExplanationResponse(BaseModel):
+    file_path: str
+    explanation: str
+    cached: bool = False
 
 
 # -----------------------------------------------------------------------

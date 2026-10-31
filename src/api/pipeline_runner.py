@@ -34,7 +34,6 @@ from src.agents import ast_parser
 from src.agents import dependency_graph
 from src.agents import complexity_scorer
 from src.agents import code_rag
-from src.agents import explainability
 from src.agents import doc_generator
 from src.utils.metrics import log_phase_start, log_phase_end
 
@@ -62,8 +61,6 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
         )
         github_token = decrypt_github_token(encrypted_token) if encrypted_token else None
         github_token = github_token or os.getenv("GITHUB_TOKEN")
-        max_explanations = options.get("max_explanations", 20)
-        skip_llm = options.get("skip_llm", False)
         incremental = options.get("incremental", False)
 
         state = ArchaeonState(repo_url=repo_url, github_token=github_token, job_id=job_id)
@@ -141,36 +138,10 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
         log_phase_end("Code RAG", t_phase_start, objects_cleaned=["Released embedding batches"])
         _end_phase(job_id, "code_rag")
 
-        # ---- Phase 6: Explainability (optional) -------------------
+        # ---- Phase 6: Explainability deferred to results -----------
         _start_phase(job_id, "explainability")
         t_start = log_phase_start("Explainability")
-        print(f"  [Pipeline] skip_llm={options.get('skip_llm')}  type={type(options.get('skip_llm'))}")
-        if not skip_llm:
-            state = explainability.run(
-                state,
-                max_count=max_explanations,
-                # Bind job_id here: update_explanation_progress needs
-                # (job_id, completed, total) but the agent calls (completed, total).
-                progress_callback=lambda completed, total: store.update_explanation_progress(
-                    job_id, completed, total
-                ),
-            )
-        else:
-            state.explanations_skipped_reason = (
-                "AI explanations were disabled for this run (skip_llm=true)"
-            )
-
-        # Progress alone cannot distinguish success from a total outage: a run
-        # where every LLM call failed used to report 20/20. Record the failures
-        # and the provider error so the status endpoint is truthful.
-        store.set_explanation_outcome(
-            job_id,
-            completed=len(state.explanations),
-            total=state.explanations_requested or len(state.explanations),
-            failed=state.explanations_failed,
-            error=state.explanation_error,
-        )
-        log_phase_end("Explainability", t_start, objects_cleaned=["Released prompt templates", "Released token arrays"])
+        log_phase_end("Explainability", t_start, objects_cleaned=["Released prompt templates"])
         _end_phase(job_id, "explainability")
 
         # ---- Phase 7: Doc Generator --------------------------------
@@ -181,7 +152,7 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
         _end_phase(job_id, "doc_generator")
 
         # ---- Serialize result --------------------------------------
-        result = _serialize_result(job_id, state, skip_llm=skip_llm)
+        result = _serialize_result(job_id, state)
         store.finish(job_id, result)
 
     except Exception as exc:
@@ -206,7 +177,7 @@ def _end_phase(job_id: str, phase: str) -> None:
     store.complete_phase(job_id, phase)
 
 
-def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False) -> dict:
+def _serialize_result(job_id: str, state: ArchaeonState) -> dict:
     """
     Convert ArchaeonState to a JSON-serializable result dict.
 
@@ -323,16 +294,35 @@ def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False)
             "flags": scores.risk_reasons,
         })
 
-    # Explainability outcome — a job can complete with missing explanations,
-    # and that must be visible rather than inferred from an empty map.
-    if skip_llm or state.explanations_skipped_reason:
-        explanation_status = "skipped"
-    elif state.explanations_failed:
-        explanation_status = "partial" if state.explanations else "failed"
-    elif state.explanations:
-        explanation_status = "complete"
-    else:
-        explanation_status = "skipped" if not state.explanations_requested else "failed"
+    # File explanations are requested from the results page after completion.
+    explanation_status = "available_on_demand"
+
+    analyzed_files = []
+    for manifest in state.file_manifest:
+        path = manifest.path
+        if state.analyzed_paths is not None and path not in state.analyzed_paths:
+            continue
+        symbol_table = state.symbol_tables.get(path)
+        score = state.complexity_scores.get(path)
+        graph = state.graph_stats.get(path, {})
+        analyzed_files.append({
+            "path": path,
+            "name": PurePosixPath(path).name,
+            "language": getattr(symbol_table, "language", manifest.language),
+            "sha": manifest.sha,
+            "risk": getattr(score, "risk_level", "UNKNOWN"),
+            "risk_reasons": getattr(score, "risk_reasons", []) if score else [],
+            "avg_cc": getattr(score, "avg_complexity", 0) if score else 0,
+            "max_cc": getattr(score, "max_complexity", 0) if score else 0,
+            "worst_fn": getattr(score, "max_complexity_function", None) if score else None,
+            "coupling": getattr(score, "coupling_score", 0) if score else 0,
+            "function_count": len(getattr(symbol_table, "functions", [])),
+            "in_degree": graph.get("in_degree", 0),
+            "out_degree": graph.get("out_degree", 0),
+            "dependencies": graph.get("dependencies", []),
+            "dependents": graph.get("dependents", []),
+        })
+    analyzed_files.sort(key=lambda item: item["path"].casefold())
 
     reading_order = state.topological_order or []
 
@@ -346,7 +336,6 @@ def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False)
         "analysis_mode": state.analysis_mode,
         "files_discovered": state.files_discovered,
         "files_analyzed": state.files_analyzed,
-        "skip_llm": skip_llm,
         "summary": {
             "total_files": state.files_analyzed,
             "files_discovered": state.files_discovered,
@@ -375,16 +364,7 @@ def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False)
             "explained": len(state.explanations),
             "top_complex_functions": top_fns,
         },
-        # Explicit explainability outcome. `explanation_status` is one of:
-        #   "complete" — every selected file was explained
-        #   "partial"  — some explanations are missing
-        #   "failed"   — files were attempted but none produced an explanation
-        #   "skipped"  — the phase did not run (skip_llm or a setup problem)
         "explanation_status": explanation_status,
-        "explanations_requested": state.explanations_requested,
-        "explanations_failed": state.explanations_failed,
-        "explanation_error": state.explanation_error,
-        "explanations_skipped_reason": state.explanations_skipped_reason,
         "complexity_report": {
             "critical_and_high": critical_high,
             "circular_deps": state.circular_deps,
@@ -396,6 +376,7 @@ def _serialize_result(job_id: str, state: ArchaeonState, skip_llm: bool = False)
             "reading_order_top_10": state.topological_order[:10]
         },
         "explanations": state.explanations,
+        "analyzed_files": analyzed_files,
         # frontend-required fields:
         "dependency_rows": dependency_rows[:10],
         "graph_data": {

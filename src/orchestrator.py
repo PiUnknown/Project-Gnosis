@@ -13,7 +13,6 @@ from src.agents import ast_parser
 from src.agents import dependency_graph
 from src.agents import complexity_scorer
 from src.agents import code_rag
-from src.agents import explainability
 from src.agents import doc_generator
 from src.utils.metrics import log_phase_start, log_phase_end
 
@@ -21,8 +20,6 @@ from src.utils.metrics import log_phase_start, log_phase_end
 def run_pipeline(
     repo_url_or_state,
     github_token: str = None,
-    max_explanations: int = 20,
-    skip_llm: bool = False,
     incremental: bool = False,
     output_dir: str = "./outputs",
     on_agent_complete = None
@@ -33,8 +30,6 @@ def run_pipeline(
     Args:
         repo_url_or_state: Public or private GitHub repository URL or existing ArchaeonState
         github_token:      Optional PAT for private repositories & higher rate limits
-        max_explanations:  Cap on LLM explanation calls (default 20)
-        skip_llm:          If True, skip Phase 6 entirely
         incremental:       If True, compute diff from previous run and update incrementally
         output_dir:        Directory containing cached outputs for incremental updates
         on_agent_complete: Optional callback function triggered after each agent boundary
@@ -122,13 +117,7 @@ def run_pipeline(
 
     # --- Phase 6: Explainability ---
     t_start = log_phase_start("Explainability")
-    if skip_llm:
-        print("\n[Orchestrator] Skipping Phase 6 (--skip-llm)")
-        state.explanations_skipped_reason = (
-            "AI explanations were disabled for this run (--skip-llm)"
-        )
-    else:
-        state = explainability.run(state, max_count=max_explanations)
+    print("\n[Orchestrator] File explanations are available on demand after analysis")
     log_phase_end("Explainability", t_start, objects_cleaned=["Released prompt templates", "Released token arrays"])
     if on_agent_complete:
         on_agent_complete(5)

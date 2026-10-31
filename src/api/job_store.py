@@ -318,7 +318,7 @@ class JobStore:
             if job:
                 job.status = "running"
 
-    def _mutate_redis_job(self, job_id: str, mutator, operation: str) -> bool:
+    def _mutate_redis_job(self, job_id: str, mutator, operation: str, allow_terminal: bool = False) -> bool:
         """Atomically mutate a non-terminal job record, or leave it untouched.
 
         Missing and terminal records are never rewritten. Returns True when a
@@ -333,12 +333,13 @@ class JobStore:
                 pipe = self._redis_client.pipeline()
                 pipe.watch(key)
                 raw_json = pipe.get(key)
+                ttl = pipe.ttl(key)
                 if raw_json is None:
                     pipe.unwatch()
                     return False
 
                 job = Job.from_dict(json.loads(raw_json))
-                if job.status in _TERMINAL_STATUSES:
+                if job.status in _TERMINAL_STATUSES and not allow_terminal:
                     pipe.unwatch()
                     return False
 
@@ -347,7 +348,11 @@ class JobStore:
                     return False
 
                 pipe.multi()
-                pipe.set(key, json.dumps(job.to_dict()))
+                payload = json.dumps(job.to_dict())
+                if ttl > 0:
+                    pipe.set(key, payload, ex=ttl)
+                else:
+                    pipe.set(key, payload)
                 pipe.execute()
                 return True
             except _WatchError:
@@ -726,6 +731,34 @@ class JobStore:
                 job.explanations_total = total
                 job.explanations_failed = failed
                 job.explanation_error = error
+
+
+    def update_explanation(self, job_id: str, file_path: str, explanation: str) -> bool:
+        """Persist a single on-demand explanation to a completed result."""
+        def mutate(job: Job) -> bool:
+            if not job.result:
+                return False
+            explanations = dict(job.result.get("explanations") or {})
+            explanations[file_path] = explanation
+            job.result["explanations"] = explanations
+            summary = dict(job.result.get("summary") or {})
+            summary["files_explained"] = len(explanations)
+            summary["explained"] = len(explanations)
+            job.result["summary"] = summary
+            job.result["file_explanations_md"] = "\n\n".join(
+                f"## {path}\n\n{text}" for path, text in sorted(explanations.items())
+            )
+            job.explanations_completed = len(explanations)
+            return True
+
+        if self.is_redis:
+            return self._mutate_redis_job(
+                job_id, mutate, "update_explanation", allow_terminal=True
+            )
+
+        with self._lock:
+            job = self._memory_jobs.get(job_id)
+            return bool(job and mutate(job))
 
     def _legacy_active_count(self) -> int:
         """Exact pre-index implementation; used until the fast path is armed."""

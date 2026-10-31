@@ -28,7 +28,7 @@ const AGENT_NAMES = [
   'Dependency Graph',
   'Complexity Scorer',
   'Code RAG',
-  'Explainability',
+  'On-demand explanations',
   'Doc Generator',
 ]
 
@@ -38,61 +38,18 @@ const AGENT_DESCS = [
   'Building directed import graph with NetworkX',
   'Scoring cyclomatic complexity and tech debt',
   'Embedding code chunks into ChromaDB',
-  'Generating explanations via LLM',
+  'File explanations are generated when requested from results',
   'Synthesizing all outputs into onboarding.md',
 ]
 
 // ─── GnosisLogo ───────────────────────────────────────────────────────────────
 // Official Project Gnosis Symbol: Isolated geometric 'G' + AST network + Eye of Gnosis
-function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
-  const reducedMotion = useReducedMotion()
-  return (
-    <motion.button
-      onClick={() => onChange(!on)}
-      whileTap={{ scale: 0.97 }}
-      transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-      style={{
-        width: 44,
-        height: 24,
-        background: on ? '#FFFFFF' : 'transparent',
-        border: on ? '1px solid #FFFFFF' : '1px solid rgba(255,255,255,0.40)',
-        cursor: 'pointer',
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        flexShrink: 0,
-      }}
-    >
-      <motion.div
-        animate={{
-          left: on ? 24 : 2,
-          background: on ? '#1400FF' : 'rgba(255,255,255,0.60)',
-        }}
-        transition={
-          reducedMotion
-            ? { duration: 0.1 }
-            : { type: 'spring', bounce: 0, duration: 0.3 }
-        }
-        style={{
-          width: 16,
-          height: 16,
-          position: 'absolute',
-        }}
-      />
-    </motion.button>
-  )
-}
-
-// ─── Screen 1: Landing ────────────────────────────────────────────────────────
 function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => void }) {
   const [url, setUrl] = useState('')
-  const [maxExplanations, setMaxExplanations] = useState(20)
-  const [skipLlm, setSkipLlm] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [focused, setFocused] = useState(false)
   const [hoverSubmit, setHoverSubmit] = useState(false)
-  const [showTooltip, setShowTooltip] = useState(false)
 
   const validate = (val: string) => /^https?:\/\/github\.com\/[^/]+\/[^/]+/.test(val)
 
@@ -108,8 +65,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
     setLoading(true)
     track('repo_analysis_submitted', {
       repo_url: url,
-      max_explanations: maxExplanations,
-      skip_llm: skipLlm,
+      file_explanations: 'on-demand',
     })
     try {
       const res = await fetch(`${API_BASE}/api/analyze`, {
@@ -117,8 +73,6 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           repo_url: url,
-          max_explanations: maxExplanations,
-          skip_llm: skipLlm,
         }),
       })
       if (!res.ok) {
@@ -223,44 +177,9 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 32, marginTop: 16, alignItems: 'flex-start' }}>
-              <div>
-                <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.65)', marginBottom: 8 }}>
-                  MAX EXPLANATIONS
-                </div>
-                <input
-                  type="number"
-                  value={maxExplanations}
-                  onChange={(e) => setMaxExplanations(Number(e.target.value))}
-                  style={{ width: 72, height: 40, background: '#FFFFFF', border: '1px solid rgba(255,255,255,0.30)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, fontWeight: 500, color: '#1400FF', textAlign: 'center', outline: 'none' }}
-                />
-              </div>
-
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.65)' }}>
-                    SKIP LLM
-                  </div>
-                  <div style={{ position: 'relative' }}>
-                    <motion.button
-                      onMouseEnter={() => setShowTooltip(true)}
-                      onMouseLeave={() => setShowTooltip(false)}
-                      whileTap={{ scale: 0.97 }}
-                      transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-                      style={{ width: 16, height: 16, background: 'transparent', border: '1px solid rgba(255,255,255,0.40)', color: 'rgba(255,255,255,0.65)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, cursor: 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}
-                    >
-                      ?
-                    </motion.button>
-                    {showTooltip && (
-                      <div style={{ position: 'absolute', left: 24, top: -8, width: 220, background: '#0F00CC', border: '1px solid #FFFFFF', padding: '10px 14px', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: '#FFFFFF', lineHeight: 1.5, zIndex: 10 }}>
-                        Skips LLM calls. Pipeline completes faster but without per-file explanations.
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <Toggle on={skipLlm} onChange={setSkipLlm} />
-              </div>
-            </div>
+            <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, lineHeight: 1.6, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.58)', margin: '16px 0 0' }}>
+              FILE EXPLANATIONS ARE AVAILABLE ON DEMAND AFTER ANALYSIS.
+            </p>
 
             <motion.button
               onClick={handleSubmit}

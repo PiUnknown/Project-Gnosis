@@ -45,11 +45,13 @@ from src.api.models import (
     JobSummary,
     JobListResponse,
     AnalysisResult,
+    FileExplanationResponse,
     HealthResponse,
     SubmitResponse
 )
 from src.utils.github_api import parse_github_url
 from src.utils.token_crypto import TokenEncryptionError, encrypt_github_token
+from src.utils.token_crypto import decrypt_github_token
 
 VERSION = "1.2.0"
 logger = logging.getLogger(__name__)
@@ -64,16 +66,12 @@ RESULT_FIELDS = {
     "reading_order",
     "complexity_rows",
     "explanations",
+    "analyzed_files",
     "explanation_status",
-    "explanations_requested",
-    "explanations_failed",
-    "explanation_error",
-    "explanations_skipped_reason",
     "complexity_report_json",
     "complexity_report",
     "circular_deps",
     "circular_deps_truncated",
-    "skip_llm",
     "branch",
     "repo",
     "job_id",
@@ -142,26 +140,15 @@ AGENT_PHASE_MAP = [
     ("03", "DEPENDENCY GRAPH", "dependency_graph"),
     ("04", "COMPLEXITY SCORER", "complexity_scorer"),
     ("05", "CODE RAG", "code_rag"),
-    ("06", "EXPLAINABILITY", "explainability"),
+    ("06", "ON-DEMAND EXPLANATIONS", "explainability"),
     ("07", "DOC GENERATOR", "doc_generator")
 ]
 
 class UnifiedAnalyzeRequest(BaseModel):
     repo_url: str
-    max_explanations: int = 20
-    skip_llm: bool = False
     github_token: Optional[str] = None
     incremental: bool = False
     options: Optional[AnalyzeOptions] = None
-
-    @field_validator("max_explanations")
-    @classmethod
-    def validate_max_explanations(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("max_explanations must be >= 0")
-        if v > 100:
-            raise ValueError("max_explanations cannot exceed 100")
-        return v
 
     @field_validator("github_token")
     @classmethod
@@ -183,6 +170,20 @@ class UnifiedAnalyzeRequest(BaseModel):
                 "URL must point to a GitHub repository: https://github.com/owner/repo"
             ) from exc
         return v
+
+
+class FileExplanationRequest(BaseModel):
+    file_path: str
+
+    @field_validator("file_path")
+    @classmethod
+    def validate_file_path(cls, value: str) -> str:
+        path = value.strip()
+        if not path or chr(92) in path or path.startswith("/"):
+            raise ValueError("file_path must be a repository-relative path")
+        if any(part in ("", ".", "..") for part in path.split("/")):
+            raise ValueError("file_path must be a normalized repository-relative path")
+        return path
 
 def _get_agents_list(job) -> list:
     """Helper to dynamically format the agents list for the frontend."""
@@ -232,21 +233,11 @@ def analyze(req: UnifiedAnalyzeRequest, request: Request):
     check_analyze_rate_limit(client_ip, getattr(store, "redis_client", None))
 
     # Extract options
-    max_explanations = req.max_explanations
-    skip_llm = req.skip_llm
     github_token = req.github_token
     incremental = req.incremental
 
     if req.options:
         supplied_options = req.options.model_dump(exclude_unset=True)
-        opt_max = supplied_options.get("max_explanations")
-        if opt_max is not None:
-            if opt_max < 0 or opt_max > 100:
-                raise HTTPException(status_code=422, detail="max_explanations validation error")
-            max_explanations = opt_max
-        opt_skip = supplied_options.get("skip_llm")
-        if opt_skip is not None:
-            skip_llm = opt_skip
         if supplied_options.get("github_token"):
             github_token = supplied_options.get("github_token")
         if supplied_options.get("incremental") is not None:
@@ -266,8 +257,6 @@ def analyze(req: UnifiedAnalyzeRequest, request: Request):
         )
 
     worker_options = {
-        "max_explanations": max_explanations,
-        "skip_llm": skip_llm,
         "incremental": incremental
     }
     stored_options = dict(worker_options)
@@ -371,6 +360,55 @@ def get_api_job_result(job_id: str, sections: Optional[str] = None):
             detail=f"Unknown result section(s): {', '.join(sorted(unknown))}"
         )
     return {key: job.result[key] for key in requested if key in job.result}
+
+
+@app.post("/jobs/{job_id}/explanations", response_model=FileExplanationResponse, tags=["Jobs"])
+@app.post("/api/jobs/{job_id}/explanations", response_model=FileExplanationResponse)
+def explain_job_file(job_id: str, request: FileExplanationRequest):
+    """Generate one explanation for a file included in a completed analysis."""
+    job = store.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != "complete" or not job.result:
+        raise HTTPException(status_code=409, detail="Analysis is not complete")
+
+    file_metadata = next(
+        (item for item in (job.result.get("analyzed_files") or [])
+         if item.get("path") == request.file_path),
+        None,
+    )
+    if file_metadata is None:
+        raise HTTPException(status_code=404, detail="File was not included in this analysis")
+
+    try:
+        owner, repo_name = parse_github_url(job.repo_url)
+        from src.agents.explainability import explain_file_on_demand
+        from src.utils.retriever import make_collection_name
+
+        encrypted_token = (job.options or {}).get("github_token_encrypted")
+        github_token = decrypt_github_token(encrypted_token) if encrypted_token else None
+        explanation, cached = explain_file_on_demand(
+            owner=owner,
+            repo_name=repo_name,
+            branch=job.result.get("branch") or "main",
+            file_path=request.file_path,
+            file_sha=file_metadata.get("sha") or "",
+            language=file_metadata.get("language") or "Unknown",
+            collection_name=make_collection_name(owner, repo_name, job_id),
+            file_metadata=file_metadata,
+            github_token=github_token or os.getenv("GITHUB_TOKEN"),
+        )
+    except RuntimeError as exc:
+        status_code = 503 if "NVIDIA_API_KEY" in str(exc) else 502
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not generate file explanation: {exc}") from exc
+
+    if not store.update_explanation(job_id, request.file_path, explanation):
+        raise HTTPException(status_code=500, detail="Could not save the explanation")
+    return FileExplanationResponse(file_path=request.file_path, explanation=explanation, cached=cached)
 
 @app.delete("/jobs/{job_id}", tags=["Jobs"])
 @app.delete("/api/jobs/{job_id}")
