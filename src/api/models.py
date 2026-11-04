@@ -18,6 +18,9 @@ class AnalyzeOptions(BaseModel):
     """
     github_token: Optional[str] = None
     incremental: bool = False
+    # Experimental path for measuring initial results without synchronous
+    # vector indexing. File explanations fall back to the analyzed Git blob.
+    defer_code_index: bool = False
 
     @field_validator("github_token")
     @classmethod
@@ -141,6 +144,7 @@ class AnalysisResult(BaseModel):
     complexity_report: dict
     explanations: dict
     explanation_status: Optional[str] = None
+    code_index_status: Optional[str] = "ready"
     graph_summary: dict
     graph_data: Optional[dict] = None
     analyzed_files: list[dict] = Field(default_factory=list)

@@ -3,6 +3,7 @@ import os
 import requests
 import time
 import tarfile
+import base64
 from urllib.parse import quote, unquote, urlencode, urlsplit
 from typing import Optional
 from requests.adapters import HTTPAdapter
@@ -214,6 +215,45 @@ def fetch_file_content_raw(
     except Exception as exc:
         logger.warning("Transient failure fetching file '%s': %s", path, exc)
         return None
+
+
+def fetch_file_content_by_sha(
+    owner: str,
+    repo: str,
+    blob_sha: str,
+    token: Optional[str] = None,
+    timeout: float = 15.0,
+) -> Optional[str]:
+    """Fetch the exact text version identified by a Git blob SHA.
+
+    This supports on-demand explanations when vector indexing was deferred,
+    while keeping source tied to the snapshot that was analyzed.
+    """
+    if not isinstance(blob_sha, str) or len(blob_sha) not in (40, 64):
+        return None
+    if any(char not in "0123456789abcdefABCDEF" for char in blob_sha):
+        return None
+
+    url = (
+        f"{GITHUB_API_BASE}/repos/{quote(owner, safe='')}/"
+        f"{quote(repo, safe='')}/git/blobs/{quote(blob_sha, safe='')}"
+    )
+    response = None
+    try:
+        response = _RAW_SESSION.get(url, headers=_get_headers(token), timeout=timeout)
+        if response.status_code != 200:
+            return None
+        body = response.json()
+        content = body.get("content")
+        if body.get("encoding") != "base64" or not isinstance(content, str):
+            return None
+        return base64.b64decode(content, validate=False).decode("utf-8", errors="replace")
+    except Exception as exc:
+        logger.warning("Could not fetch Git blob %s for %s/%s: %s", blob_sha, owner, repo, exc)
+        return None
+    finally:
+        if response is not None:
+            response.close()
 
 
 def _fetch_archive_contents(

@@ -68,6 +68,7 @@ RESULT_FIELDS = {
     "explanations",
     "analyzed_files",
     "explanation_status",
+    "code_index_status",
     "complexity_report_json",
     "complexity_report",
     "circular_deps",
@@ -235,6 +236,7 @@ def analyze(req: UnifiedAnalyzeRequest, request: Request):
     # Extract options
     github_token = req.github_token
     incremental = req.incremental
+    defer_code_index = False
 
     if req.options:
         supplied_options = req.options.model_dump(exclude_unset=True)
@@ -242,6 +244,8 @@ def analyze(req: UnifiedAnalyzeRequest, request: Request):
             github_token = supplied_options.get("github_token")
         if supplied_options.get("incremental") is not None:
             incremental = bool(supplied_options.get("incremental"))
+        if supplied_options.get("defer_code_index") is not None:
+            defer_code_index = bool(supplied_options.get("defer_code_index"))
 
     # Restrict duplicate checks to active jobs. The active Redis index falls
     # back to a full scan until its operator-run reconciliation is armed.
@@ -257,7 +261,8 @@ def analyze(req: UnifiedAnalyzeRequest, request: Request):
         )
 
     worker_options = {
-        "incremental": incremental
+        "incremental": incremental,
+        "defer_code_index": defer_code_index,
     }
     stored_options = dict(worker_options)
     if github_token:

@@ -12,6 +12,7 @@ CACHING: ./explanation_cache/ keyed by owner::repo::file_path::sha
 
 import os
 import time
+import hashlib
 from types import SimpleNamespace
 import concurrent.futures
 from pathlib import PurePosixPath
@@ -26,7 +27,7 @@ from src.utils.explanation_cache import (
     save_explanation,
     cache_stats
 )
-from src.utils.github_api import fetch_file_content_raw
+from src.utils.github_api import fetch_file_content_by_sha, fetch_file_content_raw
 
 DEFAULT_MAX_EXPLANATIONS = 20
 MAX_CODE_CHARS           = 8000
@@ -336,11 +337,37 @@ def explain_file_on_demand(
     if not os.getenv("NVIDIA_API_KEY"):
         raise RuntimeError("NVIDIA_API_KEY is not configured")
 
-    retriever = CodeRetriever(collection_name=collection_name, chroma_db_path=DEFAULT_CHROMA_DB_PATH)
-    chunks = retriever.get_file_chunks(file_path)
+    try:
+        retriever = CodeRetriever(collection_name=collection_name, chroma_db_path=DEFAULT_CHROMA_DB_PATH)
+        chunks = retriever.get_file_chunks(file_path)
+    except ValueError:
+        # A missing collection is expected when this job used deferred
+        # indexing. The API has already verified the file belongs to the job.
+        retriever = None
+        chunks = []
     raw_content = ""
     if not chunks:
-        raw_content = fetch_file_content_raw(owner, repo_name, branch, file_path, token=github_token) or ""
+        raw_content = fetch_file_content_by_sha(
+            owner, repo_name, file_sha, token=github_token
+        ) or ""
+        if not raw_content and not file_sha:
+            raw_content = fetch_file_content_raw(
+                owner, repo_name, branch, file_path, token=github_token
+            ) or ""
+        elif not raw_content:
+            # Preserve the previous raw-branch fallback when the blob endpoint
+            # is unavailable, but never explain source that changed since the
+            # analysis snapshot.
+            candidate = fetch_file_content_raw(
+                owner, repo_name, branch, file_path, token=github_token
+            ) or ""
+            raw_bytes = candidate.encode("utf-8")
+            git_header = f"blob {len(raw_bytes)}\0".encode("ascii")
+            digest = hashlib.sha1(git_header + raw_bytes).hexdigest()
+            if len(file_sha) == 64:
+                digest = hashlib.sha256(git_header + raw_bytes).hexdigest()
+            if candidate and digest.lower() == file_sha.lower():
+                raw_content = candidate
     code_context = _assemble_code_context(file_path, retriever, raw_content=raw_content)
     if not code_context.strip():
         raise ValueError("Source context for this file is no longer available")
@@ -423,8 +450,12 @@ def _select_files_to_explain(state: ArchaeonState, max_count: int) -> list:
 # Context assembly
 # -----------------------------------------------------------------------
 
-def _assemble_code_context(file_path: str, retriever: CodeRetriever, raw_content: str = "") -> str:
-    chunks = retriever.get_file_chunks(file_path)
+def _assemble_code_context(
+    file_path: str,
+    retriever: Optional[CodeRetriever],
+    raw_content: str = "",
+) -> str:
+    chunks = retriever.get_file_chunks(file_path) if retriever else []
     if not chunks:
         if raw_content:
             if len(raw_content) > MAX_CODE_CHARS:

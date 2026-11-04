@@ -55,6 +55,7 @@ class ArchaeonState:
 
     # --- Agent 5: Code RAG ---
     chroma_collection_name: str = None
+    code_index_status: str = "ready"
 
     # --- Agent 6: Explainability ---
     explanations: dict = field(default_factory=dict)
