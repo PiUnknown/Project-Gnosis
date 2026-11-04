@@ -134,7 +134,13 @@ def run(job_id: str, repo_url: str, options: dict) -> None:
 
         _start_phase(job_id, "code_rag")
         t_phase_start = log_phase_start("Code RAG")
-        state = code_rag.run(state)
+        defer_code_index = bool(options.get("defer_code_index", False))
+        if defer_code_index:
+            print("  Code index deferred for this analysis.")
+            state.code_index_status = "deferred"
+        else:
+            state = code_rag.run(state)
+            state.code_index_status = "ready"
         log_phase_end("Code RAG", t_phase_start, objects_cleaned=["Released embedding batches"])
         _end_phase(job_id, "code_rag")
 
@@ -365,6 +371,7 @@ def _serialize_result(job_id: str, state: ArchaeonState) -> dict:
             "top_complex_functions": top_fns,
         },
         "explanation_status": explanation_status,
+        "code_index_status": getattr(state, "code_index_status", "ready"),
         "complexity_report": {
             "critical_and_high": critical_high,
             "circular_deps": state.circular_deps,
