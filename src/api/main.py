@@ -236,7 +236,7 @@ def analyze(req: UnifiedAnalyzeRequest, request: Request):
     # Extract options
     github_token = req.github_token
     incremental = req.incremental
-    defer_code_index = False
+    defer_code_index = True
 
     if req.options:
         supplied_options = req.options.model_dump(exclude_unset=True)

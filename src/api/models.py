@@ -18,9 +18,9 @@ class AnalyzeOptions(BaseModel):
     """
     github_token: Optional[str] = None
     incremental: bool = False
-    # Experimental path for measuring initial results without synchronous
-    # vector indexing. File explanations fall back to the analyzed Git blob.
-    defer_code_index: bool = False
+    # Keep initial results fast; uncached explanations read the exact Git blob.
+    # Set false only when synchronous vector indexing is required.
+    defer_code_index: bool = True
 
     @field_validator("github_token")
     @classmethod

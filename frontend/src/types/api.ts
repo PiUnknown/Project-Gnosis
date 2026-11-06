@@ -6,6 +6,10 @@
 export interface AnalyzeRequest {
     repo_url: string;
     github_token?: string;
+    options?: {
+        incremental?: boolean;
+        defer_code_index?: boolean;
+    };
 }
 
 export interface AnalyzeResponse {
@@ -96,6 +100,7 @@ export interface JobResult {
     }>;
 
     analysis_mode?: string;
+    code_index_status?: 'ready' | 'deferred';
     files_discovered?: number;
     files_analyzed?: number;
     error?: string;

@@ -98,6 +98,25 @@ def test_analyze_endpoint_passes_defer_option_to_worker(monkeypatch):
     assert job_store.get(response.json()["job_id"]).options["defer_code_index"] is True
 
 
+def test_analyze_endpoint_defers_code_index_by_default(monkeypatch):
+    job_store = JobStore()
+    submitted = {}
+    monkeypatch.setattr(main, "store", job_store)
+
+    def enqueue(job_id, repo_url, options, **kwargs):
+        submitted.update(options)
+
+    monkeypatch.setattr(main, "enqueue_analysis_job", enqueue)
+
+    response = TestClient(main.app).post(
+        "/api/analyze",
+        json={"repo_url": "https://github.com/owner/repo"},
+    )
+
+    assert response.status_code == 202
+    assert submitted["defer_code_index"] is True
+
+
 def test_file_explanation_uses_analyzed_blob_without_chroma():
     code = "def answer():\n    return 42\n"
     prompt = {}

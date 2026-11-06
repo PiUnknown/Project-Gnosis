@@ -73,6 +73,7 @@ function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => v
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           repo_url: url,
+          options: { defer_code_index: true },
         }),
       })
       if (!res.ok) {

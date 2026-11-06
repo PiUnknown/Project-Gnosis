@@ -58,11 +58,11 @@ benchmark used in-memory storage, which also differs from production storage.
 
 ## Feature check and experiment boundary
 
-The opt-in API option `options.defer_code_index` skips Code RAG for that job
-and returns `code_index_status: "deferred"`. The default remains the existing
-synchronous index path. The onboarding document, graph, dependency rows,
-complexity rows, analyzed-file list, and downloads continue to come from the
-same analysis stages.
+The API now defaults to `options.defer_code_index: true`; clients can set it to
+false to request synchronous Code RAG. Deferred runs return
+`code_index_status: "deferred"`. The onboarding document, graph, dependency
+rows, complexity rows, analyzed-file list, and downloads continue to come from
+the same analysis stages.
 
 On-demand file explanations work without a Chroma collection by fetching the
 exact Git blob recorded in the result. The fallback was checked with mocked
@@ -74,6 +74,7 @@ frontend callsite for semantic search. A deferred job does not build vectors
 for that helper; if semantic search becomes a user-facing feature, indexing
 will need to happen on demand or in the background.
 
-This experiment has not been deployed. A production App Service comparison
-would still need paired runs on the deployed worker to include NVIDIA
+The paired figures above come from local runs, not production measurements. The
+2026-11-05 live audit observed synchronous Code RAG on the deployed worker;
+measure the deferred default again after the API rollout, including NVIDIA
 embedding latency, persistent Chroma writes, queue wait, and host variance.
