@@ -1,13 +1,16 @@
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
-import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, useReducedMotion } from 'motion/react'
-import { AthenaFigure, NavBar } from './components/AppChrome'
+import { useCallback, useEffect, useRef, useState, lazy, Suspense, type FormEvent } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { LandingNav, NavBar } from './components/AppChrome'
+import { AthenaCanvas } from './components/AthenaCanvas'
 import { track } from './lib/analytics'
-const API_BASE = import.meta.env.VITE_API_URL || "";
-const APP_VERSION = "1.2.0";
+
+const API_BASE = import.meta.env.VITE_API_URL || ''
 const AnalysisResultsPage = lazy(() => import('./pages/AnalysisResultsPage'))
 
 type Screen = 'landing' | 'progress' | 'results' | 'error'
+type JobStatus = 'queued' | 'running' | 'complete' | 'failed'
 type AgentStatus = 'queued' | 'running' | 'complete' | 'failed'
+
 interface AgentState {
   id: string
   name: string
@@ -15,308 +18,327 @@ interface AgentState {
 }
 
 interface JobState {
-  status: 'queued' | 'running' | 'complete' | 'failed'
+  status: JobStatus
   agents: AgentState[]
   error: string | null
+  progress_pct?: number
+  current_phase?: string | null
+  phases_completed?: string[]
   explanations_completed?: number
   explanations_total?: number
+  created_at?: string
+  completed_at?: string | null
 }
 
-const AGENT_NAMES = [
-  'Ingestion',
-  'AST Parser',
-  'Dependency Graph',
-  'Complexity Scorer',
-  'Code RAG',
-  'On-demand explanations',
-  'Doc Generator',
-]
+interface LogLine {
+  id: number
+  text: string
+  ok?: boolean
+}
 
-const AGENT_DESCS = [
-  'Fetching repository file tree from GitHub API',
-  'Parsing syntax trees with tree-sitter',
-  'Building directed import graph with NetworkX',
-  'Scoring cyclomatic complexity and tech debt',
-  'Embedding code chunks into ChromaDB',
-  'File explanations are generated when requested from results',
-  'Synthesizing all outputs into onboarding.md',
-]
+const GITHUB_RE = /^https?:\/\/github\.com\/[^/]+\/[^/]+/
 
-// ─── GnosisLogo ───────────────────────────────────────────────────────────────
-// Official Project Gnosis Symbol: Isolated geometric 'G' + AST network + Eye of Gnosis
+function formatDuration(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const minutes = Math.floor(total / 60)
+  const seconds = total % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+function displayRepo(repoUrl: string) {
+  return repoUrl.replace(/^https?:\/\/(www\.)?github\.com\//, '').replace(/\.git$/, '').replace(/\/$/, '') || 'owner/repo'
+}
+
+// ─── Landing ─────────────────────────────────────────────────────────────────
 function LandingPage({ onSubmit }: { onSubmit: (url: string, jobId: string) => void }) {
   const [url, setUrl] = useState('')
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [focused, setFocused] = useState(false)
-  const [hoverSubmit, setHoverSubmit] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
-  const validate = (val: string) => /^https?:\/\/github\.com\/[^/]+\/[^/]+/.test(val)
+  const handleSubmit = async (event?: FormEvent) => {
+    event?.preventDefault()
+    if (submitting) return
 
-  const handleSubmit = async () => {
-    if (!validate(url)) {
+    const value = url.trim()
+    if (!GITHUB_RE.test(value)) {
       setError('INVALID GITHUB URL — MUST MATCH github.com/owner/repo')
-      track('repo_analysis_validation_failed', {
-        input_url: url,
-      })
+      track('repo_analysis_validation_failed', { input_url: value })
       return
     }
+
     setError('')
-    setLoading(true)
-    track('repo_analysis_submitted', {
-      repo_url: url,
-      file_explanations: 'on-demand',
-    })
+    setSubmitting(true)
+    track('repo_analysis_submitted', { repo_url: value, file_explanations: 'on-demand' })
+
     try {
-      const res = await fetch(`${API_BASE}/api/analyze`, {
+      const response = await fetch(`${API_BASE}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          repo_url: url,
+          repo_url: value,
           options: { defer_code_index: true },
         }),
       })
-      if (!res.ok) {
+
+      if (!response.ok) {
         let data: any = null
         try {
-          data = await res.json()
+          data = await response.json()
         } catch {
-          // ignore parsing error
+          // A non-JSON error page is handled below.
         }
 
-        if (res.status === 409 && data && data.job_id) {
-          track('repo_analysis_attached_existing_job', {
-            repo_url: url,
-            job_id: data.job_id,
-          })
-          onSubmit(url, data.job_id)
+        if (response.status === 409 && data && data.job_id) {
+          track('repo_analysis_attached_existing_job', { repo_url: value, job_id: data.job_id })
+          onSubmit(value, data.job_id)
           return
         }
 
-        let msg = `Server error: ${res.status}`
-        if (data && data.detail) {
-          msg = data.detail
-        } else if (data && data.message) {
-          msg = data.message
-        }
-        throw new Error(msg)
+        let message = `Server error: ${response.status}`
+        if (data && data.detail) message = data.detail
+        else if (data && data.message) message = data.message
+        throw new Error(message)
       }
-      const { job_id } = await res.json()
-      onSubmit(url, job_id)
+
+      const { job_id } = await response.json()
+      onSubmit(value, job_id)
     } catch (err) {
-      const rawMsg = err instanceof Error ? err.message : 'unknown error'
-      track('repo_analysis_submission_error', {
-        repo_url: url,
-        error: rawMsg,
-      })
-      if (rawMsg.includes('Failed to fetch') || rawMsg.includes('NetworkError') || rawMsg.includes('Network request failed')) {
-        setError(`CONNECTION FAILED — IS THE SERVER RUNNING? (${rawMsg})`)
+      const rawMessage = err instanceof Error ? err.message : 'unknown error'
+      track('repo_analysis_submission_error', { repo_url: value, error: rawMessage })
+      if (
+        rawMessage.includes('Failed to fetch') ||
+        rawMessage.includes('NetworkError') ||
+        rawMessage.includes('Network request failed')
+      ) {
+        setError(`CONNECTION FAILED — IS THE SERVER RUNNING? (${rawMessage})`)
       } else {
-        setError(rawMsg.toUpperCase())
+        setError(rawMessage.toUpperCase())
       }
-      setLoading(false)
+      setSubmitting(false)
     }
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#1400FF' }}>
-      <NavBar onLogoClick={() => { }} />
-      <div style={{ display: 'flex', flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {/* Left column */}
-        <div
-          style={{
-            width: 600,
-            flexShrink: 0,
-            padding: '0 0 0 96px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-          }}
-        >
-          <div style={{ marginBottom: 20 }}>
-            <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 58, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase', margin: 0 }}>
-              UNDERSTAND<br />ANY CODEBASE
-            </h1>
-          </div>
+    <section className="screen landing" aria-labelledby="landing-title">
+      <AthenaCanvas className="athena" alpha={1} />
+      <div className="athena-fade" aria-hidden="true" />
 
-          <p style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 16, fontWeight: 400, color: 'rgba(255,255,255,0.65)', maxWidth: 420, lineHeight: 1.6, margin: '0 0 32px 0' }}>
-            Enter a public GitHub URL. Gnosis maps every import, scores every function, and writes the onboarding document your team never did.
+      <LandingNav />
+
+      <div className="hero">
+        <div className="hcopy">
+          <div className="eyebrow reveal" style={{ ['--d' as string]: '0.05s' }}>
+            Code archaeology agent
+          </div>
+          <h1 id="landing-title" className="reveal" style={{ ['--d' as string]: '0.15s' }}>
+            Understand
+            <br />
+            any codebase.
+          </h1>
+          <p className="sub reveal" style={{ ['--d' as string]: '0.3s' }}>
+            Enter a public GitHub URL. Gnosis maps every import, scores every function, and writes the
+            onboarding document your team never did.
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.65)', marginBottom: 8 }}>
-              REPOSITORY URL
+          <form
+            className="repo-form reveal"
+            style={{ ['--d' as string]: '0.45s' }}
+            onSubmit={handleSubmit}
+            noValidate
+          >
+            <label htmlFor="repo-url">REPOSITORY URL</label>
+            <div className="formrow">
+              <input
+                id="repo-url"
+                name="repo-url"
+                type="url"
+                inputMode="url"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={url}
+                disabled={submitting}
+                placeholder="https://github.com/owner/repo"
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? 'repo-url-error' : undefined}
+                onChange={(event) => {
+                  setUrl(event.target.value)
+                  if (error) setError('')
+                }}
+              />
+              <button type="submit" className="analyze-btn" disabled={submitting}>
+                {submitting ? (
+                  'SUBMITTING ···'
+                ) : (
+                  <>
+                    ANALYZE REPOSITORY <span className="ar" aria-hidden="true">→</span>
+                  </>
+                )}
+              </button>
             </div>
-
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => { setUrl(e.target.value); setError('') }}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
-              placeholder="https://github.com/owner/repo"
-              style={{
-                width: 480,
-                height: 56,
-                background: '#FFFFFF',
-                border: error ? '1px solid #FF3B3B' : focused ? '1px solid #FFFFFF' : '1px solid rgba(255,255,255,0.30)',
-                padding: '0 20px',
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: 14,
-                fontWeight: 400,
-                color: '#1400FF',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-              onKeyDown={(e) => e.key === 'Enter' && !loading && handleSubmit()}
-            />
-            <style>{`input::placeholder { color: rgba(20,0,255,0.35) !important; }`}</style>
-
-            {error && (
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, letterSpacing: '0.1em', color: '#FF3B3B', marginTop: 6, maxWidth: 480 }}>
+            {error ? (
+              <p className="form-error" id="repo-url-error" role="alert">
                 {error}
-              </div>
-            )}
-
-            <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, lineHeight: 1.6, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.58)', margin: '16px 0 0' }}>
-              FILE EXPLANATIONS ARE AVAILABLE ON DEMAND AFTER ANALYSIS.
-            </p>
-
-            <motion.button
-              onClick={handleSubmit}
-              disabled={loading}
-              onMouseEnter={() => !loading && setHoverSubmit(true)}
-              onMouseLeave={() => setHoverSubmit(false)}
-              whileTap={{ scale: 0.97 }}
-              transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-              style={{
-                width: 480,
-                height: 56,
-                marginTop: 16,
-                background: loading ? 'rgba(255,255,255,0.30)' : hoverSubmit ? 'transparent' : '#FFFFFF',
-                border: loading ? 'none' : hoverSubmit ? '1px solid #FFFFFF' : 'none',
-                color: loading ? 'rgba(255,255,255,0.60)' : hoverSubmit ? '#FFFFFF' : '#1400FF',
-                fontFamily: "'IBM Plex Mono', monospace",
-                fontSize: 13,
-                fontWeight: 500,
-                letterSpacing: '0.14em',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                transition: 'all 0.15s',
-              }}
-            >
-              {loading ? 'SUBMITTING ···' : 'ANALYZE REPOSITORY →'}
-            </motion.button>
-          </div>
-
-          <div style={{ position: 'fixed', bottom: 32, right: 96, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)' }}>
-            v{APP_VERSION} · PiUnknown · Project Gnosis
-          </div>
-        </div>
-
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden', minWidth: 0 }}>
-          <AthenaFigure brightness={0.88} />
+              </p>
+            ) : null}
+            <p className="form-note">FILE EXPLANATIONS ARE AVAILABLE ON DEMAND AFTER ANALYSIS.</p>
+          </form>
         </div>
       </div>
-    </div>
+
+      <footer className="landing-foot">
+        <span>FREE &nbsp;·&nbsp; NO SIGNUP &nbsp;·&nbsp; PUBLIC REPOS ONLY</span>
+        <span className="r">GNOSIS · PIUNKNOWN · v1.2.0</span>
+      </footer>
+    </section>
   )
 }
 
-// ─── Screen 2: Progress ───────────────────────────────────────────────────────
-function ProgressPage({ repoUrl, jobId, onComplete, onHome }: { repoUrl: string; jobId: string; onComplete: () => void; onHome: () => void }) {
-  const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>(
-    Array(7).fill('queued' as AgentStatus)
-  )
-  const [agentNames, setAgentNames] = useState<string[]>(
-    ['INGESTION', 'AST PARSER', 'DEPENDENCY GRAPH', 'COMPLEXITY SCORER', 'CODE RAG', 'EXPLAINABILITY', 'DOC GENERATOR']
-  )
-  const [jobStatus, setJobStatus] = useState<'running' | 'complete' | 'failed'>('running')
-  const [errorMsg, setErrorMsg] = useState('')
-  const [hoverBtn, setHoverBtn] = useState(false)
-  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+// ─── Progress ────────────────────────────────────────────────────────────────
+interface ProgressPageProps {
+  repoUrl: string
+  jobId: string
+  onComplete: () => void
+  onHome: () => void
+}
+
+function ProgressPage({ repoUrl, jobId, onComplete, onHome }: ProgressPageProps) {
+  const [agents, setAgents] = useState<AgentState[]>([])
+  const [status, setStatus] = useState<JobStatus>('queued')
+  const [progressPct, setProgressPct] = useState<number | null>(null)
+  const [errorMessage, setErrorMessage] = useState('')
   const [explanationProgress, setExplanationProgress] = useState({ completed: 0, total: 0 })
+  const [log, setLog] = useState<LogLine[]>([])
+  const [now, setNow] = useState(() => Date.now())
+
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const createdRef = useRef<number>(Date.now())
+  const previousAgentsRef = useRef(new Map<string, AgentStatus>())
+  const previousExplanationRef = useRef({ completed: 0, total: 0 })
+  const logIdRef = useRef(0)
+  const finishedRef = useRef(false)
+
+  const pushLog = useCallback((text: string, ok = false) => {
+    logIdRef.current += 1
+    const line = { id: logIdRef.current, text, ok }
+    setLog((current) => [...current, line].slice(-5))
+  }, [])
 
   useEffect(() => {
-    // If no real jobId (demo mode), simulate with timers
+    setLog([])
+    setAgents([])
+    setProgressPct(null)
+    setStatus('queued')
+    setErrorMessage('')
+    previousAgentsRef.current = new Map()
+    previousExplanationRef.current = { completed: 0, total: 0 }
+    finishedRef.current = false
+    createdRef.current = Date.now()
+    if (jobId) pushLog(`job ${jobId.slice(0, 8)} — attached`)
+  }, [jobId, pushLog])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
     if (!jobId) {
-      let idx = 0
-      setAgentStatuses(prev => { const n = [...prev]; n[0] = 'running'; return n })
-      const t = setInterval(() => {
-        setAgentStatuses(prev => {
-          const n = [...prev]
-          const running = n.findIndex(s => s === 'running')
-          if (running === -1) { clearInterval(t); return n }
-          n[running] = 'complete'
-          if (running + 1 < 7) n[running + 1] = 'running'
-          else { setJobStatus('complete'); clearInterval(t) }
-          return n
-        })
-        idx++
-      }, 2200)
-      return () => clearInterval(t)
+      setStatus('queued')
+      return
     }
 
-    // Recursive polling prevents overlapping requests and slows down while
-    // long-running analysis phases are in progress. Each poll costs a Redis
-    // read, so the floor is 5s and a hidden tab stops polling entirely.
-    const POLL_MIN_MS = 5000
-    const POLL_MAX_MS = 10000
     let cancelled = false
-    let delayMs = POLL_MIN_MS
+    let delayMs = 5000
     const clearPoll = () => {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
       pollTimerRef.current = null
     }
     const schedulePoll = () => {
-      if (cancelled) return
+      if (cancelled || finishedRef.current) return
       clearPoll()
       pollTimerRef.current = setTimeout(() => {
         pollTimerRef.current = null
         if (document.visibilityState === 'hidden') {
-          // Idle without hitting the API while the tab is in the background.
           schedulePoll()
           return
         }
         void poll()
       }, delayMs)
     }
+
+    const applyAgents = (next: AgentState[]) => {
+      const previous = previousAgentsRef.current
+      for (const agent of next) {
+        const before = previous.get(agent.id)
+        if (before === agent.status) continue
+        if (agent.status === 'running') pushLog(`agent ${agent.id} ${agent.name} — running`)
+        else if (agent.status === 'complete') pushLog(`agent ${agent.id} ${agent.name} — complete`, true)
+        else if (agent.status === 'failed') pushLog(`agent ${agent.id} ${agent.name} — failed`)
+        previous.set(agent.id, agent.status)
+      }
+      setAgents(next)
+    }
+
+    const applyExplanations = (completed: number, total: number) => {
+      setExplanationProgress({ completed, total })
+      const before = previousExplanationRef.current
+      if (total > 0 && (before.completed !== completed || before.total !== total)) {
+        pushLog(`explanations ${completed}/${total} files`, completed === total)
+      }
+      previousExplanationRef.current = { completed, total }
+    }
+
     const poll = async () => {
       if (cancelled) return
       try {
-        const res = await fetch(`${API_BASE}/api/jobs/${jobId}`)
+        const response = await fetch(`${API_BASE}/api/jobs/${jobId}`)
         if (cancelled) return
-        if (res.status === 404 || res.status === 410) {
-          setJobStatus('failed')
-          setErrorMsg('This analysis job is no longer available. Return home and submit it again.')
+        if (response.status === 404 || response.status === 410) {
+          finishedRef.current = true
+          setStatus('failed')
+          setErrorMessage('This analysis job is no longer available. Return home and submit it again.')
           clearPoll()
           return
         }
-        if (!res.ok) {
+        if (!response.ok) {
           delayMs = Math.min(10000, delayMs * 2)
           schedulePoll()
           return
         }
-        const data: JobState = await res.json()
+
+        const data: JobState = await response.json()
         if (cancelled) return
         if (!Array.isArray(data.agents)) {
-          setJobStatus('failed')
-          setErrorMsg(data.error || 'The server returned an invalid job status.')
+          finishedRef.current = true
+          setStatus('failed')
+          setErrorMessage(data.error || 'The server returned an invalid job status.')
           clearPoll()
           return
         }
-        setAgentNames(data.agents.map(a => a.name))
-        setAgentStatuses(data.agents.map(a => a.status))
-        setExplanationProgress({
-          completed: data.explanations_completed || 0,
-          total: data.explanations_total || 0,
-        })
+
+        applyAgents(data.agents)
+        applyExplanations(data.explanations_completed || 0, data.explanations_total || 0)
+
+        if (data.created_at) {
+          const parsed = Date.parse(data.created_at)
+          if (Number.isFinite(parsed)) createdRef.current = parsed
+        }
+        setProgressPct(typeof data.progress_pct === 'number' ? Math.max(0, Math.min(100, data.progress_pct)) : null)
+
         if (data.status === 'complete') {
-          setJobStatus('complete')
+          finishedRef.current = true
+          setStatus('complete')
+          setProgressPct(100)
+          pushLog('analysis complete — rendering results', true)
           clearPoll()
           return
         }
         if (data.status === 'failed') {
-          setJobStatus('failed')
-          setErrorMsg(data.error || 'Unknown error')
+          finishedRef.current = true
+          setStatus('failed')
+          setErrorMessage(data.error || 'Unknown error')
+          pushLog('analysis failed')
           track('repo_analysis_failed', {
             repo_url: repoUrl,
             job_id: jobId,
@@ -325,19 +347,20 @@ function ProgressPage({ repoUrl, jobId, onComplete, onHome }: { repoUrl: string;
           clearPoll()
           return
         }
-        delayMs = Math.min(POLL_MAX_MS, Math.round(delayMs * 1.5))
+
+        setStatus(data.status === 'queued' ? 'queued' : 'running')
+        delayMs = Math.min(10000, Math.round(delayMs * 1.5))
         schedulePoll()
       } catch {
-        delayMs = Math.min(POLL_MAX_MS, delayMs * 2)
+        if (cancelled) return
+        delayMs = Math.min(10000, delayMs * 2)
         schedulePoll()
       }
     }
 
-    // Returning to the tab resumes immediately instead of waiting out the
-    // remaining backoff.
     const handleVisibility = () => {
-      if (!cancelled && document.visibilityState === 'visible') {
-        delayMs = POLL_MIN_MS
+      if (!cancelled && document.visibilityState === 'visible' && !finishedRef.current) {
+        delayMs = 5000
         clearPoll()
         void poll()
       }
@@ -350,266 +373,163 @@ function ProgressPage({ repoUrl, jobId, onComplete, onHome }: { repoUrl: string;
       clearPoll()
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [jobId])
+  }, [jobId, pushLog, repoUrl])
 
-  const completeCount = agentStatuses.filter(s => s === 'complete').length
-  const runningIdx = agentStatuses.findIndex(s => s === 'running')
-  const progress = Math.round(((completeCount + (runningIdx !== -1 ? 0.5 : 0)) / 7) * 100)
-  const currentName = runningIdx !== -1 ? agentNames[runningIdx] : agentNames[Math.min(completeCount, 6)]
-  const displayRepo = repoUrl.replace(/^https?:\/\//, '') || 'github.com/owner/repo'
+  const elapsed = now - createdRef.current
+  const elapsedLabel = formatDuration(elapsed)
+  const repoLabel = displayRepo(repoUrl).toUpperCase()
+  const isIndeterminate = progressPct === null && status !== 'complete'
+  const pctLabel = progressPct === null ? '--' : String(Math.round(progressPct))
+  const runningIndex = agents.findIndex((agent) => agent.status === 'running')
+  const completeCount = agents.filter((agent) => agent.status === 'complete').length
+  const currentName = runningIndex >= 0 ? agents[runningIndex].name : null
 
-  const reducedMotion = useReducedMotion()
-  const smoothProgress = useMotionValue(0)
-  const springProgress = useSpring(smoothProgress, {
-    duration: 0.6,
-    bounce: 0,
-  })
-  const displayProgress = useTransform(springProgress, (v) => Math.round(v))
-
-  // Keep a ref to track displayed value for the counter
-  const [displayValue, setDisplayValue] = useState(0)
-  useEffect(() => {
-    smoothProgress.set(progress)
-  }, [progress, smoothProgress])
-
-  useEffect(() => {
-    const unsubscribe = displayProgress.on('change', (v) => {
-      setDisplayValue(Math.round(v))
-    })
-    return unsubscribe
-  }, [displayProgress])
+  const statusWord =
+    status === 'failed'
+      ? 'FAILED'
+      : status === 'complete'
+        ? 'COMPLETE'
+        : status === 'queued'
+          ? 'QUEUED'
+          : 'RUNNING'
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#1400FF', position: 'relative', overflow: 'hidden' }}>
-      <AthenaFigure brightness={0.55} />
-      <NavBar onLogoClick={onHome} />
+    <section className="screen screen--fixed loading-screen" aria-labelledby="loading-title">
+      <AthenaCanvas className="loading-athena" alpha={1} />
+      <div className="loading-scrim" aria-hidden="true" />
 
-      {/* Repo context bar */}
-      <div style={{ height: 48, borderBottom: '1px solid rgba(255,255,255,0.15)', padding: '0 120px', display: 'flex', alignItems: 'center', gap: 16, position: 'relative', zIndex: 1, flexShrink: 0 }}>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.50)' }}>ANALYZING</span>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 400, color: '#FFFFFF' }}>{displayRepo}</span>
-        <div style={{ marginLeft: 'auto' }}>
-          {jobStatus === 'running' && (
-            <span className="pulse-border" style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: '#FFFFFF', border: '1px solid #FFFFFF', padding: '4px 12px' }}>
-              RUNNING
-            </span>
-          )}
-          {jobStatus === 'complete' && (
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: '#FFFFFF', border: '1px solid #FFFFFF', padding: '4px 12px' }}>
-              COMPLETE ✓
-            </span>
-          )}
-          {jobStatus === 'failed' && (
-            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.14em', color: '#FF3B3B', border: '1px solid #FF3B3B', padding: '4px 12px' }}>
-              FAILED
-            </span>
-          )}
-        </div>
-      </div>
+      <NavBar>
+        <span className="nav-run">ANALYSIS RUN — {repoLabel}</span>
+      </NavBar>
 
-      {/* Main content */}
-      <div style={{ display: 'flex', flex: 1, maxWidth: 1200, margin: '0 auto', width: '100%', padding: '0 120px', boxSizing: 'border-box', position: 'relative', zIndex: 1 }}>
-        {/* Left: Pipeline */}
-        <div style={{ width: 500, flexShrink: 0, paddingTop: 64 }}>
-          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 500, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.50)', marginBottom: 32 }}>
-            PIPELINE STATUS
+      <div className="load">
+        <div className="loadbox">
+          <div className="loadtop">
+            <span>AGENTS {agents.length > 0 ? `01–${String(agents.length).padStart(2, '0')}` : '01–07'}</span>
+            <span className="right" aria-live="polite">
+              {statusWord} · {elapsedLabel}
+              {status === 'running' && currentName ? ` · ${currentName}` : ''}
+            </span>
           </div>
-          <motion.div
-            initial="hidden"
-            animate="show"
-            variants={
-              reducedMotion
-                ? undefined
-                : { show: { transition: { staggerChildren: 0.06 } } }
-            }
-          >
-            {agentNames.map((name, idx) => {
-              const status = agentStatuses[idx]
-              const isRunning = status === 'running'
-              const isComplete = status === 'complete'
-              const isQueued = status === 'queued'
-              return (
-                <motion.div
-                  key={idx}
-                  variants={
-                    reducedMotion
-                      ? undefined
-                      : {
-                        hidden: { opacity: 0, x: -12 },
-                        show: { opacity: 1, x: 0 },
-                      }
-                  }
-                  transition={
-                    reducedMotion
-                      ? { duration: 0.1 }
-                      : { type: 'spring', bounce: 0, duration: 0.3 }
-                  }
-                  style={{
-                    height: 72,
-                    borderBottom: '1px solid rgba(255,255,255,0.10)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 16,
-                    paddingRight: 16,
-                    opacity: isQueued ? 0.35 : 1,
-                    borderLeft: isRunning ? '2px solid #FFFFFF' : '2px solid transparent',
-                    paddingLeft: isRunning ? 14 : 0,
-                  }}
-                >
-                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 400, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.30)', width: 28, flexShrink: 0 }}>
-                    {String(idx + 1).padStart(2, '0')}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 500, letterSpacing: '0.10em', color: '#FFFFFF' }}>{name}</div>
-                    <div style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 3 }}>
-                      {idx === 5 && isRunning && explanationProgress.total > 0
-                        ? `${explanationProgress.completed} OF ${explanationProgress.total} FILES PROCESSED`
-                        : AGENT_DESCS[idx]}
-                    </div>
-                  </div>
-                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: isComplete ? 500 : 400, letterSpacing: '0.08em', color: isComplete ? '#FFFFFF' : isRunning ? '#FFFFFF' : 'rgba(255,255,255,0.25)', minWidth: 100, textAlign: 'right' }}>
-                    {isQueued && '—'}
-                    {isRunning && <span>RUNNING <span className="running-dots" /></span>}
-                    {isComplete && 'COMPLETE ✓'}
-                    {status === 'failed' && <span style={{ color: '#FF3B3B' }}>FAILED</span>}
-                  </div>
-                </motion.div>
-              )
-            })}
-          </motion.div>
-        </div>
 
-        {/* Right: Progress display */}
-        <div style={{ flex: 1, paddingTop: 64, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start', paddingLeft: 80 }}>
-          {jobStatus === 'running' && (
-            <>
-              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 120, fontWeight: 400, color: '#FFFFFF', letterSpacing: '-0.02em', lineHeight: 1.0 }}>
-                {displayValue}%
+          <h1 id="loading-title" className="pct">
+            {pctLabel}
+            <small>%</small>
+          </h1>
+
+          <div className={`bar${isIndeterminate ? ' indeterminate' : ''}`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPct ?? undefined} aria-valuetext={progressPct === null ? 'Progress is not reported yet' : `${Math.round(progressPct)} percent`}>
+            <i style={isIndeterminate ? undefined : { width: `${progressPct ?? 0}%` }} />
+          </div>
+
+          {agents.length > 0 ? (
+            <div className="stages">
+              {agents.map((agent, index) => {
+                const stateClass =
+                  agent.status === 'complete'
+                    ? 'done'
+                    : agent.status === 'running'
+                      ? 'run'
+                      : agent.status === 'failed'
+                        ? 'failed'
+                        : ''
+                const mark = agent.status === 'complete' ? '✓' : agent.status === 'running' ? '▸' : agent.status === 'failed' ? '!' : '·'
+                return (
+                  <div className={`stage ${stateClass}`} key={agent.id}>
+                    <b aria-hidden="true">{mark}</b>
+                    <span>
+                      {String(index + 1).padStart(2, '0')} {agent.name}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="stages">
+              <div className="stage">
+                <b aria-hidden="true">·</b>
+                <span>{jobId ? 'AWAITING PIPELINE STATE' : 'WAITING FOR JOB ID'}</span>
               </div>
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 500, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.65)', marginTop: 16 }}>
-                {currentName}
-              </div>
-              <div style={{ marginTop: 24, width: 300, height: 1, background: 'rgba(255,255,255,0.20)', position: 'relative' }}>
-                <motion.div
-                  animate={{ width: `${progress}%` }}
-                  transition={
-                    reducedMotion
-                      ? { duration: 0.1 }
-                      : { type: 'spring', bounce: 0, duration: 0.6 }
-                  }
-                  style={{ position: 'absolute', top: 0, left: 0, height: 1, background: '#FFFFFF' }}
-                />
-              </div>
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.40)', marginTop: 12 }}>
-                {completeCount} OF 7 AGENTS COMPLETE
-              </div>
-            </>
+            </div>
           )}
-          {jobStatus === 'complete' && (
-            <>
-              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 80, fontWeight: 400, color: '#FFFFFF', textTransform: 'uppercase', lineHeight: 1.0 }}>
-                COMPLETE
+
+          <div className="log" aria-live="polite">
+            {log.map((line) => (
+              <div key={line.id} className={line.ok ? 'ok' : undefined}>
+                {line.text}
               </div>
-              <motion.button
-                onMouseEnter={() => setHoverBtn(true)}
-                onMouseLeave={() => setHoverBtn(false)}
-                onClick={onComplete}
-                whileTap={{ scale: 0.97 }}
-                transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-                style={{ marginTop: 32, width: 280, height: 56, background: hoverBtn ? 'transparent' : '#FFFFFF', border: hoverBtn ? '1px solid #FFFFFF' : 'none', color: hoverBtn ? '#FFFFFF' : '#1400FF', fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 500, letterSpacing: '0.14em', cursor: 'pointer', transition: 'all 0.15s' }}
-              >
-                ANALYSIS COMPLETE — VIEW RESULTS
-              </motion.button>
-            </>
-          )}
-          {jobStatus === 'failed' && (
-            <>
-              <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 80, fontWeight: 400, color: '#FF3B3B', textTransform: 'uppercase', lineHeight: 1.0 }}>
-                FAILED
+            ))}
+          </div>
+
+          {status === 'complete' ? (
+            <div className="complete-actions">
+              <button type="button" className="btn-primary" onClick={onComplete}>
+                VIEW RESULTS <span aria-hidden="true">→</span>
+              </button>
+              <span className="status-note">
+                {completeCount} OF {agents.length || 7} AGENTS COMPLETE · {explanationProgress.total > 0 ? `${explanationProgress.completed}/${explanationProgress.total} EXPLANATIONS` : 'EXPLANATIONS ON DEMAND'}
+              </span>
+            </div>
+          ) : null}
+
+          {status === 'failed' ? (
+            <div>
+              <p className="status-note error" role="alert">
+                {errorMessage || 'THE ANALYSIS COULD NOT BE COMPLETED.'}
+              </p>
+              <div className="complete-actions">
+                <button type="button" className="btn-ghost" onClick={onHome}>
+                  ← NEW ANALYSIS
+                </button>
               </div>
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 16, maxWidth: 320 }}>{errorMsg}</div>
-            </>
-          )}
+            </div>
+          ) : null}
+
+          {!jobId && status !== 'complete' && status !== 'failed' ? (
+            <p className="status-note">NO JOB ID WAS RETURNED. RETURN HOME AND SUBMIT THE REPOSITORY AGAIN.</p>
+          ) : null}
         </div>
       </div>
-    </div>
+    </section>
   )
 }
 
-// ─── Screen 3: Results ────────────────────────────────────────────────────────
+// ─── Error ───────────────────────────────────────────────────────────────────
 function ErrorPage({ onHome }: { onHome: () => void }) {
-  const [hoverBtn, setHoverBtn] = useState(false)
-  const reducedMotion = useReducedMotion()
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#1400FF' }}>
+    <section className="screen landing" aria-labelledby="error-title">
+      <AthenaCanvas className="athena" alpha={0.7} />
+      <div className="athena-fade" aria-hidden="true" />
       <NavBar onLogoClick={onHome} />
-      <div style={{ display: 'flex', flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {/* Left column */}
-        <div
-          style={{
-            width: 600,
-            flexShrink: 0,
-            padding: '0 0 0 96px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-          }}
-        >
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 58, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
-              SOMETHING
-            </div>
-            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 58, fontWeight: 400, color: '#FFFFFF', lineHeight: 0.95, letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
-              WENT WRONG
-            </div>
-          </div>
 
-          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 120, fontWeight: 400, color: 'rgba(255,255,255,0.15)', lineHeight: 1.0, letterSpacing: '-0.02em', marginBottom: 16 }}>
-            404
-          </div>
-
-          <p style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 16, fontWeight: 400, color: 'rgba(255,255,255,0.65)', maxWidth: 420, lineHeight: 1.6, margin: '0 0 40px 0' }}>
-            The page you're looking for doesn't exist or the server encountered an unexpected error. Please try again later.
+      <div className="hero">
+        <div className="hcopy">
+          <div className="eyebrow">Unexpected state</div>
+          <h1 id="error-title" style={{ marginTop: 24 }}>
+            Something
+            <br />
+            went wrong.
+          </h1>
+          <p className="sub">
+            This screen is not part of the analysis flow. Return home and submit a public GitHub
+            repository to start again.
           </p>
-
-          <motion.button
-            onClick={onHome}
-            onMouseEnter={() => setHoverBtn(true)}
-            onMouseLeave={() => setHoverBtn(false)}
-            whileTap={{ scale: 0.97 }}
-            transition={{ type: 'spring', bounce: 0, duration: 0.2 }}
-            style={{
-              width: 280,
-              height: 56,
-              background: hoverBtn ? 'transparent' : '#FFFFFF',
-              border: hoverBtn ? '1px solid #FFFFFF' : 'none',
-              color: hoverBtn ? '#FFFFFF' : '#1400FF',
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 13,
-              fontWeight: 500,
-              letterSpacing: '0.14em',
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-            }}
-          >
-            RETURN HOME →
-          </motion.button>
-        </div>
-
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden', minWidth: 0 }}>
-          <AthenaFigure brightness={0.55} />
+          <div style={{ marginTop: 32 }}>
+            <button type="button" className="btn-primary" onClick={onHome}>
+              RETURN HOME <span aria-hidden="true">→</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      <div style={{ position: 'fixed', bottom: 32, right: 96, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 400, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)' }}>
-        v{APP_VERSION} · PiUnknown · Project Gnosis
-      </div>
-    </div>
+      <footer className="landing-foot">
+        <span>GNOSIS</span>
+        <span className="r">CODE ARCHAEOLOGY AGENT</span>
+      </footer>
+    </section>
   )
 }
 
-// ─── Root App ─────────────────────────────────────────────────────────────────
+// ─── Root ────────────────────────────────────────────────────────────────────
 export default function App() {
   const [screen, setScreen] = useState<Screen>('landing')
   const [repoUrl, setRepoUrl] = useState('')
@@ -622,41 +542,37 @@ export default function App() {
     setScreen('progress')
   }
 
-  const goHome = useCallback(() => setScreen('landing'), [])
-
-  // Determine enter direction: landing = from left, others = from right
-  const isLanding = screen === 'landing'
-  const xInitial = reducedMotion ? 0 : (isLanding ? -40 : 40)
-  const xAnimate = 0
-  const xExit = reducedMotion ? 0 : (isLanding ? 40 : -40)
+  const goHome = useCallback(() => {
+    setScreen('landing')
+    setJobId('')
+    setRepoUrl('')
+  }, [])
 
   return (
-    <AnimatePresence mode="wait">
+    <AnimatePresence mode="wait" initial={false}>
       <motion.div
         key={screen}
-        initial={{ opacity: 0, x: xInitial }}
-        animate={{ opacity: 1, x: xAnimate }}
-        exit={{ opacity: 0, x: xExit }}
-        transition={
-          reducedMotion
-            ? { duration: 0.15 }
-            : { type: 'spring', bounce: 0, duration: 0.4 }
-        }
-        style={{ height: '100vh' }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: reducedMotion ? 0 : 0.18 }}
+        style={{ minHeight: '100dvh' }}
       >
-        {screen === 'landing' && <LandingPage onSubmit={handleSubmit} />}
-        {screen === 'progress' && (
+        {screen === 'landing' ? <LandingPage onSubmit={handleSubmit} /> : null}
+        {screen === 'progress' ? (
           <ProgressPage
             repoUrl={repoUrl}
             jobId={jobId}
             onComplete={() => setScreen('results')}
             onHome={goHome}
           />
-        )}
-        {screen === 'results' && (
-          <Suspense fallback={<div style={{ minHeight: '100vh', background: '#1400FF' }} />}><AnalysisResultsPage repoUrl={repoUrl} jobId={jobId} onHome={goHome} /></Suspense>
-        )}
-        {screen === 'error' && <ErrorPage onHome={goHome} />}
+        ) : null}
+        {screen === 'results' ? (
+          <Suspense fallback={<div style={{ minHeight: '100dvh', background: 'var(--bg)' }} />}>
+            <AnalysisResultsPage repoUrl={repoUrl} jobId={jobId} onHome={goHome} />
+          </Suspense>
+        ) : null}
+        {screen === 'error' ? <ErrorPage onHome={goHome} /> : null}
       </motion.div>
     </AnimatePresence>
   )
