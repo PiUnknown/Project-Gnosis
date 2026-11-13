@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { LandingNav, NavBar } from './components/AppChrome'
 import { AthenaCanvas } from './components/AthenaCanvas'
 import { track } from './lib/analytics'
+import { createElapsedClock, formatDuration } from './lib/elapsed'
 
 const API_BASE = import.meta.env.VITE_API_URL || ''
 const AnalysisResultsPage = lazy(() => import('./pages/AnalysisResultsPage'))
@@ -37,13 +38,6 @@ interface LogLine {
 }
 
 const GITHUB_RE = /^https?:\/\/github\.com\/[^/]+\/[^/]+/
-
-function formatDuration(ms: number) {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const minutes = Math.floor(total / 60)
-  const seconds = total % 60
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-}
 
 function displayRepo(repoUrl: string) {
   return repoUrl.replace(/^https?:\/\/(www\.)?github\.com\//, '').replace(/\.git$/, '').replace(/\/$/, '') || 'owner/repo'
@@ -209,14 +203,12 @@ function ProgressPage({ repoUrl, jobId, onComplete, onHome }: ProgressPageProps)
   const [errorMessage, setErrorMessage] = useState('')
   const [explanationProgress, setExplanationProgress] = useState({ completed: 0, total: 0 })
   const [log, setLog] = useState<LogLine[]>([])
-  const [now, setNow] = useState(() => Date.now())
+  const [elapsedMs, setElapsedMs] = useState(0)
 
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const createdRef = useRef<number>(Date.now())
   const previousAgentsRef = useRef(new Map<string, AgentStatus>())
   const previousExplanationRef = useRef({ completed: 0, total: 0 })
   const logIdRef = useRef(0)
-  const finishedRef = useRef(false)
 
   const pushLog = useCallback((text: string, ok = false) => {
     logIdRef.current += 1
@@ -230,17 +222,11 @@ function ProgressPage({ repoUrl, jobId, onComplete, onHome }: ProgressPageProps)
     setProgressPct(null)
     setStatus('queued')
     setErrorMessage('')
+    setElapsedMs(0)
     previousAgentsRef.current = new Map()
     previousExplanationRef.current = { completed: 0, total: 0 }
-    finishedRef.current = false
-    createdRef.current = Date.now()
     if (jobId) pushLog(`job ${jobId.slice(0, 8)} — attached`)
   }, [jobId, pushLog])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [])
 
   useEffect(() => {
     if (!jobId) {
@@ -248,14 +234,20 @@ function ProgressPage({ repoUrl, jobId, onComplete, onHome }: ProgressPageProps)
       return
     }
 
+    // Owned by this effect: a late response from a previous job can never
+    // touch the timer of the job currently on screen.
+    const clock = createElapsedClock(setElapsedMs)
+    clock.reset(Date.now())
+
     let cancelled = false
+    let finished = false
     let delayMs = 5000
     const clearPoll = () => {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
       pollTimerRef.current = null
     }
     const schedulePoll = () => {
-      if (cancelled || finishedRef.current) return
+      if (cancelled || finished) return
       clearPoll()
       pollTimerRef.current = setTimeout(() => {
         pollTimerRef.current = null
@@ -295,9 +287,10 @@ function ProgressPage({ repoUrl, jobId, onComplete, onHome }: ProgressPageProps)
         const response = await fetch(`${API_BASE}/api/jobs/${jobId}`)
         if (cancelled) return
         if (response.status === 404 || response.status === 410) {
-          finishedRef.current = true
+          finished = true
           setStatus('failed')
           setErrorMessage('This analysis job is no longer available. Return home and submit it again.')
+          clock.freeze('failed')
           clearPoll()
           return
         }
@@ -310,9 +303,10 @@ function ProgressPage({ repoUrl, jobId, onComplete, onHome }: ProgressPageProps)
         const data: JobState = await response.json()
         if (cancelled) return
         if (!Array.isArray(data.agents)) {
-          finishedRef.current = true
+          finished = true
           setStatus('failed')
           setErrorMessage(data.error || 'The server returned an invalid job status.')
+          clock.freeze('failed')
           clearPoll()
           return
         }
@@ -320,24 +314,23 @@ function ProgressPage({ repoUrl, jobId, onComplete, onHome }: ProgressPageProps)
         applyAgents(data.agents)
         applyExplanations(data.explanations_completed || 0, data.explanations_total || 0)
 
-        if (data.created_at) {
-          const parsed = Date.parse(data.created_at)
-          if (Number.isFinite(parsed)) createdRef.current = parsed
-        }
+        clock.applyServerTimestamps(data.created_at, data.completed_at)
         setProgressPct(typeof data.progress_pct === 'number' ? Math.max(0, Math.min(100, data.progress_pct)) : null)
 
         if (data.status === 'complete') {
-          finishedRef.current = true
+          finished = true
           setStatus('complete')
           setProgressPct(100)
+          clock.freeze('complete')
           pushLog('analysis complete — rendering results', true)
           clearPoll()
           return
         }
         if (data.status === 'failed') {
-          finishedRef.current = true
+          finished = true
           setStatus('failed')
           setErrorMessage(data.error || 'Unknown error')
+          clock.freeze('failed')
           pushLog('analysis failed')
           track('repo_analysis_failed', {
             repo_url: repoUrl,
@@ -359,7 +352,7 @@ function ProgressPage({ repoUrl, jobId, onComplete, onHome }: ProgressPageProps)
     }
 
     const handleVisibility = () => {
-      if (!cancelled && document.visibilityState === 'visible' && !finishedRef.current) {
+      if (!cancelled && document.visibilityState === 'visible' && !finished) {
         delayMs = 5000
         clearPoll()
         void poll()
@@ -371,12 +364,12 @@ function ProgressPage({ repoUrl, jobId, onComplete, onHome }: ProgressPageProps)
     return () => {
       cancelled = true
       clearPoll()
+      clock.dispose()
       document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [jobId, pushLog, repoUrl])
 
-  const elapsed = now - createdRef.current
-  const elapsedLabel = formatDuration(elapsed)
+  const elapsedLabel = formatDuration(elapsedMs)
   const repoLabel = displayRepo(repoUrl).toUpperCase()
   const isIndeterminate = progressPct === null && status !== 'complete'
   const pctLabel = progressPct === null ? '--' : String(Math.round(progressPct))
